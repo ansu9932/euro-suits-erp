@@ -1,4 +1,5 @@
 <script lang="ts">
+ import WhatsAppWorkspace from "./WhatsAppWorkspace.svelte";
  import SidebarToggle from "./SidebarToggle.svelte";
  import {onMount} from 'svelte';
  import {ShieldCheck,Users,Activity,Mail,LogOut,RefreshCw,Download,LockKeyhole} from '@lucide/svelte';
@@ -10,7 +11,7 @@
  import '../app.css';import '../company.css';import '../interactions.css';
  let user:Row|null=$state(null),data:Row|null=$state(null),ready=$state(false),busy=$state(false),error=$state(''),notice=$state('');
  let tab=$state('Overview'),search=$state(''),filter=$state('Open'),form:Row|null=$state(null),kind=$state('');
- const tabs=['Overview','Accounts','Access & new users','Issues','Email & reminders'];
+ const tabs=['Overview','Accounts','Access & new users','Issues','Email & reminders','WhatsApp'];
  let users=$derived.by(()=>(data?.users||[]).filter((u:Row)=>(u.name+' '+u.username+' '+u.email).toLowerCase().includes(search.toLowerCase())));
  let issues=$derived.by(()=>(data?.issues||[]).filter((i:Row)=>(filter==='All'||(filter==='Open'?i.status!=='Resolved':i.status===filter))&&(!search||(i.title+' '+i.route+' '+i.category+' '+(i.username||'')).toLowerCase().includes(search.toLowerCase()))));
  const time=(v:unknown)=>v?new Date(String(v)).toLocaleString():'—';
@@ -19,7 +20,7 @@
  onMount(()=>{let stopped=false;const expired=()=>{user=null;data=null;form=null;error='Please sign in again.'};window.addEventListener('erp:session-expired',expired);(async()=>{try{const s=await api('/session');if(s.user)await signedIn(s);}catch(e){error=(e as Error).message}finally{ready=true}})();const timer=setInterval(()=>{if(!stopped&&data&&!form&&!busy)load().catch(e=>error=e.message)},60000);return()=>{stopped=true;clearInterval(timer);window.removeEventListener('erp:session-expired',expired)}});
  async function logout(){try{await api('/logout',{});user=null;data=null;form=null;}catch(e){error=(e as Error).message}}
  async function refresh(){if(busy)return;busy=true;error='';try{await load()}catch(e){error=(e as Error).message}finally{busy=false}}
- function editUser(u:Row){kind='account';error='';form={id:u.id,username:u.username,name:u.name,email:u.email,phone:u.phone,is_developer:u.is_developer,mfa_enabled:u.mfa_enabled,ip_restricted:u.ip_restricted,allowed_ips:(u.allowed_ips||[]).join('\n'),version:u.version,new_password:'',password:''};}
+ function editUser(u:Row){kind='account';error='';form={id:u.id,username:u.username,name:u.name,email:u.email,phone:u.phone||'+91',is_developer:u.is_developer,mfa_enabled:u.mfa_enabled,ip_restricted:u.ip_restricted,allowed_ips:(u.allowed_ips||[]).join('\n'),version:u.version,new_password:'',password:''};}
  function removeUser(u:Row){kind='delete';error='';form={id:u.id,username:u.username,version:u.version,confirmation_username:'',password:''};}
  function editIssue(i:Row){kind='issue';error='';form={id:i.id,title:i.title,status:i.status,version:i.version,resolution:i.resolution};}
  function recipients(c?:Row){kind='recipients';error='';form={company_id:c?.id||0,name:c?.legal_name||'Additional recipients for every company',version:c?c.notification_version:data?.notification_settings.version,addresses:(c?.recipients||data?.notification_settings.recipients||[]).join('\n')};}
@@ -52,6 +53,7 @@
  <section class="panel dev-section"><h2>Service health</h2><div class="dev-health">{#each [['Database',data.health.database],['Session store',data.health.redis],['Email sender',data.health.email_configured]] as service}<div><span>{service[0]}</span><strong class:dev-warning={!service[1]}>{service[1]?(service[0]==='Email sender'?'Settings present':'Ready'):'Needs attention'}</strong></div>{/each}<div><span>Reminder worker</span><strong class:dev-warning={!data.worker_last_success||Date.now()/1000-data.worker_last_success>180}>{data.worker_last_success?time(new Date(data.worker_last_success*1000).toISOString()):'No successful run recorded'}</strong></div></div>{#if !data.health.email_configured}<p class="company-warning">The company email sender still needs its server credentials. Accounts with two-step verification cannot sign in until email delivery works.</p>{/if}</section>
  <section class="panel dev-section"><h2>Workflow checks</h2>{#each data.flow_alerts as alert}<p><strong>{alert.po}</strong> · {alert.stage} · {alert.issue}</p>{:else}<p class="muted">No missing work-item records detected in approved orders.</p>{/each}<p class="muted">These checks identify specific inconsistencies. New or unreported workflow defects still need investigation.</p></section>
  <section class="panel dev-section"><h2>Recent account activity</h2>{#each data.history.slice(0,10) as h}<div class="dev-history"><strong>{h.action}</strong><span>{h.actor} · {h.subject_type} #{h.subject_id}</span><small>{time(h.created_at)}</small></div>{:else}<p class="muted">No activity recorded.</p>{/each}</section>
+ {:else if tab==='WhatsApp'}<WhatsAppWorkspace/>
  {:else if tab==='Accounts'}
  <section class="panel"><div class="company-register-toolbar"><input aria-label="Search accounts" bind:value={search} placeholder="Search name, username or email"/><button class="button primary" onclick={()=>tab='Access & new users'}>Add user / manage access</button></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Role</th><th>Email</th><th>Security</th><th>Actions</th></tr></thead><tbody>{#each users as u}<tr><td><strong>{u.name}</strong><br/><small>{u.username}</small></td><td>{u.is_developer?'Developer owner':u.designation||u.role}</td><td>{u.email||'Not assigned'}<br/><small>{u.phone}</small></td><td>{u.deleted_at?'Deleted':u.active?'Active':'Disabled'}<br/><small>{u.mfa_enabled?'Email OTP enabled':'Password only'}</small><small>{u.is_developer?'Any IP · developer owner':u.ip_restricted?'IP restricted · '+u.allowed_ips.length+' entries':'Any IP'}</small></td><td>{#if !u.deleted_at}<div class="row-actions"><button class="button secondary" onclick={()=>editUser(u)}>Account settings</button>{#if !u.is_developer}<button class="text-button danger" onclick={()=>removeUser(u)}>Delete</button>{/if}</div>{/if}</td></tr>{/each}</tbody></table></div></section>
  {:else if tab==='Issues'}
