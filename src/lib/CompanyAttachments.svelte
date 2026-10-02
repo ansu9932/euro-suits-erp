@@ -1,0 +1,5 @@
+<script lang="ts">
+ import type {Row} from './types';
+ let {target,files=[],editable=false,busy=false,label='Supporting copies',onselect,onupload}:{target:Row;files?:Row[];editable?:boolean;busy?:boolean;label?:string;onselect:(id:number,checked:boolean)=>void;onupload?:(file:File)=>Promise<void>}=$props();
+</script>
+<div class="linked-documents"><strong>{label}</strong>{#each files as doc}<label class="inline-check"><input type="checkbox" checked={(target.documents||[]).includes(doc.id)} disabled={!editable||busy} onchange={e=>onselect(doc.id,e.currentTarget.checked)}/>{doc.name}</label>{/each}{#if editable&&onupload}<label class="button secondary">Attach document here<input class="upload-file-input" aria-label={'Upload '+label} type="file" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" disabled={busy} onchange={async e=>{const input=e.currentTarget;const file=input.files?.[0];if(file){await onupload?.(file);input.value=''}}}/></label><small>Uploaded files link to this item. Save the draft to keep the link.</small>{:else if !files.length}<p class="muted">No supporting copies attached.</p>{/if}</div>
