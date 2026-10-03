@@ -1,2 +1,2 @@
-<script lang="ts">import CompanyWorkspace from '$lib/CompanyWorkspace.svelte';</script>
-<CompanyWorkspace/>
+<script lang="ts">import LandingPage from '$lib/landing/LandingPage.svelte';</script>
+<LandingPage/>
