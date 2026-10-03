@@ -8,6 +8,7 @@
  import WorkflowStory from './WorkflowStory.svelte';
  import './landing.css';
  import './story.css';
+ import './motion.css';
  let root:HTMLElement,paused=$state(false),menu=$state(false);
  const stages=[
   {name:'Company & sourcing',short:'Source',owner:'FINANCE · SOURCING',heading:'Start with the right foundation.',text:'Register companies, buyers and suppliers. Build a fabric library with ETF / ESF references, specifications and swatch photographs.',items:['Company review & approval','Supplier and material masters','Fabric references & sample photos'],next:'A shared, approved foundation for the teams that follow.',icon:Layers},
@@ -90,5 +91,6 @@
   </section>
   <section class="es-cta"><div class="es-micro">THE NEXT STEP IS YOURS</div><h2>Let’s get<br/>to work<span>.</span></h2><a class="es-btn" href="/signin">Open Euro Suits ERP <ArrowUpRight size={21}/></a><div class="es-cta-orbit" aria-hidden="true"></div></section>
  </main>
+ <button class="es-motion-dock" onclick={()=>paused=!paused} aria-label={paused?'Enable page animations':'Pause page animations'} aria-pressed={paused}>{#if paused}<Play size={14}/><span>Motion off</span>{:else}<Pause size={14}/><span>Motion on</span>{/if}</button>
  <footer class="es-footer"><a class="es-brand" href="/"><span class="es-logo"><img src="/logo.png" width="40" height="40" alt=""/></span><span>EURO SUITS<span class="brand-caption">MANUFACTURING ERP</span></span></a><div><a href="#workflow">Workflow</a><a href="/guide.html">Dashboard guide</a><a href="/privacy">Privacy</a><a href="mailto:it@eurosuitsmfg.com">Contact IT <ArrowUpRight size={13}/></a></div><span>© {new Date().getFullYear()} Euro Suits MFG</span></footer>
 </div>

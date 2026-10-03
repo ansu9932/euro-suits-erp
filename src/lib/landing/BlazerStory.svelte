@@ -2,6 +2,7 @@
  import {onMount} from 'svelte';
  import {ArrowDown,ArrowUpRight,Layers} from '@lucide/svelte';
  import GarmentScene from './GarmentScene.svelte';
+ import ConstructionDetails from './ConstructionDetails.svelte';
  import {observeStory,goToStoryStep} from './scrollStory';
  let {paused=false}:{paused?:boolean}=$props();
  let host:HTMLElement;
@@ -20,7 +21,7 @@
  <div class="es-layer-layout">
   <div class="es-layer-sticky">
    <div class="es-layer-top"><span>EURO SUITS / CONSTRUCTION STUDY</span><Layers size={18}/></div>
-   <div class="es-layer-model"><GarmentScene {paused} mode="layers" {progress}/><div class="es-layer-grid" aria-hidden="true"></div></div>
+   <div class="es-layer-model"><GarmentScene {paused} mode="layers" {progress}/><div class="es-layer-grid" aria-hidden="true"></div><ConstructionDetails {active} {paused}/></div><div class="es-story-progress" aria-hidden="true"><span style={`transform:scaleX(${(progress+1)/5})`}></span></div>
    <div class="es-layer-caption"><span class="es-layer-count">0{active+1}<small> / 05</small></span><div><strong>{layers[active].part}</strong><span>{layers[active].note}</span></div></div>
    <nav class="es-layer-dots" aria-label="Blazer layers">{#each layers as layer,i}<button aria-label={`Show ${layer.name.toLowerCase()}`} aria-current={active===i?'step':undefined} class:current={active===i} onclick={()=>goToStoryStep(host,i,paused)}><span></span></button>{/each}<span>SCROLL TO REVEAL <ArrowDown size={12}/></span></nav>
   </div>
