@@ -1,82 +1,93 @@
 import * as T from 'three';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 
-// Original procedural garment: no external model, texture or tracking request.
-export function createGarmentScene(host:HTMLElement,paused:()=>boolean,onReady:()=>void,onUnavailable:()=>void){
+type SceneOptions = {mode:'hero'|'layers';progress:()=>number};
+// A procedural tailoring study. All geometry and fabric textures stay local.
+export function createGarmentScene(host:HTMLElement,paused:()=>boolean,onReady:()=>void,onUnavailable:()=>void,options:SceneOptions){
  const renderer=new T.WebGLRenderer({alpha:true,antialias:true,powerPreference:'low-power'});
  renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));
- renderer.setClearColor(0xffffff,0);renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.5;
+ renderer.setClearColor(0xffffff,0);renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
  host.appendChild(renderer.domElement);
- const scene=new T.Scene(),camera=new T.PerspectiveCamera(34,1,.1,100);camera.position.set(0,.1,8.5);
- const room=new RoomEnvironment(),pmrem=new T.PMREMGenerator(renderer),env=pmrem.fromScene(room,.035);scene.environment=env.texture;room.dispose();pmrem.dispose();
- scene.add(new T.HemisphereLight(0xffffff,0x515663,2));
- const key=new T.DirectionalLight(0xffffff,4);key.position.set(-3,5,6);scene.add(key);
- const rim=new T.DirectionalLight(0xbfd4e3,2);rim.position.set(3,1,-3);scene.add(rim);
- const model=new T.Group();model.position.y=-.12;scene.add(model);
- const fabric=new T.MeshPhysicalMaterial({color:0x9ba8b1,metalness:.82,roughness:.28,clearcoat:1,clearcoatRoughness:.17,side:T.DoubleSide});
- const lapel=new T.MeshPhysicalMaterial({color:0xd6dee1,metalness:.92,roughness:.17,clearcoat:1,side:T.DoubleSide});
- const shirt=new T.MeshStandardMaterial({color:0xf7f8f6,roughness:.66,metalness:.05});
- const seam=new T.LineBasicMaterial({color:0x223443,transparent:true,opacity:.45});
- function panel(points:number[][],mat:T.Material,z:number,depth=.3){
-  const s=new T.Shape();points.forEach(([x,y],i)=>i?s.lineTo(x,y):s.moveTo(x,y));s.closePath();
-  const g=new T.ExtrudeGeometry(s,{depth,bevelEnabled:true,bevelSegments:3,steps:1,bevelSize:.042,bevelThickness:.045,curveSegments:12});g.translate(0,0,-depth/2);
-  const m=new T.Mesh(g,mat);m.position.z=z;model.add(m);return m;
+ const scene=new T.Scene(),camera=new T.PerspectiveCamera(34,1,.1,100);camera.position.set(0,.05,8.5);
+ const room=new RoomEnvironment(),pmrem=new T.PMREMGenerator(renderer),env=pmrem.fromScene(room,.04);scene.environment=env.texture;room.dispose();pmrem.dispose();
+ scene.add(new T.HemisphereLight(0xeefaff,0x405c66,1.5));
+ const key=new T.DirectionalLight(0xffffff,2.8);key.position.set(-3,5,6);scene.add(key);
+ const rim=new T.DirectionalLight(0x9ae0d4,2.5);rim.position.set(4,1,-2);scene.add(rim);
+ const model=new T.Group();scene.add(model);
+ const pixels=new Uint8Array(64*64*4);
+ for(let y=0;y<64;y++)for(let x=0;x<64;x++){const i=(y*64+x)*4,v=(x+y)%6<2?180:235;pixels[i]=pixels[i+1]=pixels[i+2]=v;pixels[i+3]=255;}
+ const weave=new T.DataTexture(pixels,64,64);weave.wrapS=weave.wrapT=T.RepeatWrapping;weave.repeat.set(7,7);weave.needsUpdate=true;
+ const fabric=new T.MeshPhysicalMaterial({color:0x10243b,metalness:.08,roughness:.74,bumpMap:weave,bumpScale:.008,sheen:.5,sheenColor:new T.Color(0x6d9ca8),side:T.DoubleSide});
+ const lapelMaterial=new T.MeshPhysicalMaterial({color:0x193d55,metalness:.1,roughness:.6,sheen:.6,side:T.DoubleSide});
+ const liningMaterial=new T.MeshPhysicalMaterial({color:0x148b88,metalness:.12,roughness:.38,clearcoat:.3,side:T.DoubleSide});
+ const canvasMaterial=new T.MeshStandardMaterial({color:0xc5bea4,roughness:.92,bumpMap:weave,bumpScale:.01,side:T.DoubleSide});
+ const buttonMaterial=new T.MeshStandardMaterial({color:0xa8c2c7,metalness:.65,roughness:.28});
+ const groups={shellLeft:new T.Group(),shellRight:new T.Group(),canvasLeft:new T.Group(),canvasRight:new T.Group(),lining:new T.Group(),sleeveLeft:new T.Group(),sleeveRight:new T.Group(),lapelLeft:new T.Group(),lapelRight:new T.Group(),trimLeft:new T.Group(),trimRight:new T.Group()};
+ Object.values(groups).forEach(g=>model.add(g));
+ groups.shellLeft.add(groups.trimLeft);groups.shellRight.add(groups.trimRight);
+ function panel(parent:T.Group,points:number[][],mat:T.Material,z:number,depth=.16,round=.025){
+  const s=new T.Shape();s.moveTo(points[0][0],points[0][1]);points.slice(1).forEach(([x,y])=>s.lineTo(x,y));s.closePath();
+  const geometry=new T.ExtrudeGeometry(s,{depth,bevelEnabled:true,bevelSegments:4,steps:1,bevelSize:round,bevelThickness:round,curveSegments:12});geometry.translate(0,0,-depth/2);
+  const mesh=new T.Mesh(geometry,mat);mesh.position.z=z;parent.add(mesh);return mesh;
  }
- panel([[-.35,1.3],[.35,1.3],[.48,.6],[.25,-1.12],[-.25,-1.12],[-.48,.6]],shirt,-.03,.23);
+ panel(groups.lining,[[-.32,1.31],[-.78,1.08],[-.62,.38],[-.6,-.32],[-.72,-1.4],[0,-1.45],[.72,-1.4],[.6,-.32],[.62,.38],[.78,1.08],[.32,1.31],[.23,1.05],[-.23,1.05]],liningMaterial,-.24,.1);
  for(const side of [-1,1]){
-  const p=(points:number[][])=>points.map(([x,y])=>[x*side,y]);
-  panel(p([[.34,1.38],[.83,1.14],[.72,.62],[.65,-.05],[.77,-1.43],[.13,-1.49],[.03,-1.17],[.09,-.2],[.22,.63]]),fabric,0,.44);
-  panel(p([[.83,1.12],[1.05,.97],[1.44,-.83],[1.11,-.95],[.92,-.2],[.72,.6]]),fabric,-.08,.36);
-  panel(p([[.34,1.38],[.54,1.12],[.43,.83],[.62,.7],[.13,-.35],[.26,.75]]),lapel,.295,.04);
-  panel(p([[.01,1.32],[.3,1.4],[.36,1.13],[.15,.9]]),shirt,.25,.035);
-  panel(p([[.33,-.63],[.66,-.58],[.65,-.66],[.32,-.71]]),lapel,.282,.027);
-  const line=new T.BufferGeometry().setFromPoints(p([[.35,1.35],[.29,.75],[.11,-.3],[.05,-1.18],[.17,-1.45]]).map(([x,y])=>new T.Vector3(x,y,.35)));
-  model.add(new T.Line(line,seam));
+  const left=side<0,p=(points:number[][])=>points.map(([x,y])=>[x*side,y]);
+  const shell=left?groups.shellLeft:groups.shellRight,canvas=left?groups.canvasLeft:groups.canvasRight,sleeve=left?groups.sleeveLeft:groups.sleeveRight,lapel=left?groups.lapelLeft:groups.lapelRight;
+  panel(shell,p([[.34,1.34],[.79,1.13],[.75,.73],[.63,.2],[.62,-.28],[.74,-1.31],[.68,-1.43],[.19,-1.47],[.07,-1.34],[.065,-.8],[.075,-.1],[.2,.62]]),fabric,.07,.23,.045);
+  panel(canvas,p([[.31,1.25],[.7,1.04],[.63,.38],[.53,-.36],[.13,-.48],[.2,.66]]),canvasMaterial,-.05,.055,.02);
+  panel(sleeve,p([[.79,1.12],[.97,1.02],[1.07,.75],[1.21,.18],[1.43,-.91],[1.11,-1.01],[.93,-.33],[.79,.16],[.69,.65]]),fabric,-.06,.24,.055);
+  panel(lapel,p([[.33,1.36],[.52,1.1],[.43,.86],[.57,.73],[.11,-.35],[.25,.7]]),lapelMaterial,.255,.045,.022);
+  panel(left?groups.trimLeft:groups.trimRight,p([[.31,-.61],[.64,-.57],[.65,-.68],[.32,-.72]]),lapelMaterial,.24,.045,.01);
+  const seamPoints=p([[.37,1.28],[.3,.75],[.12,-.3],[.095,-1.23],[.22,-1.39]]).map(([x,y])=>new T.Vector3(x,y,.23));
+  shell.add(new T.Line(new T.BufferGeometry().setFromPoints(seamPoints),new T.LineBasicMaterial({color:0x84b8bd,transparent:true,opacity:.45})));
+  for(let i=0;i<3;i++){const b=new T.Mesh(new T.SphereGeometry(.021,10,8),buttonMaterial);b.position.set(side*(1.18+i*.025),-.79-i*.07,.095);sleeve.add(b);}
  }
- panel([[-.57,.67],[-.28,.7],[-.28,.66],[-.57,.63]],lapel,.3,.03);
- const buttonMaterial=new T.MeshStandardMaterial({color:0x23313d,metalness:.7,roughness:.3});
- for(const y of [-.28,-.67]){const b=new T.Mesh(new T.SphereGeometry(.046,12,8),buttonMaterial);b.scale.z=.4;b.position.set(.075,y,.3);model.add(b);}
- // Tailoring construction lines give the sculpture its technical character.
- const blueprint=new T.Group();model.add(blueprint);
- for(let i=0;i<12;i++){
-  const y=-1.35+i*.22,w=.69+Math.sin(i*.52)*.03;
-  const g=new T.BufferGeometry().setFromPoints([new T.Vector3(-w,y,.29),new T.Vector3(w,y,.29)]);
-  blueprint.add(new T.Line(g,new T.LineBasicMaterial({color:0x243844,transparent:true,opacity:.09})));
- }
+ panel(groups.trimLeft,[[-.56,.64],[-.29,.66],[-.29,.61],[-.56,.59]],lapelMaterial,.23,.035,.006);
+ for(const y of [-.28,-.65]){const b=new T.Mesh(new T.SphereGeometry(.048,16,10),buttonMaterial);b.scale.z=.4;b.position.set(.074,y,.255);groups.trimRight.add(b);}
+ const stitch=new T.LineDashedMaterial({color:0x87c9c5,dashSize:.025,gapSize:.027,transparent:true,opacity:.55});
+ const liningSeam=new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(0,1.06,-.16),new T.Vector3(0,-1.36,-.16)]),stitch);liningSeam.computeLineDistances();groups.lining.add(liningSeam);
  const orbit=new T.Group();scene.add(orbit);
- const orbitMaterial=new T.LineBasicMaterial({color:0x819098,transparent:true,opacity:.29});
- for(let j=0;j<5;j++){
-  const points=[];for(let i=0;i<=160;i++){const a=i/160*Math.PI*2;points.push(new T.Vector3(Math.cos(a)*2.15,Math.sin(a)*2.15,0));}
-  const ring=new T.Line(new T.BufferGeometry().setFromPoints(points),orbitMaterial);ring.rotation.set(.5+j*.49,.45+j*.55,j*.3);orbit.add(ring);
- }
- const dots=new T.BufferGeometry(),positions=[];
- for(let i=0;i<100;i++){const a=i*2.399963,y=1-2*i/99,r=Math.sqrt(1-y*y);positions.push(Math.cos(a)*r*2.2,y*2.2,Math.sin(a)*r*2.2);}
- dots.setAttribute('position',new T.Float32BufferAttribute(positions,3));orbit.add(new T.Points(dots,new T.PointsMaterial({color:0x182c3b,size:.022,transparent:true,opacity:.72})));
- const satellites:T.Mesh[]=[];
- for(let i=0;i<6;i++){const dot=new T.Mesh(new T.SphereGeometry(.033,10,8),buttonMaterial);scene.add(dot);satellites.push(dot);}
- let inView=true,frame=0,last=0,t=0,pointerX=0,pointerY=0,dirty=true,wasMoving=false,contextLost=false;
+ const orbitMaterial=new T.LineBasicMaterial({color:0x539f9b,transparent:true,opacity:options.mode==='hero'?.21:.1});
+ for(let j=0;j<3;j++){const points=[];for(let i=0;i<=128;i++){const a=i/128*Math.PI*2;points.push(new T.Vector3(Math.cos(a)*2.05,Math.sin(a)*2.05,0));}const ring=new T.Line(new T.BufferGeometry().setFromPoints(points),orbitMaterial);ring.rotation.set(.6+j*.65,.4+j*.55,j*.3);orbit.add(ring);}
+ let inView=true,frame=0,last=0,t=0,pointerX=0,pointerY=0,dirty=true,wasMoving=false,contextLost=false,displayProgress=0,lastProgress=-1;
  const reduce=window.matchMedia('(prefers-reduced-motion: reduce)');
  const observer=new IntersectionObserver(entries=>{inView=entries[0].isIntersecting;},{rootMargin:'100px'});observer.observe(host);
  const resize=()=>{const {width,height}=host.getBoundingClientRect();renderer.setSize(width,height,false);camera.aspect=width/Math.max(1,height);camera.updateProjectionMatrix();dirty=true;};
  const ro=new ResizeObserver(resize);ro.observe(host);resize();
- const pointer=(e:PointerEvent)=>{if(e.pointerType==='touch')return;const b=host.getBoundingClientRect();pointerX=(e.clientX-b.left)/b.width-.5;pointerY=(e.clientY-b.top)/b.height-.5;};
+ const pointer=(e:PointerEvent)=>{if(e.pointerType==='touch'||options.mode==='layers')return;const b=host.getBoundingClientRect();pointerX=T.MathUtils.clamp((e.clientX-b.left)/b.width-.5,-.6,.6);pointerY=T.MathUtils.clamp((e.clientY-b.top)/b.height-.5,-.6,.6);};
  window.addEventListener('pointermove',pointer,{passive:true});
  const lost=(e:Event)=>{e.preventDefault();contextLost=true;renderer.domElement.style.opacity='0';onUnavailable();};
  const restored=()=>{contextLost=false;dirty=true;renderer.domElement.style.opacity='1';onReady();};renderer.domElement.addEventListener('webglcontextlost',lost);renderer.domElement.addEventListener('webglcontextrestored',restored);
+ const smooth=(a:number,b:number,p:number)=>T.MathUtils.smoothstep(p,a,b);
+ function pose(p:number){
+  const shell=smooth(.15,1,p),inner=smooth(1.1,2,p),sleeve=smooth(2.1,3,p),trim=smooth(3.1,4,p);
+  groups.shellLeft.position.set(-shell*.55,0,shell*.65);groups.shellRight.position.set(shell*.55,0,shell*.65);
+  groups.shellLeft.rotation.y=-shell*.25;groups.shellRight.rotation.y=shell*.25;
+  groups.canvasLeft.position.set(-inner*.17,0,inner*.42);groups.canvasRight.position.set(inner*.17,0,inner*.42);
+  groups.lining.position.z=-inner*.25;
+  groups.sleeveLeft.position.set(-sleeve*.72,sleeve*.08,0);groups.sleeveRight.position.set(sleeve*.72,sleeve*.08,0);
+  groups.sleeveLeft.rotation.z=-sleeve*.08;groups.sleeveRight.rotation.z=sleeve*.08;
+  groups.lapelLeft.position.set(-shell*.55-trim*.08,trim*.1,shell*.65+trim*.6);groups.lapelRight.position.set(shell*.55+trim*.08,trim*.1,shell*.65+trim*.6);
+  groups.trimLeft.position.set(0,-trim*.15,trim*.7);groups.trimRight.position.set(0,-trim*.15,trim*.7);
+  camera.position.z=Math.max(options.mode==='layers'?7.3:7.8,6.5/camera.aspect)+shell*.65+sleeve*.85;
+ }
  function render(now:number){
-  frame=requestAnimationFrame(render);
-  if(!inView||document.hidden||contextLost||now-last<32)return;
+  frame=requestAnimationFrame(render);if(!inView||document.hidden||contextLost||now-last<32)return;
   const dt=Math.min((now-last)/1000,.05);last=now;
-  const moving=!paused()&&!reduce.matches;
-  if(!moving&&!dirty&&!wasMoving)return;
-  if(moving)t+=dt;
-  dirty=false;wasMoving=moving;
-  model.rotation.y=.2+Math.sin(t*.3)*.22+(moving?pointerX*.14:0);model.rotation.z=Math.sin(t*.23)*.025;
-  model.position.y=-.08+Math.sin(t*.7)*.06;model.rotation.x=moving?pointerY*.08:0;
-  orbit.rotation.y=t*.05;orbit.rotation.z=t*.026;
-  satellites.forEach((s,i)=>{const a=t*.15+i*Math.PI/3;s.position.set(Math.cos(a)*2.15,Math.sin(a)*2.1,Math.sin(a*2)*.7);});
+  const moving=!paused()&&!reduce.matches,target=options.mode==='layers'?options.progress():0;
+  displayProgress=moving?T.MathUtils.lerp(displayProgress,target,1-Math.exp(-dt*12)):Math.floor(target+.001);
+  if(Math.abs(displayProgress-target)<.002)displayProgress=target;
+  const changed=Math.abs(lastProgress-displayProgress)>.001;
+  if(!moving&&!dirty&&!wasMoving&&!changed)return;
+  if(moving)t+=dt;dirty=false;wasMoving=moving;lastProgress=displayProgress;
+  pose(displayProgress);
+  model.rotation.y=options.mode==='layers'?-.26-displayProgress*.065:.14+Math.sin(t*.25)*.18+(moving?pointerX*.14:0);
+  model.rotation.z=options.mode==='hero'&&moving?Math.sin(t*.23)*.016:0;
+  model.position.y=options.mode==='hero'&&moving?-.03+Math.sin(t*.65)*.04:0;model.rotation.x=options.mode==='hero'&&moving?pointerY*.06:0;
+  orbit.visible=options.mode==='hero';orbit.rotation.y=t*.035;orbit.rotation.z=t*.016;
   renderer.render(scene,camera);
  }
- renderer.render(scene,camera);onReady();frame=requestAnimationFrame(render);
- return()=>{cancelAnimationFrame(frame);ro.disconnect();observer.disconnect();window.removeEventListener('pointermove',pointer);renderer.domElement.removeEventListener('webglcontextlost',lost);renderer.domElement.removeEventListener('webglcontextrestored',restored);const geometries=new Set<T.BufferGeometry>(),materials=new Set<T.Material>();scene.traverse(obj=>{const m=obj as T.Mesh;if(m.geometry)geometries.add(m.geometry);if(m.material)(Array.isArray(m.material)?m.material:[m.material]).forEach(v=>materials.add(v));});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());env.dispose();renderer.dispose();renderer.domElement.remove();};
+ pose(0);renderer.render(scene,camera);onReady();frame=requestAnimationFrame(render);
+ return()=>{cancelAnimationFrame(frame);ro.disconnect();observer.disconnect();window.removeEventListener('pointermove',pointer);renderer.domElement.removeEventListener('webglcontextlost',lost);renderer.domElement.removeEventListener('webglcontextrestored',restored);const geometries=new Set<T.BufferGeometry>(),materials=new Set<T.Material>();scene.traverse(obj=>{const m=obj as T.Mesh;if(m.geometry)geometries.add(m.geometry);if(m.material)(Array.isArray(m.material)?m.material:[m.material]).forEach(v=>materials.add(v));});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());weave.dispose();env.dispose();renderer.dispose();renderer.domElement.remove();};
 }

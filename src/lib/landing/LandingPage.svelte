@@ -4,8 +4,11 @@
  import {ArrowUpRight,ArrowRight,ArrowDown,Pause,Play,Menu,X,Layers,Check,Scissors,Package,Shirt,Workflow,LockKeyhole} from '@lucide/svelte';
  import '@fontsource/manrope/400.css';import '@fontsource/manrope/500.css';import '@fontsource/manrope/600.css';import '@fontsource/manrope/700.css';import '@fontsource/manrope/800.css';
  import GarmentScene from './GarmentScene.svelte';
+ import BlazerStory from './BlazerStory.svelte';
+ import WorkflowStory from './WorkflowStory.svelte';
  import './landing.css';
- let root:HTMLElement,paused=$state(false),menu=$state(false),active=$state(0);
+ import './story.css';
+ let root:HTMLElement,paused=$state(false),menu=$state(false);
  const stages=[
   {name:'Company & sourcing',short:'Source',owner:'FINANCE · SOURCING',heading:'Start with the right foundation.',text:'Register companies, buyers and suppliers. Build a fabric library with ETF / ESF references, specifications and swatch photographs.',items:['Company review & approval','Supplier and material masters','Fabric references & sample photos'],next:'A shared, approved foundation for the teams that follow.',icon:Layers},
   {name:'Orders & planning',short:'Plan',owner:'MERCHANDISING · PLANNING',heading:'Turn the order into a plan.',text:'Bring buyer requirements, order quantities and delivery dates together. Plan capacity and follow time-and-action milestones.',items:['Buyer orders & style information','Capacity and line allocation','Time & action milestones'],next:'Clear requirements move into development.',icon:Workflow},
@@ -16,7 +19,6 @@
   {name:'Finishing & quality',short:'Finish',owner:'FINISHING · QUALITY',heading:'Bring every piece to its final standard.',text:'Follow product-specific finishing for suits, trousers and shirts, including checking, pressing, tagging and packing preparation.',items:['Product-specific finishing','Quality checks & pressing','Tagging and packing readiness'],next:'Checked garments are ready to pack.',icon:Check},
   {name:'Packing & dispatch',short:'Deliver',owner:'PACKING · WAREHOUSE · ACCOUNTS',heading:'Close the loop, from carton to dispatch.',text:'Connect packed goods, warehouse movement and the invoicing queue. Keep the final handover visible against the original order.',items:['Packing and warehouse records','Invoicing & logistics handover','Order dispatch tracking'],next:'A traceable journey, from requirement to dispatch.',icon:Package}
  ];
- let ActiveIcon=$derived(stages[active].icon);
  const departments=[
   {id:'md',name:'Leadership',text:'Approvals and operational oversight',roles:['MD','Management'],links:['md','management']},
   {id:'finance',name:'Finance & administration',text:'Company records, users and accounts',roles:['Finance','Accounts','Admin'],links:['finance','accounts','admin']},
@@ -35,18 +37,17 @@
   const changed=()=>{paused=reduce.matches;if(reduce.matches)animations.forEach(a=>a.revert())};reduce.addEventListener('change',changed);
   return()=>{observer.disconnect();animations.forEach(a=>a.revert());reduce.removeEventListener('change',changed)};
  });
- function selectStage(i:number){active=i;}
 </script>
 <svelte:head>
  <title>Euro Suits · Every thread. One connected workflow.</title>
  <meta name="description" content="Explore the Euro Suits manufacturing ERP: connected company setup, fabric sourcing, sample approvals, planning, production and dispatch. Sign in to your department workspace."/>
- <meta name="theme-color" content="#fafbf9"/>
+ <meta name="theme-color" content="#14273c"/>
 </svelte:head>
 <div class="es-site" bind:this={root} class:motion-paused={paused}>
  <a class="es-skip" href="#main">Skip to content</a>
  <header class="es-nav">
   <a class="es-brand" href="/" aria-label="Euro Suits home"><span class="es-logo"><img src="/logo.png" alt="" width="42" height="42"/></span><span>EURO SUITS<span class="brand-caption">MANUFACTURING ERP</span></span></a>
-  <nav class:open={menu} aria-label="Main navigation"><a href="#about" onclick={()=>menu=false}>The company</a><a href="#workflow" onclick={()=>menu=false}>How it works</a><a href="#workspaces" onclick={()=>menu=false}>Workspaces</a></nav>
+  <nav class:open={menu} aria-label="Main navigation"><a href="#blazer" onclick={()=>menu=false}>Inside the blazer</a><a href="#about" onclick={()=>menu=false}>The company</a><a href="#workflow" onclick={()=>menu=false}>How it works</a><a href="#workspaces" onclick={()=>menu=false}>Workspaces</a></nav>
   <a class="es-nav-login" href="/signin">Sign in <ArrowUpRight size={16}/></a>
   <button class="es-menu" aria-label={menu?'Close navigation':'Open navigation'} aria-expanded={menu} onclick={()=>menu=!menu}>{#if menu}<X size={22}/>{:else}<Menu size={22}/>{/if}</button>
  </header>
@@ -57,7 +58,7 @@
     <div class="es-kicker hero-reveal"><span class="es-dot"></span> PRECISION IN EVERY PROCESS</div>
     <h1 id="hero-title" class="hero-reveal">Every thread.<br/><span>One connected</span><br/>workflow.</h1>
     <p class="es-lead hero-reveal">From the first fabric swatch to the final dispatch. Bring people, production and progress together with Euro Suits ERP.</p>
-    <div class="es-actions hero-reveal"><a class="es-btn es-primary" href="/signin">Enter your workspace <ArrowUpRight size={18}/></a><a class="es-btn es-secondary" href="#workflow">Explore the workflow <ArrowDown size={17}/></a></div>
+    <div class="es-actions hero-reveal"><a class="es-btn es-primary" href="/signin">Enter your workspace <ArrowUpRight size={18}/></a><a class="es-btn es-secondary" href="#blazer">Explore the blazer <ArrowDown size={17}/></a></div>
     <div class="es-micro hero-reveal">DESIGNED FOR GARMENTS. BUILT AROUND PEOPLE.</div>
    </div>
    <div class="es-sculpture">
@@ -67,35 +68,18 @@
    </div>
    <div class="es-hero-foot"><span>SUITS · TROUSERS · SHIRTS</span><a href="#about">SCROLL TO DISCOVER <ArrowDown size={14}/></a><button class="es-motion" onclick={()=>paused=!paused} aria-pressed={paused}>{#if paused}<Play size={13}/> Enable motion{:else}<Pause size={13}/> Pause motion{/if}</button></div>
   </section>
+  <BlazerStory {paused}/>
   <section id="about" class="es-about es-section" data-reveal>
-   <div class="es-section-line"><span><i></i>01 / THE EURO SUITS WAY</span><span>CRAFT MEETS COORDINATION</span></div>
+   <div class="es-section-line"><span><i></i>02 / THE EURO SUITS WAY</span><span>CRAFT MEETS COORDINATION</span></div>
    <div class="es-about-grid"><h2>Good garments.<br/><span>Great coordination.</span></h2><div><p class="es-intro">A garment passes through many hands.<br/>Its information should move just as smoothly.</p><p>Euro Suits brings sourcing, merchandising, development, production and dispatch into a shared manufacturing workspace. Every department has its part. Every handover has a place.</p><a class="es-text-link" href="#workspaces">Meet the workspaces <ArrowUpRight size={18}/></a></div></div>
    <div class="es-principles"><article><span>01 — CLARITY</span><h3>Know what comes next.</h3><p>Follow requirements, approvals and the next department in the workflow.</p></article><article><span>02 — ACCOUNTABILITY</span><h3>Give each team its space.</h3><p>Work with the companies, orders and sewing lines assigned to your role.</p></article><article><span>03 — CONTINUITY</span><h3>Keep the details together.</h3><p>Connect fabric references, sample documents and production records.</p></article></div>
   </section>
-  <section id="workflow" class="es-flow es-section">
-   <div class="es-section-line"><span><i></i>02 / FOLLOW THE THREAD</span><span>FROM REQUIREMENT TO DISPATCH</span></div>
-   <div class="es-flow-heading" data-reveal><h2>Many moving parts.<br/><span>One clear direction.</span></h2><p>Select a stage to see how the work<br/>moves through Euro Suits.</p></div>
-   <div class="es-flow-layout">
-    <div class="es-system-map" aria-label="Manufacturing workflow stages">
-     <svg viewBox="0 0 600 600" aria-hidden="true"><circle cx="300" cy="300" r="218"/><circle cx="300" cy="300" r="161" class="inner"/>{#each stages as stage,i}<line x1="300" y1="300" x2={300+218*Math.cos((i*45-90)*Math.PI/180)} y2={300+218*Math.sin((i*45-90)*Math.PI/180)} class:active={active===i}/>{/each}</svg>
-     <div class="es-core"><span class="es-core-symbol">E</span><strong>EURO SUITS</strong><span>CONNECTED WORKFLOW</span></div>
-     {#each stages as stage,i}<button class="es-node" class:selected={active===i} aria-pressed={active===i} aria-controls="stage-detail" onclick={()=>selectStage(i)} style={`--nx:${50+36.3*Math.cos((i*45-90)*Math.PI/180)}%;--ny:${50+36.3*Math.sin((i*45-90)*Math.PI/180)}%`}><span class="es-node-index">{String(i+1).padStart(2,'0')}</span><span>{stage.short}</span></button>{/each}
-     <span class="es-map-note">SELECT A STAGE TO EXPLORE</span>
-    </div>
-    <div class="es-stage-detail" id="stage-detail" aria-live="polite" aria-atomic="true">
-     <div class="es-detail-top"><span class="es-stage-number">{String(active+1).padStart(2,'0')}<small> / 08</small></span><ActiveIcon size={30} strokeWidth={1}/></div>
-     <div class="es-micro">{stages[active].owner}</div><h3>{stages[active].heading}</h3><p>{stages[active].text}</p>
-     <ul>{#each stages[active].items as item}<li><Check size={15}/>{item}</li>{/each}</ul>
-     <div class="es-handover"><ArrowRight size={18}/><span>{stages[active].next}</span></div>
-     <div class="es-step-controls"><button onclick={()=>selectStage((active+7)%8)} aria-label="Previous workflow stage">← Previous</button><span>{stages[active].name}</span><button onclick={()=>selectStage((active+1)%8)} aria-label="Next workflow stage">Next →</button></div>
-    </div>
-   </div>
-  </section>
+  <WorkflowStory {stages} {paused}/>
   <section class="es-detail-band" data-reveal>
    <div class="es-detail-inner"><div><div class="es-micro">THE DETAILS MAKE THE DIFFERENCE</div><h2>Small details.<br/>Shared understanding.</h2><p>Fabric references. Sample sizes. Approved specifications.<br/>The information a team needs, connected to its work.</p></div><div class="es-material-study" aria-label="Illustration of fabric information"><div class="es-swatch swatch-back"></div><div class="es-swatch swatch-mid"></div><div class="es-swatch swatch-front"><span>EURO SUITS / MATERIAL LIBRARY</span><div class="es-weave"></div><strong>From swatch to specification.</strong><div class="es-swatch-fields"><span>ETF / ESF</span><span>COMPOSITION</span><span>COLOUR</span></div></div><span class="es-illustration">ILLUSTRATIVE MATERIAL CARD</span></div></div>
   </section>
   <section id="workspaces" class="es-section es-workspaces">
-   <div class="es-section-line"><span><i></i>03 / A PLACE FOR EVERY TEAM</span><span>YOUR ROLE. YOUR WORKSPACE.</span></div>
+   <div class="es-section-line"><span><i></i>04 / A PLACE FOR EVERY TEAM</span><span>YOUR ROLE. YOUR WORKSPACE.</span></div>
    <div class="es-flow-heading" data-reveal><h2>Different responsibilities.<br/><span>The same direction.</span></h2><p>Choose your department to sign in.<br/>Your account determines your access.</p></div>
    <div class="es-department-grid">{#each departments as d,i}<article data-reveal><div class="es-dept-index">0{i+1}<ArrowUpRight size={20}/></div><h3>{d.name}</h3><p>{d.text}</p><div class="es-portal-links">{#each d.roles as role,j}<a href={`/${d.links[j]}`}>{role}<ArrowUpRight size={13}/></a>{/each}</div></article>{/each}</div>
    <div class="es-access-note"><LockKeyhole size={17}/><span>Accounts are created by your administrator. Selecting a workspace does not change your permissions.</span><a href="/signin">General sign in <ArrowRight size={15}/></a></div>
