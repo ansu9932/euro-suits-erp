@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {workspaceMotion} from "./motion";
  import '../materials.css';
  import DevelopmentMasters from './DevelopmentMasters.svelte';
  import {onMount} from 'svelte';
@@ -46,7 +47,7 @@
  async function saveOption(e:SubmitEvent){e.preventDefault();await run(async()=>{const result=await api('/material-options'+(option?.id?'/'+option.id:''),payload(option,['company_id','kind','label','parent_id','active','version']));const savedLabel=option!.label.trim();await load();if(optionTarget){optionTarget.row[optionTarget.key]=optionTarget.numeric?result.id:savedLabel;if(optionTarget.numeric)resetChildren(optionTarget.key)}option=null;optionTarget=null;notice='Master list updated.'})}
  async function saveRating(e:SubmitEvent){e.preventDefault();await run(async()=>{await api('/material-suppliers/'+rating!.id+'/rating',{rating:rating!.rating,reason:rating!.rating_reason,version:rating!.rating_version});rating=null;await load();notice='Supplier rating updated.'})}
 </script>
-<section class="material-workspace">
+<section class="material-workspace" use:workspaceMotion={tab}>
  <div class="panel-header"><div><p class="eyebrow">MASTER DATA</p><h2>Materials & sample library</h2><p>One permanent reference. Clear specifications. A traceable history.</p></div>{#if ['Fabric library','Trim library'].includes(tab)&&editAllowed(tab==='Trim library'?'trim':'fabric')}<button class="button primary" disabled={busy} onclick={()=>start(tab==='Trim library'?'trim':'fabric')}>{tab==='Trim library'?'Add trim sample':'ETF/ESF Generate'}</button>{/if}</div>
  <div class="filter-tabs material-tabs">{#each ['Fabric library','Trim library',...(data.can_development?['Development masters']:[]),...(data.can_masters?['Master lists']:[]),...(data.commercial?['Supplier ratings']:[])] as t}<button class:active={tab===t} onclick={()=>chooseTab(t)}>{t}</button>{/each}</div>
  {#if error}<p class="form-error" role="alert">{error}</p>{/if}{#if notice}<p class="company-notice" role="status">{notice}</p>{/if}

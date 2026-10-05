@@ -8,8 +8,8 @@
  import type {Row} from './types';
  import SignInForm from './SignInForm.svelte';
  import SetupUsers from './SetupUsers.svelte';
- import {enter} from './motion';
- import '../app.css';import '../company.css';import '../interactions.css';
+ import {enter, workspaceMotion} from './motion';
+ import '../app.css';import '../company.css';import '../interactions.css';import '../dashboard.css';
  let user:Row|null=$state(null),data:Row|null=$state(null),ready=$state(false),busy=$state(false),error=$state(''),notice=$state('');
  let tab=$state('Overview'),search=$state(''),filter=$state('Open'),form:Row|null=$state(null),kind=$state('');
  const tabs=['Overview','Performance','Accounts','Access & new users','Issues','Email & reminders','WhatsApp'];
@@ -42,8 +42,8 @@
 {:else if !user}
  <main class="login-layout"><section class="login-brand"><div class="login-brand-name"><img src="/logo.png" alt="Euro Suits logo"/><span>EURO SUITS</span></div><div><p class="eyebrow">DEVELOPER WORKSPACE</p><h1>Access.<br/>Visibility.<br/><span>Control.</span></h1><p>Account security and operational health in one place.</p></div><small>OWNER ACCESS · EMAIL VERIFICATION REQUIRED</small></section><section class="login-panel"><div class="login-form-wrap" use:enter><span class="login-symbol"><LockKeyhole size={24}/></span><h1>Developer sign in</h1><p class="muted">Enter your password, then the code sent to your personal email.</p>{#if notice}<p role="status">{notice}</p>{/if}<SignInForm portal="developer" initialUsername="developer" onauthenticated={signedIn}/>{#if error}<p class="form-error" role="alert">{error}</p>{/if}</div></section></main>
 {:else}
- <div class="dev-shell"><aside class="dev-sidebar"><div class="dev-brand"><img src="/logo.png" alt="Euro Suits logo"/><div><strong>EURO SUITS</strong><small>DEVELOPER</small></div></div><p class="dev-caption">OWNER WORKSPACE</p><nav aria-label="Developer navigation">{#each tabs as t}<button class:active={tab===t} onclick={()=>{tab=t;search='';error=''}}>{#if t==='Overview'||t==='Performance'}<Activity size={18}/>{:else if t==='Accounts'||t==='Access & new users'}<Users size={18}/>{:else if t==='Issues'}<ShieldCheck size={18}/>{:else}<Mail size={18}/>{/if}{t}</button>{/each}</nav><div class="dev-owner"><strong>{user.name}</strong><small>Email verification enabled</small><button onclick={logout}><LogOut size={16}/>Sign out</button></div></aside>
- <div class="dev-main"><header class="dev-topbar"><span><SidebarToggle/>Developer / <strong>{tab}</strong></span><button class="button secondary" disabled={busy} onclick={refresh}><RefreshCw size={16}/>Refresh</button></header><main class="dev-content">
+ <div class="dev-shell erp-workspace"><a class="workspace-skip" href="#workspace-content">Skip to workspace</a><aside class="dev-sidebar"><div class="dev-brand"><img src="/logo.png" alt="Euro Suits logo"/><div><strong>EURO SUITS</strong><small>DEVELOPER</small></div></div><p class="dev-caption">OWNER WORKSPACE</p><nav aria-label="Developer navigation">{#each tabs as t}<button class:active={tab===t} aria-current={tab===t?'page':undefined} onclick={()=>{tab=t;search='';error=''}}>{#if t==='Overview'||t==='Performance'}<Activity size={18}/>{:else if t==='Accounts'||t==='Access & new users'}<Users size={18}/>{:else if t==='Issues'}<ShieldCheck size={18}/>{:else}<Mail size={18}/>{/if}{t}</button>{/each}</nav><div class="dev-owner"><strong>{user.name}</strong><small>Email verification enabled</small><button onclick={logout}><LogOut size={16}/>Sign out</button></div></aside>
+ <div class="dev-main"><header class="dev-topbar"><span><SidebarToggle/>Developer / <strong>{tab}</strong></span><button class="button secondary" disabled={busy} onclick={refresh}><RefreshCw size={16}/>Refresh</button></header><main id="workspace-content" class="dev-content" tabindex="-1" use:workspaceMotion={tab}>
  {#if notice}<p class="company-notice" role="status">{notice}</p>{/if}{#if error&&!form}<p class="form-error" role="alert">{error}</p>{/if}
  {#if !data}<p role="status">Loading workspace…</p>
  {:else if tab==='Access & new users'}<SetupUsers currentUser={user}/>
