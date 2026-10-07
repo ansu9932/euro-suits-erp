@@ -1,4 +1,5 @@
 <script lang="ts">
+ import Spooly from './Spooly.svelte';
  import SidebarToggle from "./SidebarToggle.svelte";
  import {workspaceRedirect} from './workspaceAccess';
  import EnquiryWorkspace from "./EnquiryWorkspace.svelte";
@@ -124,3 +125,6 @@
 {/if}
 {#if form}<FormDialog spec={form} onclose={()=>form=null}/>{/if}
 {#if toast}<div class="toast" role="status"><Check size={18}/>{toast}</div>{/if}
+{#if !loading && data && !blockedUser && !noAccess}
+ <Spooly userId={data.user.id} role={data.user.role} {portal} {page}/>
+{/if}

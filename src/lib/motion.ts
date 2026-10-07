@@ -1,5 +1,17 @@
 import { animate, createScope, stagger } from 'animejs';
 
+// Spooly's optional Web Component adapter. Gestures are finite and never gate
+// a business action; the component owns and calls the returned cleanup.
+export function mascotGesture(node: Element, gesture: string) {
+ if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return () => {};
+ const frames: Record<string, number[]> = gesture === 'wave' ? {rotate: [0, -7, 6, 0]}
+  : gesture === 'celebrate' ? {translateY: [0, -7, 0], rotate: [0, -4, 4, 0]}
+  : {translateY: [0, 4, 0]};
+ const animation = animate(node, {...frames, duration: 460, ease: 'outCubic',
+  onComplete: instance => instance.revert()});
+ return () => animation.revert();
+}
+
 // Content has no hidden CSS baseline. Finite, interruptible animation only;
 // business actions and network requests never wait for these transitions.
 export function enter(node: HTMLElement, key: unknown = '') {

@@ -1,4 +1,5 @@
 <script lang="ts">
+ import Spooly from './Spooly.svelte';
  import PerformanceWorkspace from "./PerformanceWorkspace.svelte";
  import WhatsAppWorkspace from "./WhatsAppWorkspace.svelte";
  import SidebarToggle from "./SidebarToggle.svelte";
@@ -80,3 +81,7 @@
  @media(max-width:1050px){.dev-sidebar{width:210px}.dev-content{padding:24px}.dev-stats{grid-template-columns:repeat(2,1fr)}.dev-history{flex-wrap:wrap}.dev-history strong{flex-basis:100%}}
  @media(max-width:700px){.dev-shell{display:block}.dev-sidebar{width:auto;height:auto;position:static;padding:16px}.dev-brand{padding:0 0 12px}.dev-caption,.dev-owner small{display:none}.dev-sidebar nav{display:flex;overflow-x:auto}.dev-sidebar nav button{white-space:nowrap}.dev-owner{padding:12px 0 0;display:flex;justify-content:space-between;align-items:center}.dev-owner button{margin:0;padding:8px}.dev-topbar{padding:12px 16px}.dev-content{padding:20px 16px}.dev-health{grid-template-columns:1fr}.dev-stats{gap:10px}.dev-stats article{padding:16px}.dev-content input{min-width:0}}
 </style>
+
+{#if ready && user && data}
+ <Spooly userId={user.id} role={user.role} portal="developer" page={tab}/>
+{/if}
