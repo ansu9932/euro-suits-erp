@@ -25,7 +25,25 @@
   // Body placement avoids transforms or overflow in any role's workspace.
   document.body.append(element);
   mascot=element;
+  let actionbar:Element|null=null;
+  let positionFrame=0;
+  const position=()=>{
+   positionFrame=0;
+   const rect=actionbar?.getBoundingClientRect();
+   const bottom=rect&&rect.top<window.innerHeight&&rect.bottom>0
+    ?Math.max(20,window.innerHeight-rect.top+12):20;
+   element.style.bottom=`${bottom}px`;
+  };
+  const schedulePosition=()=>{if(!positionFrame)positionFrame=requestAnimationFrame(position)};
+  const barObserver=new ResizeObserver(schedulePosition);
   const suspend=()=>{
+   const nextBar=document.querySelector('.company-actionbar');
+   if(nextBar!==actionbar){
+    barObserver.disconnect();
+    actionbar=nextBar;
+    if(actionbar)barObserver.observe(actionbar);
+   }
+   schedulePosition();
    const editing=document.activeElement?.matches('input,textarea,select,[contenteditable="true"]');
    const dialog=Array.from(document.querySelectorAll(
     'dialog[open],[aria-modal="true"],.drawer-backdrop,.company-modal-backdrop,.sample-overlay'
@@ -38,11 +56,17 @@
   const afterFocus=()=>queueMicrotask(()=>{if(element.isConnected)suspend()});
   document.addEventListener('focusin',suspend);
   document.addEventListener('focusout',afterFocus);
+  window.addEventListener('resize',schedulePosition);
+  document.addEventListener('scroll',schedulePosition,{passive:true,capture:true});
   suspend();
   return()=>{
    observer.disconnect();
+   barObserver.disconnect();
+   cancelAnimationFrame(positionFrame);
    document.removeEventListener('focusin',suspend);
    document.removeEventListener('focusout',afterFocus);
+   window.removeEventListener('resize',schedulePosition);
+   document.removeEventListener('scroll',schedulePosition,true);
    element.remove();
   };
  });
