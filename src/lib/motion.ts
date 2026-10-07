@@ -1,4 +1,53 @@
-import { animate, createScope, stagger } from 'animejs';
+import { animate, createScope, createTimeline, stagger } from 'animejs';
+
+type ConstructionMotionOptions = { paused: boolean; replay: number };
+
+// A single assembly sequence, with a complete static illustration as its baseline.
+// Shared page controls, reduced motion, visibility and unmount all stop the work.
+export function constructionAnnouncement(node: HTMLElement, initial: ConstructionMotionOptions) {
+ let options = initial, visible = false, played = false;
+ let timeline: ReturnType<typeof createTimeline> | undefined;
+ const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+ const stop = () => { timeline?.revert(); timeline = undefined; };
+ const sync = () => {
+  if (!visible || options.paused || reduce.matches || document.hidden) { stop(); return; }
+  if (played) return;
+  played = true;
+  timeline = createTimeline({defaults: {ease: 'out(4)'}, onComplete: () => stop()});
+  timeline
+   .add(node.querySelectorAll('[data-build-block]'), {
+    translateY: [-14, 0], opacity: [.15, 1], duration: 650, delay: stagger(320)
+   }, 100)
+   .add(node.querySelector('[data-build-thread]')!, {
+    strokeDashoffset: [160, 0], duration: 2000, ease: 'inOut(3)'
+   }, 250)
+   .add(node.querySelector('[data-build-hammer]')!, {
+    rotate: [0, -24, 8, -18, 6, 0], duration: 1700, ease: 'inOutSine'
+   }, 500)
+   .add(node.querySelector('[data-build-spool]')!, {
+    translateY: [0, -3, 0], duration: 1700, ease: 'inOutSine'
+   }, 550)
+   .add(node.querySelector('[data-build-eyes]')!, {
+    scaleY: [1, .15, 1], duration: 240, ease: 'inOutSine'
+   }, 2500);
+ };
+ const observer = new IntersectionObserver(entries => {
+  visible = entries[0].isIntersecting;
+  sync();
+ }, {threshold: .25});
+ observer.observe(node);
+ reduce.addEventListener('change', sync);
+ document.addEventListener('visibilitychange', sync);
+ return {
+  update(next: ConstructionMotionOptions) {
+   if (next.replay !== options.replay || (options.paused && !next.paused)) {
+    stop(); played = false;
+   }
+   options = next; sync();
+  },
+  destroy() { stop(); observer.disconnect(); reduce.removeEventListener('change', sync); document.removeEventListener('visibilitychange', sync); }
+ };
+}
 
 // Spooly's optional Web Component adapter. Gestures are finite and never gate
 // a business action; the component owns and calls the returned cleanup.

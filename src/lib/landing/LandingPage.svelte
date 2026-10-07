@@ -6,6 +6,7 @@
  import GarmentScene from './GarmentScene.svelte';
  import BlazerStory from './BlazerStory.svelte';
  import WorkflowStory from './WorkflowStory.svelte';
+ import AIAnnouncement from './AIAnnouncement.svelte';
  import './landing.css';
  import './story.css';
  import './motion.css';
@@ -46,6 +47,7 @@
 </svelte:head>
 <div class="es-site" bind:this={root} class:motion-paused={paused}>
  <a class="es-skip" href="#main">Skip to content</a>
+ <AIAnnouncement {paused}/>
  <header class="es-nav">
   <a class="es-brand" href="/" aria-label="Euro Suits home"><span class="es-logo"><img src="/logo.png" alt="" width="42" height="42"/></span><span>EURO SUITS<span class="brand-caption">MANUFACTURING ERP</span></span></a>
   <nav class:open={menu} aria-label="Main navigation"><a href="#blazer" onclick={()=>menu=false}>Inside the blazer</a><a href="#about" onclick={()=>menu=false}>The company</a><a href="#workflow" onclick={()=>menu=false}>How it works</a><a href="#workspaces" onclick={()=>menu=false}>Workspaces</a></nav>
