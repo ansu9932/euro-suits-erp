@@ -34,3 +34,17 @@ test('generic login and developer route resolve to the account portal',()=>{
  assert.equal(workspaceRedirect({portal:'finance'},'','companies'),'/finance');
  assert.equal(workspaceRedirect({portal:'developer'},'admin','companies'),'/developer');
 });
+
+test('export-only Finance users reach invoice access from sign-in and old workspace links',()=>{
+ const user={portal:'finance',grants:['export_view','export_edit'],setup_grants:[]};
+ for(const portal of ['', 'finance', 'admin']) for(const workspace of ['companies','operations']) {
+  assert.equal(workspaceRedirect(user,portal,workspace),'/exports');
+ }
+});
+test('export grants preserve company and operations workspaces when those are assigned',()=>{
+ assert.equal(workspaceRedirect({portal:'finance',grants:['export_view'],setup_grants:['view']},'finance','companies'),null);
+ assert.equal(workspaceRedirect({portal:'finance',grants:['export_view'],setup_grants:['view']},'finance','operations'),'/finance');
+ assert.equal(workspaceRedirect({portal:'finance',grants:['export_view','view_orders'],setup_grants:[]},'finance','companies'),'/finance/operations');
+ assert.equal(workspaceRedirect({portal:'finance',grants:['export_edit'],setup_grants:[]},'finance','companies'),null);
+ assert.equal(workspaceRedirect({portal:'developer',grants:['export_view'],setup_grants:[]},'finance','companies'),'/developer');
+});

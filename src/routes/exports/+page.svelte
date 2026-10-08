@@ -7,6 +7,7 @@
  import ExportWorkspace from '$lib/ExportWorkspace.svelte';
  import SignInForm from '$lib/SignInForm.svelte';
  import Spooly from '$lib/Spooly.svelte';
+ import {workspaceRedirect} from '$lib/workspaceAccess';
  import '../../app.css';
  import '../../company.css';
  import '../../dashboard.css';
@@ -14,6 +15,7 @@
  type SessionUser = User & {portal:string; renewal_blocks?:Row[]; setup_grants?:string[]};
  let user:SessionUser|null=$state(null);
  let ready=$state(false), busy=$state(false), error=$state(''), exportDirty=$state(false);
+ let hasWorkspaceHome=$derived.by(()=>!!user&&workspaceRedirect(user,user.portal,'companies')!=='/exports');
  let generation=0;
  onMount(()=>{
   let active=true;
@@ -44,7 +46,7 @@
 {:else}
  <div class="export-shell erp-workspace">
   <a class="workspace-skip" href="#export-content">Skip to export workspace</a>
-  <header class="export-topbar"><a class="back-link" href={'/'+user.portal}><ArrowLeft size={17}/><span>Back to workspace</span></a><div class="export-account"><span><strong>{user.name}</strong><small>{user.role}</small></span><button class="button secondary" disabled={busy} onclick={logout}><LogOut size={16}/>Sign out</button></div></header>
+  <header class="export-topbar">{#if hasWorkspaceHome}<a class="back-link" href={'/'+user.portal}><ArrowLeft size={17}/><span>Back to workspace</span></a>{/if}<div class="export-account"><span><strong>{user.name}</strong><small>{user.role}</small></span><button class="button secondary" disabled={busy} onclick={logout}><LogOut size={16}/>Sign out</button></div></header>
   <main id="export-content" tabindex="-1">
    {#if error}<p class="form-error" role="alert">{error}</p>{/if}
    {#if user.renewal_blocks?.length}
@@ -70,6 +72,7 @@
  #export-content{max-width:1720px;margin:auto;padding:28px 32px 80px;outline:none}
  .access-message{padding:28px;max-width:760px;margin:40px auto}
  .access-message p{line-height:1.65;margin:16px 0}
+ @media(min-width:1024px){.export-account{margin-left:auto}}
  @media(max-width:900px){.export-topbar{padding:12px 20px}#export-content{padding:20px 20px 72px}.export-account{gap:12px}}
  @media(max-width:560px){.export-topbar{align-items:flex-start;flex-wrap:wrap;padding:12px 16px}#export-content{padding:16px 12px 72px}.export-account{margin-left:auto}.export-account>span{display:none}}
 </style>
