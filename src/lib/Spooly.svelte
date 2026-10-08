@@ -37,14 +37,15 @@
   const schedulePosition=()=>{if(!positionFrame)positionFrame=requestAnimationFrame(position)};
   const barObserver=new ResizeObserver(schedulePosition);
   const suspend=()=>{
-   const nextBar=document.querySelector('.company-actionbar');
+   const nextBar=document.querySelector('.company-actionbar, .ex-task-footer');
    if(nextBar!==actionbar){
     barObserver.disconnect();
     actionbar=nextBar;
     if(actionbar)barObserver.observe(actionbar);
    }
    schedulePosition();
-   const editing=document.activeElement?.matches('input,textarea,select,[contenteditable="true"]');
+   const editing=document.activeElement?.matches('input,textarea,select,[contenteditable="true"]')
+    ||Array.from(document.querySelectorAll('.ex-editor')).some(node=>node.getClientRects().length>0);
    const dialog=Array.from(document.querySelectorAll(
     'dialog[open],[aria-modal="true"],.drawer-backdrop,.company-modal-backdrop,.sample-overlay'
    )).some(node=>node.getClientRects().length>0);

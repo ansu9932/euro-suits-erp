@@ -21,3 +21,9 @@ Implementation assumptions pending further business clarification: merchants pro
 ## Source evidence
 
 OPEN COSTING BOOKING ENQUIRY.xlsx; ERP ENQUIRY OPEN COSTING -BOOKING ENQUIRY.eml; complete SH 9 8 and SH 9 9 recording transcripts. The detailed field mapping and test evidence live outside the frontend in work/enquiry-20261006 and ERP docs.
+
+## Export documentation
+
+The `/exports` workspace covers export invoices and shipping fields, multiple receipts and eBRC certificates, scrip/clearance facts, encrypted documents, file reviews, history and Excel statements. Separate `export_*` grants apply with existing company, team, buyer, line and PO restrictions. Existing designation/custom permission arrays are preserved during release.
+
+Outstanding uses exact decimal amounts: invoice less receipts, recorded foreign/local bank charges and finally approved discounts. Gross/net advice and eBRC values are not counted again. Cross-currency settlement requires explicit invoice-currency equivalents. Finance Head reviews shortfall adjustments first; a different MD or Super Admin provides final approval. Historical workbook records are not automatically imported. Detailed mapping and evidence: ERP `docs/export-20261008/`.
