@@ -157,7 +157,7 @@ export const exportDate=(value:unknown)=>value?new Date(String(value).slice(0,10
 export const exportReference=(id:number)=>'EX-'+String(id).padStart(6,'0');
 
 
-export type InvoiceFile = {file:File;key:string;status:'queued'|'uploading'|'uploaded'|'failed'|'uncertain';path?:string;error?:string;id?:number};
+export type InvoiceFile = {file:File;key:string;kind:string;status:'queued'|'uploading'|'uploaded'|'failed'|'uncertain';path?:string;error?:string;id?:number};
 export type InvoiceSaveAttempt = {path:string;body:Row;content:string};
 export type InvoiceSaveState = {savedContent:string;pendingSave:InvoiceSaveAttempt|null;files:InvoiceFile[]};
 type Mutation = (path:string,body:Row)=>Promise<Row>;
@@ -170,6 +170,8 @@ export function invoiceCompanyChoices(choices:Row[],current=''):string[]{
  return names;
 }
 export function invoiceFileKey(file:File):string{return [file.name,file.size,file.lastModified,file.type].join(':')}
+export function hasRequiredInvoiceDocument(saved:Row[],queued:InvoiceFile[]):boolean{return saved.some(file=>file.kind==='invoice')||queued.some(file=>file.kind==='invoice')}
+export function exportFileCanPreview(file:Row):boolean{return ['application/pdf','image/png','image/jpeg'].includes(String(file.mime||'').toLowerCase())}
 export function invoiceFileError(file:File):string{
  if(!file.size)return 'Choose a document that is not empty.';
  if(file.size>10*1024*1024)return 'Each document must be 10 MB or smaller.';
@@ -191,7 +193,7 @@ export async function saveInvoiceFiles(form:Row,state:InvoiceSaveState,mutate:Mu
   catch(error){if(!uncertainInvoiceWrite(error))state.pendingSave=null;throw error}
  };
  const attach=async(entry:InvoiceFile)=>{
-  entry.path??=`/exports/${form.id}/files?version=${form.version}&kind=invoice`;
+  entry.path??=`/exports/${form.id}/files?version=${form.version}&kind=${encodeURIComponent(entry.kind)}`;
   entry.status='uploading';entry.error='';
   try{const saved=await upload(entry.path,entry.file);entry.id=saved.id;entry.status='uploaded';form.version=saved.version}
   catch(error){entry.status=uncertainInvoiceWrite(error)?'uncertain':'failed';entry.error=(error as Error).message;if(entry.status==='failed')entry.path=undefined;throw error}

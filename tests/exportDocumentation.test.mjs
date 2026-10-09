@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {exportPartyKey,exportRegisterQuery,exportInvoiceBody,moneyMinor,minorDecimal,exportWorkflowStatuses,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,saveInvoiceFiles} from '../src/lib/exportDocumentation.ts';
+import {exportPartyKey,exportRegisterQuery,exportInvoiceBody,moneyMinor,minorDecimal,exportWorkflowStatuses,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,hasRequiredInvoiceDocument,exportFileCanPreview,saveInvoiceFiles} from '../src/lib/exportDocumentation.ts';
 
 test('unassigned register omits company ID instead of sending an invalid zero',()=>{
  assert.equal(exportRegisterQuery('').toString(),'scope=standalone');
@@ -46,7 +46,7 @@ test('invoice document queue rejects empty, oversized and unsupported documents'
  assert.match(invoiceFileError(new File(['x'],'script.html')),/Choose a PDF/);
 });
 const draft=()=>({company_id:null,party_type:'manual',party_name:'Customer',invoice_number:'INV-1',currency:'USD',invoice_amount:'100.00',profile:{},receipts:[],ebrcs:[]});
-const queued=(name)=>({file:new File(['%PDF-1.4'],name,{lastModified:1}),key:name,status:'queued'});
+const queued=(name,kind='invoice')=>({kind,file:new File(['%PDF-1.4'],name,{lastModified:1}),key:name,status:'queued'});
 test('a partial upload retry keeps one invoice and skips successfully attached files',async()=>{
  const form=draft(),state={savedContent:'',pendingSave:null,files:[queued('a.pdf'),queued('b.pdf')]};
  let saves=0,failed=false;const uploads=[];
@@ -87,4 +87,19 @@ test('unconfirmed file attempts keep their URL and File object and block later w
  await assert.rejects(saveInvoiceFiles(form,state,mutate,upload));form.invoice_amount='200.00';
  await assert.rejects(saveInvoiceFiles(form,state,mutate,upload));
  assert.equal(saves,0);assert.equal(uploads[0].path,uploads[1].path);assert.equal(uploads[0].file,uploads[1].file);assert.equal(state.files[0].status,'uncertain');assert.equal(form.version,5);
+});
+
+test('only the invoice checklist category satisfies the submission requirement',()=>{
+ assert.equal(hasRequiredInvoiceDocument([{kind:'packing_list'}],[queued('evidence.pdf','bank_advice')]),false);
+ assert.equal(hasRequiredInvoiceDocument([{kind:'invoice'}],[]),true);
+ assert.equal(hasRequiredInvoiceDocument([],[queued('invoice.pdf')]),true);
+});
+test('checklist upload queue keeps categories across saves and retries',async()=>{
+ const form=draft(),state={savedContent:'',pendingSave:null,files:[queued('same.pdf','invoice'),queued('same.pdf','packing_list')]},kinds=[];
+ await saveInvoiceFiles(form,state,async()=>({id:5,version:1}),async(path)=>{const query=new URL('https://example.test'+path).searchParams;kinds.push(query.get('kind'));return {id:kinds.length,version:Number(query.get('version'))+1}});
+ assert.deepEqual(kinds,['invoice','packing_list']);assert.equal(form.version,3);
+});
+test('secure previews use validated PDF/image metadata and Office falls back to download',()=>{
+ for(const mime of ['application/pdf','image/png','image/jpeg'])assert.equal(exportFileCanPreview({mime}),true);
+ for(const mime of ['application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','text/html',''])assert.equal(exportFileCanPreview({mime,filename:'looks-like.pdf'}),false);
 });
