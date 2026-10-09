@@ -37,3 +37,9 @@
  .company-reminder-recipients>.button{justify-self:start}
  .company-history>div small{font-variant-numeric:tabular-nums;color:#526a7b;white-space:nowrap}
 }
+
+/* Keep user-access actions in view while the desktop permissions form scrolls. */
+@media(min-width:1024px){
+ .company-modal.setup-users-modal{scroll-padding-block:108px 100px}
+ .company-modal.setup-users-modal>form>footer{position:sticky;bottom:-28px;z-index:3;margin:28px -28px -28px;padding:16px 28px;background:#fff;border-top:1px solid #dce5eb;box-shadow:0 -4px 18px #142b400a}
+}
