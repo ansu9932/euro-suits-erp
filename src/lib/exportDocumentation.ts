@@ -11,7 +11,30 @@ export type ExportField = {
 };
 export type ExportTab = 'shipment' | 'receipts' | 'ebrc' | 'clearance' | 'documents' | 'history';
 export type ExportWorkspaceProps = {user: User; dirty?: boolean};
-export type ExportRecord = Row & {id:number;version:number;company_id:number;profile:Row;receipts:Row[];ebrcs:Row[]};
+export type ExportRecord = Row & {id:number;version:number;company_id:number|null;profile:Row;receipts:Row[];ebrcs:Row[]};
+export const exportWorkflowStatuses = ['Draft','Submitted','Changes requested','Approved'] as const;
+export function exportPartyKey(party:Row):string {
+ return party.party_type==='manual'?'manual:'+String(party.party_name??party.name??'').trim().toLowerCase():`${party.party_type}:${party.party_id??party.id??''}`;
+}
+export function exportRegisterQuery(company:string,filters:Row={}):URLSearchParams {
+ const query=new URLSearchParams({scope:company?'company':'standalone'});
+ if(company)query.set('company_id',company);
+ for(const key of ['fy','currency','search','status'])if(String(filters[key]||'').trim())query.set(key,String(filters[key]).trim());
+ if(filters.party){
+  query.set('party_type',filters.party.party_type);
+  if(filters.party.party_type==='manual')query.set('party_name',String(filters.party.party_name??filters.party.name??'').trim());
+  else query.set('party_id',String(filters.party.party_id??filters.party.id));
+ }
+ return query;
+}
+export function exportInvoiceBody(form:Row):Row {
+ const standalone=!form.company_id;
+ return {company_id:standalone?null:Number(form.company_id),party_type:standalone?'manual':form.party_type,
+  party_id:standalone?null:Number(form.party_id),order_id:standalone||!form.order_id?null:Number(form.order_id),
+  ...(standalone?{party_name:String(form.party_name||'').trim()}:{}),
+  invoice_number:form.invoice_number,currency:form.currency,invoice_amount:form.invoice_amount,
+  profile:form.profile,receipts:form.receipts,ebrcs:form.ebrcs,version:form.version};
+}
 
 export const exportTabs: {key:ExportTab;label:string}[] = [
  {key:'shipment',label:'Shipment & invoice'}, {key:'receipts',label:'Receipts & banking'},
