@@ -5,7 +5,7 @@
  import {api,uploadTo} from './api';
  import {enter} from './motion';
  import type {Row,User} from './types';
- import {invoiceFields,incentiveFields,receiptFields,conversionFields,ebrcFields,scripFields,clearanceFields,exportTabs,moneyText,moneyMinor,minorDecimal,exportDate,exportReference,exportWorkflowStatuses,exportPartyKey,exportRegisterQuery,exportInvoiceBody,type ExportField,type ExportTab} from './exportDocumentation';
+ import {invoiceFields,incentiveFields,receiptFields,conversionFields,ebrcFields,scripFields,clearanceFields,exportTabs,moneyText,moneyMinor,minorDecimal,exportDate,exportReference,exportWorkflowStatuses,exportPartyKey,exportRegisterQuery,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,saveInvoiceFiles,type InvoiceSaveState,type ExportField,type ExportTab} from './exportDocumentation';
  let {user,dirty=$bindable(false)}:{user:User&{portal?:string;setup_grants?:string[]};dirty?:boolean}=$props();
  let options:Row=$state({companies:[],parties:[],orders:[],currencies:[],permissions:{},document_kinds:[]});
  let listing:Row=$state({records:[],totals:[]}),detail:Row|null=$state(null),form:Row=$state({profile:{},receipts:[],ebrcs:[]});
@@ -13,6 +13,8 @@
  let editing=$state(false),busy=$state(false),loading=$state(true),error=$state(''),notice=$state(''),reviewNote=$state(''),reviewStatus=$state('Checked');
  let discountAmount=$state(''),discountReason=$state(''),decisionNotes:Record<number,string>=$state({}),fileKind=$state('invoice'),revision:Row|null=$state(null);
  let workflowNote=$state(''),commentNote=$state('');
+ let addingCompany=$state(false),newCompanyName=$state(''),companyError=$state('');
+ let invoiceSave:InvoiceSaveState=$state({savedContent:'',pendingSave:null,files:[]});
  let root:HTMLElement; let returnID='export-new'; let savedID=$state(0); let focusFrame=0;
  const coreFields=invoiceFields.filter(f=>['invoice_number','currency','invoice_amount'].includes(f.key));
  const shipmentFields=invoiceFields.filter(f=>!['invoice_number','currency','invoice_amount'].includes(f.key));
@@ -21,6 +23,11 @@
  let parties=$derived(options.parties||[]);
  let registerParties=$derived.by(()=>{const choices=new Map<string,Row>();for(const party of parties)choices.set(exportPartyKey(party),party);for(const record of listing.records||[])if(record.party_type==='manual')choices.set(exportPartyKey(record),{party_type:'manual',name:record.party_name});return [...choices.values()]});
  let actions=$derived.by(()=>detail?.actions||{});
+ let invoiceCompanies=$derived(invoiceCompanyChoices(options.standalone_parties||[],String(form.party_name||'')));
+ let invoiceFiles=$derived.by(()=>(detail?.files||[]).filter((file:Row)=>file.kind==='invoice'));
+ let canAttachInvoice=$derived(editing?!!permissions.files&&(!detail||!!actions.attach):!!actions.attach);
+ let hasInvoiceDocument=$derived(invoiceFiles.length>0||invoiceSave.files.length>0);
+ let uncertainSave=$derived(!!invoiceSave.pendingSave||invoiceSave.files.some(file=>file.status==='uncertain'));
  let requiresOrder=$derived.by(()=>!!form.company_id&&!!options.permissions?.requires_order);
  let companySetupURL=$derived.by(()=>user.setup_grants?.includes('view')&&['admin','md','finance'].includes(user.portal||'')?'/'+user.portal:'');
  let linkedParty=$derived(editing?`${form.party_type||''}:${form.party_id||''}`:'');
@@ -63,37 +70,68 @@
  }
 
  beforeNavigate(n=>{if(!dirty)return;if(n.type==='leave'){n.cancel();return}if(!window.confirm('Discard the unsaved export changes?'))n.cancel()});
- async function selectCompany(value:string){if(value===company||busy)return;if(dirty&&!window.confirm('Discard the unsaved export changes?'))return;company=value;detail=null;editing=false;dirty=false;listing={records:[],totals:[]};options={...options,parties:[],orders:[],permissions:{}};partyFilter='';year='';currencyFilter='';workflowFilter='';search='';notice='';await run(async()=>{await loadOptions();if(company||options.permissions?.standalone)await loadRegister()})}
+ async function selectCompany(value:string){if(value===company||busy)return;if(dirty&&!window.confirm('Discard the unsaved export changes?'))return;company=value;detail=null;editing=false;dirty=false;resetInvoiceStaging();listing={records:[],totals:[]};options={...options,parties:[],orders:[],permissions:{}};partyFilter='';year='';currencyFilter='';workflowFilter='';search='';notice='';await run(async()=>{await loadOptions();if(company||options.permissions?.standalone)await loadRegister()})}
+ function resetInvoiceStaging(saved=false){invoiceSave={savedContent:saved?invoiceContent(form):'',pendingSave:null,files:[]};addingCompany=false;newCompanyName='';companyError=''}
  function changeParty(value:string){const p=parties.find((p:Row)=>partyKey(p)===value);form.party_type=p?.party_type||'';form.party_id=p?.id||'';form.order_id=null;dirty=true}
- function fresh(){if(busy||!options.permissions?.edit||(!company&&!options.permissions?.standalone))return;returnID='export-new';error='';notice='';detail=null;form={company_id:company?Number(company):null,party_type:company?'':'manual',party_id:null,party_name:'',order_id:null,workflow_status:'Draft',invoice_number:'',currency:'',invoice_amount:'',profile:{statuses:{}},receipts:[],ebrcs:[]};editing=true;dirty=true;tab='shipment';void focus('export-task-title')}
- async function open(id:number){returnID='export-open-'+id;await run(async()=>{detail=await api('/exports/'+id);savedID=0;editing=false;dirty=false;tab='shipment';revision=null;reviewNote='';workflowNote='';commentNote='';discountAmount='';discountReason='';notice='';await focus('export-task-title')})}
- function edit(){if(!detail||busy||!actions.edit)return;form=structuredClone($state.snapshot(detail.record));form.profile??={};form.profile.statuses??={};form.receipts??=[];form.ebrcs??=[];editing=true;dirty=false;error='';notice='';revision=null;void focus('export-task-title')}
- async function cancel(){if(busy||dirty&&!window.confirm('Discard the unsaved export changes?'))return;editing=false;dirty=false;error='';await focus(detail?'export-task-title':returnID)}
- async function back(){if(busy)return;if(editing){await cancel();if(editing)return}detail=null;revision=null;notice='';error='';await focus(returnID)}
+ function fresh(){if(busy||!options.permissions?.edit||(!company&&!options.permissions?.standalone))return;returnID='export-new';error='';notice='';detail=null;form={company_id:company?Number(company):null,party_type:company?'':'manual',party_id:null,party_name:'',order_id:null,workflow_status:'Draft',invoice_number:'',currency:'',invoice_amount:'',profile:{statuses:{}},receipts:[],ebrcs:[]};resetInvoiceStaging();editing=true;dirty=true;tab='shipment';void focus('export-task-title')}
+ async function open(id:number){returnID='export-open-'+id;await run(async()=>{detail=await api('/exports/'+id);resetInvoiceStaging();savedID=0;editing=false;dirty=false;tab='shipment';revision=null;reviewNote='';workflowNote='';commentNote='';discountAmount='';discountReason='';notice='';await focus('export-task-title')})}
+ function edit(){if(!detail||busy||!actions.edit)return;if(invoiceSave.files.length){error='Finish confirming the queued attachments before editing the invoice.';return}form=structuredClone($state.snapshot(detail.record));form.profile??={};form.profile.statuses??={};form.receipts??=[];form.ebrcs??=[];resetInvoiceStaging(true);editing=true;dirty=false;error='';notice='';revision=null;void focus('export-task-title')}
+ async function cancel(){
+  if(busy||dirty&&!window.confirm(uncertainSave?'A previous save or upload is unconfirmed. Leave this form and check the saved invoice or register before starting it again?':'Discard unsaved changes and queued documents? Saved invoice details and attached files will remain.'))return;
+  const id=form.id;editing=false;dirty=false;error='';resetInvoiceStaging();
+  if(id)await run(async()=>{savedID=id;detail=null;detail=await api('/exports/'+id);savedID=0;await loadRegister()});
+  await focus(detail?'export-task-title':returnID);
+ }
+ async function back(){if(busy)return;if(editing){await cancel();if(editing)return}else if(dirty&&!window.confirm('Leave the queued attachments? Check this invoice before attaching an unconfirmed file again.'))return;resetInvoiceStaging();dirty=false;detail=null;revision=null;notice='';error='';await focus(returnID)}
  async function refreshDetail(){detail=await api('/exports/'+detail!.record.id);await loadRegister()}
- function body(){return exportInvoiceBody(form)}
+ async function addInvoiceCompany(){
+  if(busy)return;const name=newCompanyName.trim();companyError='';
+  if(!name||name.length>160||/[\r\n]/.test(name)){companyError='Enter a company name between 1 and 160 characters on one line.';await focus('export-new-company');return}
+  await run(async()=>{const item=await api('/exports/parties',{name});options.standalone_parties=[...(options.standalone_parties||[]).filter((choice:Row)=>choice.id!==item.id),item];form.party_name=item.name;addingCompany=false;newCompanyName='';dirty=true;notice=item.created?'Company added to the export invoice list.':'The existing company name is selected.';await focus('export-invoice-company')});
+ }
+ function queueInvoiceFiles(event:Event){
+  const input=event.currentTarget as HTMLInputElement,files=Array.from(input.files||[]);input.value='';if(busy||!canAttachInvoice)return;
+  const invalid=files.map(file=>invoiceFileError(file)).find(Boolean);if(invalid){error=invalid;return}
+  if((detail?.files||[]).length+invoiceSave.files.length+files.length>100){error='Each invoice can have at most 100 documents.';return}
+  for(const file of files){const key=invoiceFileKey(file);if(!invoiceSave.files.some(item=>item.key===key))invoiceSave.files.push({file,key,status:'queued'})}
+  dirty=true;error='';notice='Invoice documents queued. Save the draft to attach them.';
+ }
+ function removeQueuedInvoiceFile(key:string){if(busy)return;const item=invoiceSave.files.find(file=>file.key===key);if(!item||item.status==='uploaded'||item.path)return;invoiceSave.files=invoiceSave.files.filter(file=>file.key!==key);dirty=editing||invoiceSave.files.length>0}
+ async function flushInvoiceDocuments(){
+  await run(async()=>{await saveInvoiceFiles(form,invoiceSave,api,uploadTo);detail=await api('/exports/'+form.id);resetInvoiceStaging();dirty=false;notice='Invoice documents attached. You can submit this draft for approval.';await loadRegister()});
+ }
+ async function attachInvoiceFiles(event:Event){
+  if(!invoiceSave.files.length){form=structuredClone($state.snapshot(detail!.record));resetInvoiceStaging(true)}
+  queueInvoiceFiles(event);if(!error&&invoiceSave.files.length)await flushInvoiceDocuments();
+ }
  async function save(event:SubmitEvent){
   event.preventDefault();
   const intent=event.submitter instanceof HTMLButtonElement?event.submitter.value:'save';
   if((form.company_id?!form.party_id:!String(form.party_name||'').trim())||!String(form.invoice_number||'').trim()||!form.currency||!present(form.invoice_amount)||(requiresOrder&&!form.order_id)){
-   error=form.company_id?'Choose a party, enter the invoice number, currency and amount, and select a linked PO when required.':'Enter the buyer / customer name, invoice number, currency and amount.';
+   error=form.company_id?'Choose a party, enter the invoice number, currency and amount, and select a linked PO when required.':'Choose the invoice company, and enter the invoice number, currency and amount.';
    tab='shipment';await focus('export-task-title');return;
   }
+  if(intent==='submit'&&!hasInvoiceDocument){error='Attach at least one invoice document before submitting for approval. You can save a draft without one.';tab='shipment';await focus('invoice-document-input');return}
   await run(async()=>{
-   const saved=await api('/exports'+(form.id?'/'+form.id:''),body());
-   form.id=saved.id;form.version=saved.version;editing=false;dirty=false;savedID=saved.id;detail=null;listing={records:[],totals:[]};
+   try{await saveInvoiceFiles(form,invoiceSave,api,uploadTo)}catch(error){
+    notice=form.id?'Draft saved. Your entered details and document queue are retained. Completed attachments will not be uploaded again.':'Your entered details and queued documents are retained.';
+    throw error;
+   }
+   const id=form.id,version=form.version;editing=false;dirty=false;savedID=id;detail=null;listing={records:[],totals:[]};resetInvoiceStaging();
    notice='Draft saved. Submit it when the invoice is ready for MD or Super Admin review.';
-   detail=await api('/exports/'+saved.id);savedID=0;
+   detail=await api('/exports/'+id);savedID=0;
    if(intent==='submit'){
-    await api('/exports/'+saved.id+'/workflow',{version:saved.version,action:'submit'});
-    notice='Invoice submitted to MD or Super Admin for approval.';savedID=saved.id;detail=null;
-    detail=await api('/exports/'+saved.id);savedID=0;
+    await api('/exports/'+id+'/workflow',{version,action:'submit'});
+    notice='Invoice submitted to MD or Super Admin for approval.';savedID=id;detail=null;
+    detail=await api('/exports/'+id);savedID=0;
    }
    await loadRegister();await focus('export-task-title');
   });
  }
  async function workflow(action:'submit'|'approve'|'request_changes'|'reopen'){
   if(!detail||!actions[action]||busy)return;
+  if(action==='submit'&&(invoiceSave.pendingSave||invoiceSave.files.some(file=>file.status!=='uploaded'))){error='Finish or remove queued invoice documents before submitting. Retry / confirm any unconfirmed attachment first.';tab='shipment';await focus('export-task-title');return}
+  if(action==='submit'&&!invoiceFiles.length){error='Attach at least one invoice document before submitting for approval.';tab='shipment';await focus('invoice-document-input');return}
   if(['request_changes','reopen'].includes(action)&&!workflowNote.trim()){error='Enter a clear reason before continuing.';await focus('export-workflow-note');return}
   await run(async()=>{
    const result=await api('/exports/'+detail!.record.id+'/workflow',{version:detail!.record.version,action,note:workflowNote.trim()});
@@ -107,7 +145,7 @@
  function addReceipt(){form.receipts.push({currency:form.currency||'',statuses:{}});dirty=true;void focus('receipt-'+(form.receipts.length-1)+'-reference')}
  function addEbrc(){form.ebrcs.push({status:'Pending',currency:form.currency||'',shipping_bill_number:form.profile.shipping_bill_number||'',shipping_bill_date:form.profile.shipping_bill_date||'',statuses:{}});dirty=true;void focus('ebrc-'+(form.ebrcs.length-1)+'-export_reference')}
  function removeRow(key:'receipts'|'ebrcs',i:number){if(window.confirm(`Remove ${key==='receipts'?'receipt':'eBRC'} ${i+1} from these unsaved changes?`)){form[key].splice(i,1);dirty=true}}
- async function upload(event:Event){const input=event.currentTarget as HTMLInputElement;const files=Array.from(input.files||[]);await run(async()=>{for(const file of files){if(file.size>10*1024*1024)throw new Error('Each document must be 10 MB or smaller.');await uploadTo(`/exports/${detail!.record.id}/files?version=${detail!.record.version}&kind=${encodeURIComponent(fileKind)}`,file);detail=await api('/exports/'+detail!.record.id)}notice='Document attached. The file and uploader are recorded in the history.';await loadRegister()});input.value=''}
+ async function upload(event:Event,kind=fileKind){const input=event.currentTarget as HTMLInputElement;const files=Array.from(input.files||[]);await run(async()=>{for(const file of files){if(file.size>10*1024*1024)throw new Error('Each document must be 10 MB or smaller.');await uploadTo(`/exports/${detail!.record.id}/files?version=${detail!.record.version}&kind=${encodeURIComponent(kind)}`,file);detail=await api('/exports/'+detail!.record.id)}notice='Document attached. The file and uploader are recorded in the history.';await loadRegister()});input.value=''}
  async function check(kind:'finance'|'audit'){await run(async()=>{await api(`/exports/${detail!.record.id}/check`,{version:detail!.record.version,kind,status:reviewStatus,note:reviewNote});await refreshDetail();reviewNote='';notice=`${kind==='finance'?'Finance':'Audit'} check recorded.`})}
  async function requestDiscount(e:SubmitEvent){e.preventDefault();await run(async()=>{await api(`/exports/${detail!.record.id}/discount`,{version:detail!.record.version,action:'request',amount:discountAmount,reason:discountReason});await refreshDetail();discountAmount='';discountReason='';notice='Shortfall request sent to Finance Head for the first review.'})}
  async function discountDecision(d:Row,action:string){await run(async()=>{await api(`/exports/${detail!.record.id}/discount`,{version:detail!.record.version,action,discount_id:d.id,reason:decisionNotes[d.id]||''});await refreshDetail();decisionNotes[d.id]='';notice=action==='final_approve'?'Shortfall approved and balance updated.':'Shortfall review recorded.'})}
@@ -119,15 +157,29 @@
  const profileStatusFields=[...shipmentFields,...incentiveFields,...scripFields,...clearanceFields].filter(f=>!['textarea','select'].includes(f.type||'')&&!f.key.endsWith('_currency'));
 </script>
 
+{#snippet invoiceAttachControl(readonly:boolean)}
+ {#if canAttachInvoice}<label class="ex-button secondary ex-upload-label"><Paperclip size={16}/>Attach invoice document<input id="invoice-document-input" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" aria-label="Attach invoice document" aria-describedby="invoice-document-help" disabled={busy} onchange={readonly?attachInvoiceFiles:queueInvoiceFiles}/></label>{/if}
+{/snippet}
+
+{#snippet invoiceAttachmentList(readonly:boolean)}
+ <small id="invoice-document-help">PDF, images, Word or Excel · up to 10 MB per file. At least one invoice document is required before submission.{#if !readonly}{' '}Files attach when you save the draft.{/if}</small>
+ {#if invoiceFiles.length||invoiceSave.files.length}<ul class="ex-invoice-files" aria-label="Invoice documents">
+  {#each invoiceFiles as file}<li><div>{#if permissions.download}<a data-sveltekit-reload data-sveltekit-preload-data="false" href={'/api/export-files/'+file.id} target="_blank" rel="noopener noreferrer">{file.filename}</a>{:else}<span>{file.filename}</span>{/if}<small>{Math.max(1,Math.round(file.size/1024))} KB · Attached {exportDate(file.created_at)}</small></div><span class="ex-status complete">Attached</span></li>{/each}
+  {#each invoiceSave.files.filter(item=>!invoiceFiles.some((file:Row)=>file.id===item.id)) as item (item.key)}<li><div>{#if item.id&&permissions.download}<a data-sveltekit-reload data-sveltekit-preload-data="false" href={'/api/export-files/'+item.id} target="_blank" rel="noopener noreferrer">{item.file.name}</a>{:else}<span>{item.file.name}</span>{/if}<small>{Math.max(1,Math.round(item.file.size/1024))} KB · {item.status==='uploaded'?'Attached':item.status==='uploading'?'Uploading…':item.status==='uncertain'?'Awaiting upload confirmation':item.status==='failed'?'Upload failed — retry or remove':'Queued for the next save'}</small>{#if item.error}<small class="ex-file-error">{item.error}</small>{/if}</div>{#if item.status==='uploaded'}<span class="ex-status complete">Attached</span>{:else if !item.path}<button type="button" class="ex-button quiet" disabled={busy} aria-label={'Remove queued document '+item.file.name} onclick={()=>removeQueuedInvoiceFile(item.key)}><Trash2 size={15}/>Remove queued</button>{/if}</li>{/each}
+ </ul>{/if}
+ {#if readonly&&invoiceSave.files.length}<div class="ex-actions"><button type="button" class="ex-button secondary" disabled={busy} onclick={flushInvoiceDocuments}>Retry / confirm attachments</button><small>Completed uploads are kept. Unconfirmed uploads use the same protected request.</small></div>{/if}
+{/snippet}
+
 {#snippet fields(items:ExportField[],values:Row,prefix:string,readonly:boolean)}
  <div class="ex-grid" class:read={readonly}>
   {#each items as field}
    {@const required=field.required||(field.key==='ebrc_number'&&!['Pending','Not required'].includes(values.status))}
-   <div class="ex-field" class:wide={field.type==='textarea'}>
-    {#if readonly}<span class="ex-label">{field.label}</span><span class="ex-value">{fieldValue(field,values?.[field.key])}</span>{#if values?.statuses?.[field.key]}<small>{values.statuses[field.key]}</small>{/if}
+   <div class="ex-field" class:wide={field.type==='textarea'} class:invoice-document={prefix==='invoice'&&field.key==='invoice_number'}>
+    {#if readonly}<span class="ex-label">{field.label}</span>{#if prefix==='invoice'&&field.key==='invoice_number'}<div class="ex-invoice-row"><span class="ex-value">{fieldValue(field,values?.[field.key])}</span>{@render invoiceAttachControl(true)}</div>{@render invoiceAttachmentList(true)}{:else}<span class="ex-value">{fieldValue(field,values?.[field.key])}</span>{/if}{#if values?.statuses?.[field.key]}<small>{values.statuses[field.key]}</small>{/if}
     {:else}
      <label for={prefix+'-'+field.key}><span class="ex-caption">{field.label}{#if required}<span class="ex-required"> *</span>{/if}</span></label>
-     {#if field.type==='textarea'}<textarea id={prefix+'-'+field.key} bind:value={values[field.key]} rows="3" maxlength="2000" disabled={busy}></textarea>
+     {#if prefix==='invoice'&&field.key==='invoice_number'}<div class="ex-invoice-row"><input id={prefix+'-'+field.key} bind:value={values[field.key]} required={required} disabled={busy} maxlength="500"/>{@render invoiceAttachControl(false)}</div>{@render invoiceAttachmentList(false)}
+     {:else if field.type==='textarea'}<textarea id={prefix+'-'+field.key} bind:value={values[field.key]} rows="3" maxlength="2000" disabled={busy}></textarea>
      {:else if field.type==='currency'||field.type==='select'}
       <select id={prefix+'-'+field.key} bind:value={values[field.key]} required={required} disabled={busy||(prefix==='invoice'&&field.key==='currency'&&invoiceCurrencyLocked)}><option value="">Choose…</option>{#each [...new Set([...(field.type==='currency'?options.currencies||[]:field.choices||[]),...(values[field.key]?[values[field.key]]:[])])] as item}<option value={item}>{item}</option>{/each}</select>
      {:else if field.type==='date'}<input id={prefix+'-'+field.key} type="date" bind:value={values[field.key]} required={required} disabled={busy}/>
@@ -157,7 +209,9 @@
  {#if tab==='shipment'}
   <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">Shipment & invoice</h3>
    {#if readonly}<div class="ex-record-links"><div><span class="ex-label">Party</span><strong>{r.party_name}</strong></div><div><span class="ex-label">Linked production PO</span><strong>{(options.orders||[]).find((o:Row)=>o.id===r.order_id)?.po||r.order_po||'Not linked'}</strong></div><div><span class="ex-label">Register reference</span><strong>{exportReference(r.id)}</strong></div></div>
-   {:else if !form.company_id}<div class="ex-grid ex-link-fields"><label><span class="ex-caption">Buyer / customer name <span class="ex-required">*</span></span><input bind:value={form.party_name} required maxlength="160" disabled={busy} autocomplete="organization"/><small>Enter the invoice customer directly. A company or buyer master is not required.</small></label></div>{:else}<div class="ex-grid ex-link-fields"><label><span class="ex-caption">Party <span class="ex-required">*</span></span><select value={linkedParty} onchange={e=>changeParty(e.currentTarget.value)} required disabled={busy||!!form.id}><option value="">Choose an approved party</option>{#each parties as p}<option value={partyKey(p)}>{p.name}{p.party_type==='company_setup'?' · company master':''}</option>{/each}</select></label><label><span class="ex-caption">Linked production PO{#if requiresOrder}<span class="ex-required"> *</span>{/if}</span><select bind:value={form.order_id} required={requiresOrder} disabled={busy||!!form.id||!form.party_id||form.party_type!=='buyer'}><option value={null}>{requiresOrder?'Choose an authorised PO':'No linked PO'}</option>{#each availableOrders as order}<option value={order.id}>{order.po}</option>{/each}</select><small>{requiresOrder?'Your access is limited to assigned production orders.':'Select the related PO when available.'}</small></label></div>{/if}
+   {:else if !form.company_id}<div class="ex-link-fields ex-invoice-company"><label for="export-invoice-company"><span class="ex-caption">Company name <span class="ex-required">*</span></span></label><div class="ex-company-choice"><select id="export-invoice-company" bind:value={form.party_name} required disabled={busy}><option value="">Choose invoice company</option>{#each invoiceCompanies as name}<option value={name}>{name}</option>{/each}</select><button type="button" class="ex-button secondary" disabled={busy} aria-expanded={addingCompany} onclick={()=>{addingCompany=!addingCompany;companyError='';if(addingCompany)void focus('export-new-company')}}><Plus size={16}/>Add more company</button></div><small>These company names are saved for export invoices only.</small>
+    {#if addingCompany}<div class="ex-company-add" use:enter={'add-invoice-company'}><label for="export-new-company">New company name<input id="export-new-company" bind:value={newCompanyName} maxlength="160" disabled={busy} autocomplete="organization" onkeydown={event=>{if(event.key==='Enter'){event.preventDefault();void addInvoiceCompany()}}}/></label>{#if companyError}<p class="ex-error" role="alert">{companyError}</p>{/if}<div class="ex-actions"><button type="button" class="ex-button primary" disabled={busy||!newCompanyName.trim()} onclick={addInvoiceCompany}>Save company</button><button type="button" class="ex-button secondary" disabled={busy} onclick={()=>{addingCompany=false;companyError='';void focus('export-invoice-company')}}>Cancel</button></div><small>This adds a choice here; it does not create a Company Setup record.</small></div>{/if}
+   </div>{:else}<div class="ex-grid ex-link-fields"><label><span class="ex-caption">Party <span class="ex-required">*</span></span><select value={linkedParty} onchange={e=>changeParty(e.currentTarget.value)} required disabled={busy||!!form.id}><option value="">Choose an approved party</option>{#each parties as p}<option value={partyKey(p)}>{p.name}{p.party_type==='company_setup'?' · company master':''}</option>{/each}</select></label><label><span class="ex-caption">Linked production PO{#if requiresOrder}<span class="ex-required"> *</span>{/if}</span><select bind:value={form.order_id} required={requiresOrder} disabled={busy||!!form.id||!form.party_id||form.party_type!=='buyer'}><option value={null}>{requiresOrder?'Choose an authorised PO':'No linked PO'}</option>{#each availableOrders as order}<option value={order.id}>{order.po}</option>{/each}</select><small>{requiresOrder?'Your access is limited to assigned production orders.':'Select the related PO when available.'}</small></label></div>{/if}
    {@render fields(coreFields,r,'invoice',readonly)}
    <div class="ex-subsection">{@render fields(shipmentFields,r.profile,'shipment',readonly)}</div>
   </section>
@@ -217,10 +271,12 @@
    <form class="ex-editor" onsubmit={save} oninput={()=>dirty=true} onchange={()=>dirty=true} use:enter={'edit-'+(form.id||'new')}>
     <header class="ex-task-heading"><div><h1 id="export-task-title" tabindex="-1">{form.id?'Edit export invoice':'Add export invoice'}</h1><p>{form.invoice_number||'Invoice & shipping file'}{#if form.id} · {exportReference(form.id)}{/if}</p></div><div class="ex-actions"><button type="button" class="ex-button header-secondary" disabled={busy} onclick={cancel}>Cancel</button><button class="ex-button header-secondary" name="intent" value="save" disabled={busy}>{busy?'Saving…':'Save draft'}</button><button class="ex-button primary" name="intent" value="submit" disabled={busy}>Save & submit</button></div></header>
     {#if error}<p class="ex-error" role="alert" tabindex="-1">{error}</p>{/if}
+    {#if notice}<p class="ex-notice" role="status">{notice}</p>{/if}
+    {#if uncertainSave}<p class="ex-notice" role="status">A save or upload is not confirmed yet. Retry the same action to check its result. If the server says it was already submitted, use Cancel to check the saved invoice or register before starting again.</p>{/if}
     {@render workflowSummary(form)}
     <nav class="ex-tabs" aria-label="Export sections">{#each exportTabs as item}<button type="button" class:active={tab===item.key} aria-current={tab===item.key?'page':undefined} onclick={()=>showTab(item.key)}>{item.label}</button>{/each}</nav>
     <div class="ex-panel" use:enter={tab}>{@render panels(form,false)}</div>
-    <footer class="ex-task-footer"><span>{dirty?'Unsaved changes':'No unsaved changes'}</span><button type="button" class="ex-button secondary" disabled={busy} onclick={cancel}>Cancel</button><button class="ex-button secondary" name="intent" value="save" disabled={busy}>{busy?'Saving…':'Save draft'}</button><button class="ex-button primary" name="intent" value="submit" disabled={busy}>Save & submit</button></footer>
+    <footer class="ex-task-footer"><span>{dirty?'Unsaved changes':'No unsaved changes'}{#if !hasInvoiceDocument} · Invoice document required to submit{/if}</span><button type="button" class="ex-button secondary" disabled={busy} onclick={cancel}>Cancel</button><button class="ex-button secondary" name="intent" value="save" disabled={busy}>{busy?'Saving…':'Save draft'}</button><button class="ex-button primary" name="intent" value="submit" disabled={busy}>Save & submit</button></footer>
    </form>
   {:else if detail}
    {@const r=detail.record}{@const balance=r.balance||{}}
@@ -266,6 +322,22 @@
   .ex-comments p{margin:10px 0 0;max-width:75ch;line-height:1.65}
   .ex-comment-form{display:grid;gap:14px;margin-top:22px;max-width:780px}
   .ex-comment-form>.ex-button{justify-self:start}
+  .ex-link-fields.ex-invoice-company{max-width:900px;display:grid;grid-template-columns:minmax(0,1fr);gap:9px}
+  .ex-company-choice{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .ex-company-choice>select{flex:1 1 320px;width:auto}
+  .ex-company-add{display:grid;gap:14px;margin-top:12px;padding-top:20px;border-top:1px solid var(--ex-line)}
+  .ex-company-add .ex-error{margin:0}
+  .ex-field.invoice-document{grid-column:1/-1}
+  .ex-invoice-row{display:grid;grid-template-columns:minmax(220px,480px) max-content;align-items:center;gap:14px}
+  .export-workspace .ex-invoice-row>input{width:100%;max-width:480px}
+  .ex-invoice-row>.ex-value{min-width:180px}
+  .ex-invoice-files{list-style:none;display:grid;gap:0;margin:5px 0 0;padding:0;max-width:820px}
+  .ex-invoice-files>li{display:flex;align-items:center;gap:16px;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--ex-line)}
+  .ex-invoice-files>li>div{min-width:0;overflow-wrap:anywhere}
+  .ex-invoice-files a{color:var(--ex-teal);text-underline-offset:3px;font-weight:600}
+  .ex-invoice-files small{display:block;margin-top:4px}
+  .ex-invoice-files :is(button,.ex-status){flex-shrink:0}
+  .ex-invoice-files .ex-file-error{color:#8e2c27}
  }
 
 </style>

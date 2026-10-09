@@ -31,7 +31,7 @@ export function api(path:string,body?:unknown,method='POST'):Promise<any>{
   const response=await fetch('/api'+path,{method:verb,credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':actionID(identity)},body:json}).catch(e=>{reportClientIssue('network');throw e});
   const data=await response.json().catch(()=>{throw new Error('The server response was interrupted. Refresh to check whether the action finished.');});
   if(response.status<500&&data.code!=='action_already_submitted')uncertain.delete(identity);
-  if(!response.ok){if(response.status===401&&path!=='/login'&&path!=='/login/otp'&&typeof window!=='undefined')window.dispatchEvent(new Event('erp:session-expired'));throw new Error(data.error||'Request failed.');}
+  if(!response.ok){if(response.status===401&&path!=='/login'&&path!=='/login/otp'&&typeof window!=='undefined')window.dispatchEvent(new Event('erp:session-expired'));throw Object.assign(new Error(data.error||'Request failed.'),{status:response.status,code:data.code});}
   if(data.csrf){if(csrf!==data.csrf)uncertain.clear();setCSRF(data.csrf);}
   if(path==='/logout'){csrf='';uncertain.clear();}
   return data;
@@ -45,7 +45,7 @@ export function uploadTo(path:string,file:File):Promise<any>{
   const response=await fetch('/api'+path,{method:'POST',credentials:'same-origin',headers:{'X-CSRF-Token':csrf,'Idempotency-Key':actionID(identity)},body}).catch(e=>{reportClientIssue('upload');throw e});
   const data=await response.json().catch(()=>{reportClientIssue('upload');throw new Error('Upload confirmation was interrupted. Refresh to check the document list before retrying.');});
   if(response.status<500&&data.code!=='action_already_submitted')uncertain.delete(identity);
-  if(!response.ok){reportClientIssue('upload');throw new Error(data.error||'Upload failed.');}
+  if(!response.ok){reportClientIssue('upload');throw Object.assign(new Error(data.error||'Upload failed.'),{status:response.status,code:data.code});}
   return data;
  });
 }

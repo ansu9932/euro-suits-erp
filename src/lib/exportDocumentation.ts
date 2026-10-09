@@ -155,3 +155,54 @@ export function moneyText(value:unknown,currency=''):string {
 }
 export const exportDate=(value:unknown)=>value?new Date(String(value).slice(0,10)+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
 export const exportReference=(id:number)=>'EX-'+String(id).padStart(6,'0');
+
+
+export type InvoiceFile = {file:File;key:string;status:'queued'|'uploading'|'uploaded'|'failed'|'uncertain';path?:string;error?:string;id?:number};
+export type InvoiceSaveAttempt = {path:string;body:Row;content:string};
+export type InvoiceSaveState = {savedContent:string;pendingSave:InvoiceSaveAttempt|null;files:InvoiceFile[]};
+type Mutation = (path:string,body:Row)=>Promise<Row>;
+type Upload = (path:string,file:File)=>Promise<Row>;
+
+export function invoiceCompanyChoices(choices:Row[],current=''):string[]{
+ const names:string[]=[];const seen=new Set<string>();
+ for(const choice of choices){const name=String(choice.name||'').trim(),key=name.replace(/\s+/g,' ').toLowerCase();if(name&&!seen.has(key)){seen.add(key);names.push(name)}}
+ if(current&&!names.includes(current))names.push(current);
+ return names;
+}
+export function invoiceFileKey(file:File):string{return [file.name,file.size,file.lastModified,file.type].join(':')}
+export function invoiceFileError(file:File):string{
+ if(!file.size)return 'Choose a document that is not empty.';
+ if(file.size>10*1024*1024)return 'Each document must be 10 MB or smaller.';
+ if(!/\.(pdf|png|jpe?g|docx|xlsx)$/i.test(file.name))return 'Choose a PDF, PNG, JPG, Word (.docx) or Excel (.xlsx) document.';
+ return '';
+}
+export function invoiceContent(form:Row):string{const {version,...content}=exportInvoiceBody(form);return JSON.stringify(content)}
+export function uncertainInvoiceWrite(error:unknown):boolean{
+ const value=error as {status?:number;code?:string};
+ return !value?.status||value.status>=500||value.code==='action_already_submitted';
+}
+
+// Keep an interrupted attempt's exact body / upload URL. The API's in-memory
+// idempotency key is tied to them, so retrying cannot repeat a completed write.
+// The server may ask for manual review instead of returning a cached receipt.
+export async function saveInvoiceFiles(form:Row,state:InvoiceSaveState,mutate:Mutation,upload:Upload):Promise<void>{
+ const commit=async(attempt:InvoiceSaveAttempt)=>{
+  try{const saved=await mutate(attempt.path,attempt.body);form.id=saved.id;form.version=saved.version;state.savedContent=attempt.content;state.pendingSave=null}
+  catch(error){if(!uncertainInvoiceWrite(error))state.pendingSave=null;throw error}
+ };
+ const attach=async(entry:InvoiceFile)=>{
+  entry.path??=`/exports/${form.id}/files?version=${form.version}&kind=invoice`;
+  entry.status='uploading';entry.error='';
+  try{const saved=await upload(entry.path,entry.file);entry.id=saved.id;entry.status='uploaded';form.version=saved.version}
+  catch(error){entry.status=uncertainInvoiceWrite(error)?'uncertain':'failed';entry.error=(error as Error).message;if(entry.status==='failed')entry.path=undefined;throw error}
+ };
+ if(state.pendingSave)await commit(state.pendingSave);
+ // Resolve an earlier uncertain upload before a new save changes its version.
+ for(const entry of state.files)if(entry.path&&entry.status!=='uploaded')await attach(entry);
+ const content=invoiceContent(form);
+ if(!form.id||content!==state.savedContent){
+  const attempt={path:'/exports'+(form.id?'/'+form.id:''),body:JSON.parse(JSON.stringify(exportInvoiceBody(form))),content};
+  state.pendingSave=attempt;await commit(attempt);
+ }
+ for(const entry of state.files)if(entry.status!=='uploaded')await attach(entry);
+}
