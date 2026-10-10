@@ -221,8 +221,8 @@
  </section>
 {/snippet}
 
-{#snippet documentField(kind:string,label:string,readonly:boolean,receiptKey='',fieldKey='',prefix='inline-document')}
- <ExportDocumentField {label} inputID={prefix+'-'+kind} files={(detail?.files||[]).filter((file:Row)=>documentInSlot(file,kind,receiptKey,fieldKey))} queued={invoiceSave.files.filter(file=>documentInSlot(file,kind,receiptKey,fieldKey))} canAttach={canAttachInvoice} canRemove={!!actions.remove} canDownload={!!permissions.download} {busy} uncertain={uncertainSave} onattach={event=>readonly?attachInvoiceFiles(event,kind,receiptKey,fieldKey):queueInvoiceFiles(event,kind,receiptKey,fieldKey)} onremove={removeSavedDocument} onremovequeued={removeQueuedInvoiceFile}/>
+{#snippet documentField(kind:string,label:string,readonly:boolean,receiptKey='',fieldKey='',prefix='inline-document',compact=false)}
+ <ExportDocumentField {label} {compact} inputID={prefix+'-'+kind} files={(detail?.files||[]).filter((file:Row)=>documentInSlot(file,kind,receiptKey,fieldKey))} queued={invoiceSave.files.filter(file=>documentInSlot(file,kind,receiptKey,fieldKey))} canAttach={canAttachInvoice} canRemove={!!actions.remove} canDownload={!!permissions.download} {busy} uncertain={uncertainSave} onattach={event=>readonly?attachInvoiceFiles(event,kind,receiptKey,fieldKey):queueInvoiceFiles(event,kind,receiptKey,fieldKey)} onremove={removeSavedDocument} onremovequeued={removeQueuedInvoiceFile}/>
 {/snippet}
 
 {#snippet panels(r:Row,readonly:boolean)}
@@ -247,13 +247,14 @@
     <ol class="ex-bank-sequence">{#each bankingStages as stage,stageIndex}{@const slot=receiptDocumentSlots[stage.key]}
      <li class="ex-bank-stage"><div class="ex-bank-stage-heading"><span class="ex-bank-number" aria-hidden="true">{stageIndex+1}</span><h5>{stage.title}</h5></div>
       {#if stage.key==='disposal'}<div class="ex-bank-carried"><span>Bill / remittance amount</span><strong>{moneyText(receipt.gross_payment_received,receipt.currency||'')}</strong><small>From this receipt’s inward advice.</small></div>{/if}
-      {@render fields(stage.fields,receipt,'receipt-'+i,readonly)}
-      {#if receipt.receipt_key}{@render documentField(slot.kind,slot.label,readonly,receipt.receipt_key,slot.field,'receipt-'+i+'-'+slot.field)}{:else}<p class="ex-muted">Edit and save this receipt to attach its {slot.label.toLowerCase()} document. Earlier shared documents remain in Documents.</p>{/if}
+      <div class="ex-bank-stage-main"><div class="ex-bank-stage-fields">{@render fields(stage.fields,receipt,'receipt-'+i,readonly)}</div>
+       <div class="ex-bank-stage-attachment" class:full-row={stage.key==='credit'}>{#if receipt.receipt_key}{@render documentField(slot.kind,slot.label,readonly,receipt.receipt_key,slot.field,'receipt-'+i+'-'+slot.field,true)}{:else}<p class="ex-muted">Edit and save this receipt to attach its {slot.label.toLowerCase()} document. Earlier shared documents remain in Documents.</p>{/if}</div>
+      </div>
       {#if stage.key==='inward'}
        {#if i===0}<div class="ex-bank-shipping"><h6>Invoice & transport details · shared by all receipts</h6>
-        <div class="ex-bank-document-row"><div>{@render fields([{key:'invoice_number',label:'Invoice number'},{key:'invoice_date',label:'Invoice date',type:'date',profile:true}],r,'inward-invoice',true)}</div>{@render documentField('invoice','Invoice document',readonly,'','','bank-invoice')}</div>
-        <div class="ex-bank-document-row"><div>{@render fields([{key:'transport_document_number',label:'BL / AWB number'},{key:'transport_document_date',label:'BL / AWB date',type:'date'}],r.profile,'inward-bl',readonly)}</div>{@render documentField('bill_of_lading','BL / AWB document',readonly,'','','bank-bl')}</div>
-        {@render fields([{key:'port_of_loading',label:'Port of loading'},{key:'port_of_departure',label:'Port of departure'}],r.profile,'inward-ports',readonly)}
+        <div class="ex-bank-document-row"><div>{@render fields([{key:'invoice_number',label:'Invoice number'},{key:'invoice_date',label:'Invoice date',type:'date',profile:true}],r,'inward-invoice',true)}</div>{@render documentField('invoice','Invoice document',readonly,'','','bank-invoice',true)}</div>
+        <div class="ex-bank-document-row"><div>{@render fields([{key:'transport_document_number',label:'BL / AWB number'},{key:'transport_document_date',label:'BL / AWB date',type:'date'}],r.profile,'inward-bl',readonly)}</div>{@render documentField('bill_of_lading','BL / AWB document',readonly,'','','bank-bl',true)}</div>
+        <div class="ex-bank-ports">{@render fields([{key:'port_of_loading',label:'Port of loading'},{key:'port_of_departure',label:'Port of departure'}],r.profile,'inward-ports',readonly)}</div>
        </div>{:else}<p class="ex-muted">Invoice, BL / AWB and port details are shared by this invoice and shown under Receipt 1.</p>{/if}
       {/if}
       {#if stage.key==='credit'}<p class="ex-muted">Foreign credited amount uses {receipt.currency||'the inward advice currency'}. Conversion, received amount and charges above are in INR.</p>{/if}
@@ -400,17 +401,18 @@
   .ex-document-fallback{flex-basis:100%;font-size:12px;line-height:1.6;color:var(--ex-muted);margin:2px 0 0}
 
   .ex-banking .ex-section-heading{margin-bottom:16px}.ex-banking .ex-muted{font-size:12px;line-height:1.6;margin:7px 0 14px}
-  .ex-bank-receipt{padding-top:22px}.ex-bank-receipt> .ex-section-heading{padding-bottom:14px;margin-bottom:0}
-  .ex-bank-sequence{list-style:none;margin:0;padding:0}.ex-bank-stage{padding:22px 0;border-top:1px solid var(--ex-line)}
-  .ex-bank-stage-heading{display:flex;align-items:center;gap:10px;margin-bottom:16px}.ex-bank-stage-heading h5{font-size:15px;line-height:1.5;color:var(--ex-ink);margin:0;font-weight:750}
+  .ex-bank-receipt{padding-top:16px}.ex-bank-receipt> .ex-section-heading{padding-bottom:10px;margin-bottom:0}
+  .ex-bank-sequence{list-style:none;margin:0;padding:0}.ex-bank-stage{padding:16px 0;border-top:1px solid var(--ex-line)}
+  .ex-bank-stage-heading{display:flex;align-items:center;gap:10px;margin-bottom:12px}.ex-bank-stage-heading h5{font-size:15px;line-height:1.5;color:var(--ex-ink);margin:0;font-weight:750}
   .ex-bank-number{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;flex-shrink:0;border-radius:6px;background:#e8f1ef;color:#175c55;font-size:12px;font-weight:750;font-variant-numeric:tabular-nums}
-  .ex-banking .ex-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px 18px}.ex-banking .ex-field{gap:5px}.ex-banking .ex-caption,.ex-banking .ex-label{font-size:12px}.ex-banking :is(input,select){min-height:40px;padding:8px 10px;font-size:13px}.ex-banking .ex-value{font-size:13px;line-height:1.5}
+  .ex-banking .ex-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px}.ex-banking .ex-field{gap:5px}.ex-banking .ex-caption,.ex-banking .ex-label{font-size:12px}.ex-banking :is(input,select){min-height:40px;padding:8px 10px;font-size:13px}.ex-banking .ex-value{font-size:13px;line-height:1.5}
   .ex-bank-calculation{display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px;margin-top:16px;padding:12px 14px;background:#edf5f1;border-radius:8px;font-size:12px;line-height:1.5}.ex-bank-calculation>strong{font-variant-numeric:tabular-nums}
   .ex-bank-additional{margin-top:0}.ex-checklist>li{scroll-margin-top:125px}.ex-checklist>li:focus{outline:3px solid #58a9a1;outline-offset:5px}
 
   .ex-bank-context{padding:14px 16px;background:#f4f7f9;margin:0 0 8px;border-radius:8px}.ex-bank-context .ex-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 18px}
   .ex-bank-carried{display:flex;align-items:center;gap:8px 18px;flex-wrap:wrap;padding:10px 12px;background:#edf5f1;border-radius:8px;font-size:12px;margin:0 0 16px}.ex-bank-carried strong{font-variant-numeric:tabular-nums}.ex-bank-carried small{margin-left:auto}
-  .ex-bank-shipping{margin-top:20px;padding-top:18px;border-top:1px solid var(--ex-line)}.ex-bank-shipping h6{font-size:13px;line-height:1.5;margin:0 0 14px;font-weight:750}.ex-bank-document-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,1fr);gap:20px;align-items:start;padding:14px 0}.ex-bank-document-row .ex-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ex-bank-stage-main{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px;align-items:start}.ex-bank-stage-fields,.ex-bank-stage-fields>.ex-grid{display:contents}.ex-bank-stage-attachment{min-width:0;align-self:start}.ex-bank-stage-attachment.full-row{grid-column:1/-1;padding-top:2px}
+  .ex-bank-shipping{margin-top:16px;padding-top:14px;border-top:1px solid var(--ex-line)}.ex-bank-shipping h6{font-size:12px;line-height:1.5;margin:0 0 10px;font-weight:750}.ex-bank-document-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:18px;align-items:start;padding:8px 0}.ex-bank-document-row>div{min-width:0}.ex-bank-document-row .ex-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-bank-document-row+.ex-bank-document-row{border-top:1px solid #e1e9eb;margin-top:2px;padding-top:12px}.ex-bank-ports{padding-top:10px}.ex-bank-ports .ex-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 
   .ex-documentation-state{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;line-height:1.6;color:#205f48;margin:14px 0 0}
 
