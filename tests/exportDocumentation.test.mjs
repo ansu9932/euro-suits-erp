@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {exportPartyKey,exportRegisterQuery,exportInvoiceBody,moneyMinor,minorDecimal,exportWorkflowStatuses,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,hasRequiredInvoiceDocument,exportFileCanPreview,saveInvoiceFiles} from '../src/lib/exportDocumentation.ts';
+import {exportPartyKey,exportRegisterQuery,exportInvoiceBody,newJVForm,jvFields,jvTabs,moneyMinor,minorDecimal,exportWorkflowStatuses,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,exportRequiredDocument,bankingStages,additionalReceiptFields,allReceiptFields,receiptFields,conversionFields,newExportReceipt,foreignChargeDifference,bankEmailRecipients,bankEmailRecipientError,bankEmailDocumentKinds,bankEmailCanConfirm,bankEmailAttachmentError,uncertainInvoiceWrite,hasRequiredInvoiceDocument,exportFileCanPreview,saveInvoiceFiles} from '../src/lib/exportDocumentation.ts';
 
 test('unassigned register omits company ID instead of sending an invalid zero',()=>{
  assert.equal(exportRegisterQuery('').toString(),'scope=standalone');
@@ -102,4 +102,106 @@ test('checklist upload queue keeps categories across saves and retries',async()=
 test('secure previews use validated PDF/image metadata and Office falls back to download',()=>{
  for(const mime of ['application/pdf','image/png','image/jpeg'])assert.equal(exportFileCanPreview({mime}),true);
  for(const mime of ['application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','text/html',''])assert.equal(exportFileCanPreview({mime,filename:'looks-like.pdf'}),false);
+});
+test('JV register queries never inherit linked company scope or mix with default exports',()=>{
+ const jv=exportRegisterQuery('42',{record_kind:'jv',status:'Draft',currency:'EUR',party:{party_type:'manual',name:'EURO SUITS MFG'}});
+ assert.equal(jv.get('record_kind'),'jv');assert.equal(jv.get('scope'),'standalone');assert.equal(jv.get('company_id'),null);
+ assert.equal(jv.get('party_name'),'EURO SUITS MFG');assert.equal(jv.get('status'),'Draft');assert.equal(jv.get('currency'),'EUR');
+ assert.equal(exportRegisterQuery('42').get('record_kind'),null);
+});
+test('new JV defaults are isolated and never infer a currency or current date',()=>{
+ const first=newJVForm(),second=newJVForm();
+ assert.equal(first.party_name,'EURO SUITS MFG');assert.equal(first.profile.shipping_mode,'HANDO');assert.equal(first.currency,'');assert.equal(first.profile.export_date,'');
+ assert.equal(first.company_id,null);assert.equal(first.party_id,null);assert.equal(first.order_id,null);
+ first.profile.shipping_mode='Sea';assert.equal(second.profile.shipping_mode,'HANDO');
+});
+test('JV payload contains only its eight field values and no stale settlement or linked identity',()=>{
+ const form={...newJVForm(),company_id:4,party_id:8,order_id:12,party_type:'buyer',party_name:' Other JV party ',invoice_number:'JV/26/1',currency:'EUR',invoice_amount:'1234.56',version:7,profile:{export_date:'2026-10-09',shipping_mode:'',jv_by_date:'Asha / 09 Oct',scrip_tally_reference:'T-1',shipping_bill_number:'stale',drawback_claim_amount:'999'},receipts:[{payment_received:'100'}],ebrcs:[{ebrc_number:'stale'}]};
+ const body=exportInvoiceBody(form);
+ assert.equal(body.record_kind,'jv');assert.equal(body.party_name,'Other JV party');assert.equal(body.company_id,null);assert.equal(body.party_id,null);assert.equal(body.order_id,null);assert.equal(body.party_type,'manual');
+ assert.deepEqual(body.profile,{export_date:'2026-10-09',shipping_mode:'',jv_by_date:'Asha / 09 Oct',scrip_tally_reference:'T-1'});
+ assert.deepEqual(body.receipts,[]);assert.deepEqual(body.ebrcs,[]);assert.equal(body.invoice_amount,'1234.56');assert.equal(body.version,7);
+});
+test('JV schema maps exactly the workbook headers and offers only its relevant sections',()=>{
+ assert.deepEqual(jvFields.map(field=>field.label),['JV Ref','Date','Party Name','Currency','Amount','Mode','By / Date','Tally Ref']);
+ assert.deepEqual(jvFields.filter(field=>field.profile).map(field=>field.key),['export_date','shipping_mode','jv_by_date','scrip_tally_reference']);
+ assert.deepEqual(jvTabs.map(tab=>tab.key),['shipment','documents','history']);
+});
+test('JV draft save preserves its classification and exact amount through attachment staging',async()=>{
+ const form=newJVForm();Object.assign(form,{invoice_number:'JV-2',currency:'USD',invoice_amount:'0.30'});const state={savedContent:'',pendingSave:null,files:[]};let body;
+ await saveInvoiceFiles(form,state,async(path,payload)=>{assert.equal(path,'/exports');body=payload;return {id:20,version:1}},async()=>{throw new Error('No upload expected')});
+ assert.equal(body.record_kind,'jv');assert.equal(body.invoice_amount,'0.30');assert.equal(form.id,20);assert.equal(form.version,1);
+});
+
+
+test('JV submission accepts supporting JV documents only, including staged files',()=>{
+ assert.deepEqual(exportRequiredDocument('jv'),{kind:'jv_supporting',label:'supporting JV document'});
+ assert.deepEqual(exportRequiredDocument('export'),{kind:'invoice',label:'invoice document'});
+ assert.equal(hasRequiredInvoiceDocument([{kind:'invoice'}],[queued('packing.pdf','packing_list')],'jv_supporting'),false);
+ assert.equal(hasRequiredInvoiceDocument([{kind:'jv_supporting'}],[],'jv_supporting'),true);
+ assert.equal(hasRequiredInvoiceDocument([],[queued('jv.pdf','jv_supporting')],'jv_supporting'),true);
+});
+test('a JV supporting document upload preserves classification and the protected version sequence',async()=>{
+ const form=newJVForm();Object.assign(form,{invoice_number:'JV-3',currency:'GBP',invoice_amount:'123456789.90'});
+ const state={savedContent:'',pendingSave:null,files:[queued('jv.pdf','jv_supporting')]};let request;
+ await saveInvoiceFiles(form,state,async(path,body)=>{assert.equal(body.record_kind,'jv');return {id:25,version:1}},async(path,file)=>{request={path,file};return {id:31,version:2}});
+ assert.equal(request.path,'/exports/25/files?version=1&kind=jv_supporting');
+ assert.equal(request.file.name,'jv.pdf');assert.equal(form.version,2);assert.equal(form.invoice_amount,'123456789.90');
+});
+
+
+test('banking sequence preserves every historical receipt field exactly once',()=>{
+ const keys=allReceiptFields.map(field=>field.key);
+ assert.equal(keys.length,new Set(keys).size);
+ for(const field of [...receiptFields,...conversionFields])assert.ok(keys.includes(field.key),field.key+' retained');
+ assert.deepEqual(bankingStages.map(stage=>stage.key),['foreign','instruction','documents','advice','inr','allocation']);
+ assert.ok(additionalReceiptFields.some(field=>field.key==='invoice_currency_amount'));
+ assert.ok(additionalReceiptFields.some(field=>field.key==='net_payment_received'));
+ assert.deepEqual(bankingStages[2].documents.map(file=>file.key),['shipping_bill','bill_of_lading','packing_list','invoice']);
+});
+test('new receipt defaults never invent settlement amounts, instructions or conversion rates',()=>{
+ const first=newExportReceipt('USD'),second=newExportReceipt('GBP');
+ assert.equal(first.forex_account,'BOB FOREX ACCOUNT');assert.equal(first.currency,'USD');assert.equal(first.inr_currency,'INR');assert.equal(first.gst_currency,'INR');
+ for(const key of ['payment_received','fcr_amount','bank_advice_amount','inr_conversion_rate','instruction_action'])assert.equal(first[key],undefined);
+ first.statuses.note='changed';assert.deepEqual(second.statuses,{});assert.equal(second.currency,'GBP');
+});
+test('foreign bank charge difference uses exact decimal subtraction and rejects over-credit',()=>{
+ assert.deepEqual(foreignChargeDifference({fcr_amount:'1000.00',bank_advice_amount:'990.00'}),{amount:'10.00',error:''});
+ assert.deepEqual(foreignChargeDifference({fcr_amount:'0.30',bank_advice_amount:'0.10'}),{amount:'0.20',error:''});
+ assert.deepEqual(foreignChargeDifference({fcr_amount:'999999999999999.99',bank_advice_amount:'0.01'}),{amount:'999999999999999.98',error:''});
+ assert.equal(foreignChargeDifference({fcr_amount:'10',bank_advice_amount:'11'}).amount,'');
+ assert.match(foreignChargeDifference({fcr_amount:'10',bank_advice_amount:'11'}).error,/cannot exceed/);
+ for(const pair of [{},{fcr_amount:'12'},{fcr_amount:'12',bank_advice_amount:''},{fcr_amount:'1e3',bank_advice_amount:'3'},{fcr_amount:'1.234',bank_advice_amount:'1'}])assert.equal(foreignChargeDifference(pair),null);
+ const receipt={fcr_amount:'100',bank_advice_amount:'90',payment_received:'70',foreign_bank_charges:'5'};foreignChargeDifference(receipt);assert.equal(receipt.payment_received,'70');assert.equal(receipt.foreign_bank_charges,'5');
+});
+test('bank email recipients normalize separators and reject missing, excessive or malformed recipients',()=>{
+ assert.deepEqual(bankEmailRecipients(' One@Bank.example, two@bank.example; ONE@bank.example\nthree@bank.example '),['one@bank.example','two@bank.example','three@bank.example']);
+ assert.equal(bankEmailRecipientError('one@bank.example;two@bank.example'),'');
+ assert.match(bankEmailRecipientError(''),/Enter the bank/);assert.match(bankEmailRecipientError('missing-domain'),/valid/);
+ assert.match(bankEmailRecipientError('x@a.test, y@a.test, z@a.test, a@a.test, b@a.test, c@a.test'),/five/);
+ assert.deepEqual(bankEmailDocumentKinds,['invoice','shipping_bill','bill_of_lading','packing_list','bank_advice','payment_details']);
+ assert.equal(bankEmailDocumentKinds.includes('jv_supporting'),false);
+});
+
+
+test('bank email confirmation requires a retry-safe status, ownership and the reviewed invoice version',()=>{
+ const prepared={status:'Prepared',created_by:7,invoice_version:3};
+ assert.equal(bankEmailCanConfirm(prepared,7,3),true);
+ assert.equal(bankEmailCanConfirm({...prepared,status:'Failed'},7,3),true);
+ for(const status of ['Sending','Accepted','Uncertain','unknown'])assert.equal(bankEmailCanConfirm({...prepared,status},7,3),false);
+ assert.equal(bankEmailCanConfirm(prepared,8,3),false);assert.equal(bankEmailCanConfirm(prepared,7,4),false);assert.equal(bankEmailCanConfirm(null,7,3),false);
+});
+test('bank email attachment review rejects stale, duplicate, excessive and oversized selections',()=>{
+ const files=Array.from({length:13},(_,index)=>({id:index+1,size:1024}));
+ assert.equal(bankEmailAttachmentError([1,2],files),'');
+ assert.match(bankEmailAttachmentError([],files),/Select the saved/);
+ assert.match(bankEmailAttachmentError([1,1],files),/current saved/);
+ assert.match(bankEmailAttachmentError([30],files),/current saved/);
+ assert.match(bankEmailAttachmentError(files.map(file=>file.id),files),/twelve/);
+ assert.equal(bankEmailAttachmentError([1],[{id:1,size:15*1024*1024}]),'');
+ assert.match(bankEmailAttachmentError([1],[{id:1,size:15*1024*1024+1}]),/15 MB/);
+});
+test('email validation failures remain editable while lost or replayed responses need status verification',()=>{
+ assert.equal(uncertainInvoiceWrite({status:400}),false);assert.equal(uncertainInvoiceWrite({status:409}),false);
+ assert.equal(uncertainInvoiceWrite({status:409,code:'action_already_submitted'}),true);assert.equal(uncertainInvoiceWrite({status:503}),true);assert.equal(uncertainInvoiceWrite(new Error('network failed')),true);
 });

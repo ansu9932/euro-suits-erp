@@ -3,14 +3,21 @@
  import {beforeNavigate} from '$app/navigation';
  import {Plus,ArrowLeft,Download,FileText,Search,RefreshCw,Trash2,Paperclip,Check,ChevronRight,Eye} from '@lucide/svelte';
  import {api,uploadTo} from './api';
+ import ExportBankEmail from './ExportBankEmail.svelte';
  import {enter} from './motion';
  import type {Row,User} from './types';
- import {invoiceFields,incentiveFields,receiptFields,conversionFields,ebrcFields,scripFields,clearanceFields,exportTabs,moneyText,moneyMinor,minorDecimal,exportDate,exportReference,exportWorkflowStatuses,exportPartyKey,exportRegisterQuery,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,exportFileCanPreview,hasRequiredInvoiceDocument,saveInvoiceFiles,type InvoiceSaveState,type ExportField,type ExportTab} from './exportDocumentation';
+ import {invoiceFields,jvFields,jvTabs,newJVForm,incentiveFields,bankingStages,additionalReceiptFields,allReceiptFields,newExportReceipt,foreignChargeDifference,ebrcFields,scripFields,clearanceFields,exportTabs,moneyText,moneyMinor,minorDecimal,exportDate,exportReference,exportWorkflowStatuses,exportPartyKey,exportRegisterQuery,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,exportFileCanPreview,exportRequiredDocument,hasRequiredInvoiceDocument,saveInvoiceFiles,type InvoiceSaveState,type ExportRecordKind,type ExportField,type ExportTab} from './exportDocumentation';
  let {user,dirty=$bindable(false)}:{user:User&{portal?:string;setup_grants?:string[]};dirty?:boolean}=$props();
  let options:Row=$state({companies:[],parties:[],orders:[],currencies:[],permissions:{},document_kinds:[]});
  let listing:Row=$state({records:[],totals:[]}),detail:Row|null=$state(null),form:Row=$state({profile:{},receipts:[],ebrcs:[]});
+ let registerKind:ExportRecordKind=$state('export');
+ let isJV=$derived.by(()=>registerKind==='jv');
+ let tabs=$derived(isJV?jvTabs:exportTabs);
+ let recordLabel=$derived(isJV?'JV':'invoice');
  let company=$state(''),search=$state(''),year=$state(''),partyFilter=$state(''),currencyFilter=$state(''),workflowFilter=$state(''),tab:ExportTab=$state('shipment');
- let editing=$state(false),busy=$state(false),loading=$state(true),error=$state(''),notice=$state(''),reviewNote=$state(''),reviewStatus=$state('Checked');
+ let working=$state(false),emailBusy=$state(false);
+ let busy=$derived(working||emailBusy);
+ let editing=$state(false),loading=$state(true),error=$state(''),notice=$state(''),reviewNote=$state(''),reviewStatus=$state('Checked');
  let discountAmount=$state(''),discountReason=$state(''),decisionNotes:Record<number,string>=$state({}),revision:Row|null=$state(null);
  let workflowNote=$state(''),commentNote=$state('');
  let addingCompany=$state(false),newCompanyName=$state(''),companyError=$state('');
@@ -24,9 +31,10 @@
  let registerParties=$derived.by(()=>{const choices=new Map<string,Row>();for(const party of parties)choices.set(exportPartyKey(party),party);for(const record of listing.records||[])if(record.party_type==='manual')choices.set(exportPartyKey(record),{party_type:'manual',name:record.party_name});return [...choices.values()]});
  let actions=$derived.by(()=>detail?.actions||{});
  let invoiceCompanies=$derived(invoiceCompanyChoices(options.standalone_parties||[],String(form.party_name||'')));
- let invoiceFiles=$derived.by(()=>(detail?.files||[]).filter((file:Row)=>file.kind==='invoice'));
+ let requiredDocument=$derived(exportRequiredDocument(registerKind));
+ let requiredFiles=$derived.by(()=>(detail?.files||[]).filter((file:Row)=>file.kind===requiredDocument.kind));
  let canAttachInvoice=$derived(editing?!!permissions.files&&(!detail||!!actions.attach):!!actions.attach);
- let hasInvoiceDocument=$derived(hasRequiredInvoiceDocument(invoiceFiles,invoiceSave.files));
+ let hasRequiredDocument=$derived(hasRequiredInvoiceDocument(requiredFiles,invoiceSave.files,requiredDocument.kind));
  let previewFallback=$state(0);
  let uncertainSave=$derived(!!invoiceSave.pendingSave||invoiceSave.files.some(file=>file.status==='uncertain'));
  let requiresOrder=$derived.by(()=>!!form.company_id&&!!options.permissions?.requires_order);
@@ -36,17 +44,17 @@
  const partyKey=exportPartyKey;
  function fiscalYear(r:Row){const value=r.profile?.export_date||r.created_at;if(!value)return 'Undated';const d=new Date(String(value).slice(0,10)+'T12:00:00');const start=d.getMonth()<3?d.getFullYear()-1:d.getFullYear();return Number.isFinite(start)?`${start}-${String(start+1).slice(-2)}`:'Undated'}
  let years=$derived([...new Set<string>((listing.records||[]).map((r:Row)=>fiscalYear(r)))].sort().reverse());
- let records=$derived((listing.records||[]).filter((r:Row)=>(!year||fiscalYear(r)===year)&&(!currencyFilter||r.currency===currencyFilter)&&(!partyFilter||partyKey(r)===partyFilter)&&(!workflowFilter||r.workflow_status===workflowFilter)&&(!search||[r.invoice_number,r.party_name,r.profile?.export_reference,r.profile?.shipping_bill_number,exportReference(r.id)].join(' ').toLowerCase().includes(search.trim().toLowerCase()))));
+ let records=$derived((listing.records||[]).filter((r:Row)=>(!year||fiscalYear(r)===year)&&(!currencyFilter||r.currency===currencyFilter)&&(!partyFilter||partyKey(r)===partyFilter)&&(!workflowFilter||r.workflow_status===workflowFilter)&&(!search||[r.invoice_number,r.party_name,r.profile?.export_reference,r.profile?.shipping_bill_number,...(isJV?[r.profile?.jv_by_date,r.profile?.scrip_tally_reference]:[exportReference(r.id)])].join(' ').toLowerCase().includes(search.trim().toLowerCase()))));
  let filteredTotals=$derived.by(()=>{const amounts=new Map<string,{count:number;invoice:bigint;outstanding:bigint}>();for(const r of records){const v=amounts.get(r.currency)||{count:0,invoice:0n,outstanding:0n};v.count++;v.invoice+=moneyMinor(r.invoice_amount);v.outstanding+=moneyMinor(r.balance?.outstanding);amounts.set(r.currency,v)}return [...amounts].map(([currency,value])=>({currency,count:value.count,invoice:minorDecimal(value.invoice),outstanding:minorDecimal(value.outstanding)}))});
- const query=()=>exportRegisterQuery(company);
+ const query=()=>exportRegisterQuery(company,{record_kind:registerKind});
  const dateTime=(s:string)=>s?new Date(s).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'}):'—';
  const present=(v:unknown)=>v!==undefined&&v!==null&&v!=='';
  const fieldValue=(f:ExportField,v:unknown)=>!present(v)?'—':f.type==='date'?exportDate(v):f.type==='money'?moneyText(v):String(v);
  async function focus(id:string){await tick();root?.querySelector<HTMLElement>('#'+id)?.focus()}
- async function run(work:()=>Promise<void>){if(busy)return;busy=true;error='';try{await work()}catch(e){error=(e as Error).message;await tick();root?.querySelector<HTMLElement>('[role="alert"]')?.focus()}finally{busy=false;loading=false}}
- async function loadOptions(){options=await api('/exports/options'+(company?'?company_id='+encodeURIComponent(company):''))}
+ async function run(work:()=>Promise<void>){if(busy)return;working=true;error='';try{await work()}catch(e){error=(e as Error).message;await tick();root?.querySelector<HTMLElement>('[role="alert"]')?.focus()}finally{working=false;loading=false}}
+ async function loadOptions(){options=await api('/exports/options'+(isJV?'?record_kind=jv':company?'?company_id='+encodeURIComponent(company):''))}
  async function loadRegister(){listing=await api('/exports?'+query())}
- async function start(){await loadOptions();if(company||options.permissions?.standalone)await loadRegister()}
+ async function start(){await loadOptions();if(!isJV&&company||options.permissions?.standalone)await loadRegister()}
  onMount(()=>{void run(start)});
  onDestroy(()=>{if(focusFrame)cancelAnimationFrame(focusFrame)});
  function revealFocusedField(event:FocusEvent){
@@ -70,20 +78,21 @@
   });
  }
 
- beforeNavigate(n=>{if(!dirty)return;if(n.type==='leave'){n.cancel();return}if(!window.confirm('Discard the unsaved export changes?'))n.cancel()});
- async function selectCompany(value:string){if(value===company||busy)return;if(dirty&&!window.confirm('Discard the unsaved export changes?'))return;company=value;detail=null;editing=false;dirty=false;resetInvoiceStaging();listing={records:[],totals:[]};options={...options,parties:[],orders:[],permissions:{}};partyFilter='';year='';currencyFilter='';workflowFilter='';search='';notice='';await run(async()=>{await loadOptions();if(company||options.permissions?.standalone)await loadRegister()})}
+ beforeNavigate(n=>{if(!dirty)return;if(n.type==='leave'){n.cancel();return}if(!window.confirm(`Discard the unsaved ${isJV?'JV':'export'} changes?`))n.cancel()});
+ async function selectCompany(value:string){if(value===company||busy)return;if(dirty&&!window.confirm(`Discard the unsaved ${isJV?'JV':'export'} changes?`))return;company=value;detail=null;editing=false;dirty=false;resetInvoiceStaging();listing={records:[],totals:[]};options={...options,parties:[],orders:[],permissions:{}};partyFilter='';year='';currencyFilter='';workflowFilter='';search='';notice='';await run(async()=>{await loadOptions();if(company||options.permissions?.standalone)await loadRegister()})}
+ async function selectRegister(value:ExportRecordKind){if(value===registerKind||busy)return;registerKind=value;detail=null;editing=false;dirty=false;savedID=0;resetInvoiceStaging();listing={records:[],totals:[]};options={...options,parties:[],orders:[],permissions:{}};partyFilter='';year='';currencyFilter='';workflowFilter='';search='';notice='';loading=true;await run(start);await focus('export-register-title')}
  function resetInvoiceStaging(saved=false){invoiceSave={savedContent:saved?invoiceContent(form):'',pendingSave:null,files:[]};addingCompany=false;newCompanyName='';companyError=''}
  function changeParty(value:string){const p=parties.find((p:Row)=>partyKey(p)===value);form.party_type=p?.party_type||'';form.party_id=p?.id||'';form.order_id=null;dirty=true}
- function fresh(){if(busy||!options.permissions?.edit||(!company&&!options.permissions?.standalone))return;returnID='export-new';error='';notice='';detail=null;form={company_id:company?Number(company):null,party_type:company?'':'manual',party_id:null,party_name:'',order_id:null,workflow_status:'Draft',invoice_number:'',currency:'',invoice_amount:'',profile:{statuses:{}},receipts:[],ebrcs:[]};resetInvoiceStaging();editing=true;dirty=true;tab='shipment';void focus('export-task-title')}
- async function open(id:number){returnID='export-open-'+id;await run(async()=>{detail=await api('/exports/'+id);resetInvoiceStaging();savedID=0;editing=false;dirty=false;tab='shipment';revision=null;reviewNote='';workflowNote='';commentNote='';discountAmount='';discountReason='';notice='';await focus('export-task-title')})}
- function edit(){if(!detail||busy||!actions.edit)return;if(invoiceSave.files.length){error='Finish confirming the queued attachments before editing the invoice.';return}form=structuredClone($state.snapshot(detail.record));form.profile??={};form.profile.statuses??={};form.receipts??=[];form.ebrcs??=[];resetInvoiceStaging(true);editing=true;dirty=false;error='';notice='';revision=null;void focus('export-task-title')}
+ function fresh(){if(busy||!options.permissions?.edit||((isJV||!company)&&!options.permissions?.standalone))return;returnID='export-new';error='';notice='';detail=null;form=isJV?newJVForm():{company_id:company?Number(company):null,party_type:company?'':'manual',party_id:null,party_name:'',order_id:null,workflow_status:'Draft',invoice_number:'',currency:'',invoice_amount:'',profile:{statuses:{}},receipts:[],ebrcs:[]};resetInvoiceStaging();editing=true;dirty=true;tab='shipment';void focus('export-task-title')}
+ async function open(id:number){returnID='export-open-'+id;await run(async()=>{const loaded:Row=await api('/exports/'+id);detail=loaded;registerKind=loaded.record.record_kind==='jv'?'jv':'export';resetInvoiceStaging();savedID=0;editing=false;dirty=false;tab='shipment';revision=null;reviewNote='';workflowNote='';commentNote='';discountAmount='';discountReason='';notice='';await focus('export-task-title')})}
+ function edit(){if(!detail||busy||!actions.edit)return;if(invoiceSave.files.length){error=`Finish confirming the queued attachments before editing the ${recordLabel}.`;return}form=structuredClone($state.snapshot(detail.record));form.profile??={};form.profile.statuses??={};form.receipts??=[];form.ebrcs??=[];resetInvoiceStaging(true);editing=true;dirty=false;error='';notice='';revision=null;void focus('export-task-title')}
  async function cancel(){
-  if(busy||dirty&&!window.confirm(uncertainSave?'A previous save or upload is unconfirmed. Leave this form and check the saved invoice or register before starting it again?':'Discard unsaved changes and queued documents? Saved invoice details and attached files will remain.'))return;
+  if(busy||dirty&&!window.confirm(uncertainSave?`A previous save or upload is unconfirmed. Leave this form and check the saved ${recordLabel} or register before starting it again?`:`Discard unsaved changes and queued documents? Saved ${recordLabel} details and attached files will remain.`))return;
   const id=form.id;editing=false;dirty=false;error='';resetInvoiceStaging();
   if(id)await run(async()=>{savedID=id;detail=null;detail=await api('/exports/'+id);savedID=0;await loadRegister()});
   await focus(detail?'export-task-title':returnID);
  }
- async function back(){if(busy)return;if(editing){await cancel();if(editing)return}else if(dirty&&!window.confirm('Leave the queued attachments? Check this invoice before attaching an unconfirmed file again.'))return;resetInvoiceStaging();dirty=false;detail=null;revision=null;notice='';error='';await focus(returnID)}
+ async function back(){if(busy)return;if(editing){await cancel();if(editing)return}else if(dirty&&!window.confirm(`Leave the queued attachments? Check this ${recordLabel} before attaching an unconfirmed file again.`))return;resetInvoiceStaging();dirty=false;detail=null;revision=null;notice='';error='';await focus(returnID)}
  async function refreshDetail(){detail=await api('/exports/'+detail!.record.id);await loadRegister()}
  async function addInvoiceCompany(){
   if(busy)return;const name=newCompanyName.trim();companyError='';
@@ -93,7 +102,7 @@
  function queueInvoiceFiles(event:Event,kind:string){
   const input=event.currentTarget as HTMLInputElement,files=Array.from(input.files||[]);input.value='';if(busy||!canAttachInvoice)return;
   const invalid=files.map(file=>invoiceFileError(file)).find(Boolean);if(invalid){error=invalid;return}
-  if((detail?.files||[]).length+invoiceSave.files.length+files.length>100){error='Each invoice can have at most 100 documents.';return}
+  if((detail?.files||[]).length+invoiceSave.files.length+files.length>100){error=`Each ${recordLabel} can have at most 100 documents.`;return}
   for(const file of files){const key=kind+':'+invoiceFileKey(file);if(!invoiceSave.files.some(item=>item.key===key))invoiceSave.files.push({file,key,kind,status:'queued'})}
   dirty=true;error='';notice='Documents queued under their checklist categories. Save the draft to attach them.';
  }
@@ -107,7 +116,7 @@
  }
  async function removeSavedDocument(file:Row){
   if(busy||!detail||!actions.remove||uncertainSave)return;
-  if(!window.confirm(`Remove ${file.filename} from this invoice? It will no longer be available in the active checklist. The removal stays in the audit history.`))return;
+  if(!window.confirm(`Remove ${file.filename} from this ${recordLabel}? It will no longer be available in the active checklist. The removal stays in the audit history.`))return;
   await run(async()=>{
    const id=detail!.record.id,version=editing||invoiceSave.files.length?form.version:detail!.record.version;
    const removed=await api(`/exports/${id}/files/${file.id}/remove`,{version});
@@ -122,21 +131,21 @@
   event.preventDefault();
   const intent=event.submitter instanceof HTMLButtonElement?event.submitter.value:'save';
   if((form.company_id?!form.party_id:!String(form.party_name||'').trim())||!String(form.invoice_number||'').trim()||!form.currency||!present(form.invoice_amount)||(requiresOrder&&!form.order_id)){
-   error=form.company_id?'Choose a party, enter the invoice number, currency and amount, and select a linked PO when required.':'Choose the invoice company, and enter the invoice number, currency and amount.';
+   error=isJV?'Enter the JV reference, party name, currency and amount.':form.company_id?'Choose a party, enter the invoice number, currency and amount, and select a linked PO when required.':'Choose the invoice company, and enter the invoice number, currency and amount.';
    tab='shipment';await focus('export-task-title');return;
   }
-  if(intent==='submit'&&!hasInvoiceDocument){error='Attach at least one invoice document before submitting for approval. You can save a draft without one.';tab='documents';await focus('document-input-invoice');return}
+  if(intent==='submit'&&!hasRequiredDocument){error=`Attach at least one ${requiredDocument.label} before submitting for approval. You can save a draft without one.`;tab='documents';await focus('document-input-'+requiredDocument.kind);return}
   await run(async()=>{
    try{await saveInvoiceFiles(form,invoiceSave,api,uploadTo)}catch(error){
     notice=form.id?'Draft saved. Your entered details and document queue are retained. Completed attachments will not be uploaded again.':'Your entered details and queued documents are retained.';
     throw error;
    }
    const id=form.id,version=form.version;editing=false;dirty=false;savedID=id;detail=null;listing={records:[],totals:[]};resetInvoiceStaging();
-   notice='Draft saved. Submit it when the invoice is ready for MD or Super Admin review.';
+   notice=`Draft saved. Submit it when the ${recordLabel} is ready for MD or Super Admin review.`;
    detail=await api('/exports/'+id);savedID=0;
    if(intent==='submit'){
     await api('/exports/'+id+'/workflow',{version,action:'submit'});
-    notice='Invoice submitted to MD or Super Admin for approval.';savedID=id;detail=null;
+    notice=`${isJV?'JV':'Invoice'} submitted to MD or Super Admin for approval.`;savedID=id;detail=null;
     detail=await api('/exports/'+id);savedID=0;
    }
    await loadRegister();await focus('export-task-title');
@@ -144,46 +153,48 @@
  }
  async function workflow(action:'submit'|'approve'|'request_changes'|'reopen'){
   if(!detail||!actions[action]||busy)return;
-  if(action==='submit'&&(invoiceSave.pendingSave||invoiceSave.files.some(file=>file.status!=='uploaded'))){error='Finish or remove queued invoice documents before submitting. Retry / confirm any unconfirmed attachment first.';tab='documents';await focus('export-panel-title');return}
-  if(action==='submit'&&!invoiceFiles.length){error='Attach at least one invoice document before submitting for approval.';tab='documents';await focus('document-input-invoice');return}
+  if(action==='submit'&&(invoiceSave.pendingSave||invoiceSave.files.some(file=>file.status!=='uploaded'))){error='Finish or remove queued documents before submitting. Retry / confirm any unconfirmed attachment first.';tab='documents';await focus('export-panel-title');return}
+  if(action==='submit'&&!requiredFiles.length){error=`Attach at least one ${requiredDocument.label} before submitting for approval.`;tab='documents';await focus('document-input-'+requiredDocument.kind);return}
   if(['request_changes','reopen'].includes(action)&&!workflowNote.trim()){error='Enter a clear reason before continuing.';await focus('export-workflow-note');return}
   await run(async()=>{
    const result=await api('/exports/'+detail!.record.id+'/workflow',{version:detail!.record.version,action,note:workflowNote.trim()});
    detail!.record.version=result.version;detail!.record.workflow_status=result.workflow_status;detail!.actions={};workflowNote='';
-   notice=action==='submit'?'Invoice submitted to MD or Super Admin for approval.':action==='approve'?'Invoice approved.':action==='request_changes'?'Changes requested. Finance can correct and resubmit this invoice.':'Invoice reopened as a draft. Save corrections and submit it for approval again.';
+   notice=action==='submit'?`${isJV?'JV':'Invoice'} submitted to MD or Super Admin for approval.`:action==='approve'?`${isJV?'JV':'Invoice'} approved.`:action==='request_changes'?`Changes requested. Finance can correct and resubmit this ${recordLabel}.`:`${isJV?'JV':'Invoice'} reopened as a draft. Save corrections and submit it for approval again.`;
    await refreshDetail();await focus('export-task-title');
   });
  }
- async function addComment(event:SubmitEvent){event.preventDefault();if(!detail||!actions.comment||!commentNote.trim())return;await run(async()=>{await api('/exports/'+detail!.record.id+'/comments',{version:detail!.record.version,note:commentNote.trim()});commentNote='';notice='Comment added to the invoice history.';await refreshDetail()})}
+ async function addComment(event:SubmitEvent){event.preventDefault();if(!detail||!actions.comment||!commentNote.trim())return;await run(async()=>{await api('/exports/'+detail!.record.id+'/comments',{version:detail!.record.version,note:commentNote.trim()});commentNote='';notice=`Comment added to the ${recordLabel} history.`;await refreshDetail()})}
 
- function addReceipt(){form.receipts.push({currency:form.currency||'',statuses:{}});dirty=true;void focus('receipt-'+(form.receipts.length-1)+'-reference')}
+ function addReceipt(){form.receipts.push(newExportReceipt(form.currency||''));dirty=true;void focus('receipt-'+(form.receipts.length-1)+'-reference')}
  function addEbrc(){form.ebrcs.push({status:'Pending',currency:form.currency||'',shipping_bill_number:form.profile.shipping_bill_number||'',shipping_bill_date:form.profile.shipping_bill_date||'',statuses:{}});dirty=true;void focus('ebrc-'+(form.ebrcs.length-1)+'-export_reference')}
  function removeRow(key:'receipts'|'ebrcs',i:number){if(window.confirm(`Remove ${key==='receipts'?'receipt':'eBRC'} ${i+1} from these unsaved changes?`)){form[key].splice(i,1);dirty=true}}
  async function check(kind:'finance'|'audit'){await run(async()=>{await api(`/exports/${detail!.record.id}/check`,{version:detail!.record.version,kind,status:reviewStatus,note:reviewNote});await refreshDetail();reviewNote='';notice=`${kind==='finance'?'Finance':'Audit'} check recorded.`})}
  async function requestDiscount(e:SubmitEvent){e.preventDefault();await run(async()=>{await api(`/exports/${detail!.record.id}/discount`,{version:detail!.record.version,action:'request',amount:discountAmount,reason:discountReason});await refreshDetail();discountAmount='';discountReason='';notice='Shortfall request sent to Finance Head for the first review.'})}
  async function discountDecision(d:Row,action:string){await run(async()=>{await api(`/exports/${detail!.record.id}/discount`,{version:detail!.record.version,action,discount_id:d.id,reason:decisionNotes[d.id]||''});await refreshDetail();decisionNotes[d.id]='';notice=action==='final_approve'?'Shortfall approved and balance updated.':'Shortfall review recorded.'})}
  async function history(id:number){await run(async()=>{revision=await api(`/exports/${detail!.record.id}/history/${id}`);await focus('export-revision-title')})}
- function exportURL(kind:'register'|'statement'){const q=exportRegisterQuery(company,{fy:year,currency:currencyFilter,search,status:workflowFilter,party:registerParties.find((p:Row)=>partyKey(p)===partyFilter)});return '/api/exports/'+(kind==='statement'?'statement':'export')+'?'+q}
+ function exportURL(kind:'register'|'statement'){const q=exportRegisterQuery(company,{record_kind:registerKind,fy:year,currency:currencyFilter,search,status:workflowFilter,party:registerParties.find((p:Row)=>partyKey(p)===partyFilter)});return '/api/exports/'+(kind==='statement'?'statement':'export')+'?'+q}
 
- function showTab(value:ExportTab){tab=value;error='';void focus('export-panel-title')}
- const docKinds=()=>options.document_kinds||[];
+ function showTab(value:ExportTab){if(busy)return;tab=value;error='';void focus('export-panel-title')}
+ async function showDocuments(kind:string){if(busy)return;tab='documents';error='';await tick();const target=root?.querySelector<HTMLElement>('#document-category-'+kind);target?.focus();target?.scrollIntoView({block:'start',behavior:'instant'})}
+ const docKinds=()=>isJV?[{key:'jv_supporting',label:'Supporting JV document'}]:options.document_kinds||[];
  const profileStatusFields=[...shipmentFields,...incentiveFields,...scripFields,...clearanceFields].filter(f=>!['textarea','select'].includes(f.type||'')&&!f.key.endsWith('_currency'));
 </script>
 
 {#snippet fields(items:ExportField[],values:Row,prefix:string,readonly:boolean)}
  <div class="ex-grid" class:read={readonly}>
   {#each items as field}
-   {@const required=field.required||(field.key==='ebrc_number'&&!['Pending','Not required'].includes(values.status))}
+   {@const fieldValues=field.profile?(values.profile||{}):values}
+   {@const required=field.required||(field.key==='ebrc_number'&&!['Pending','Not required'].includes(fieldValues.status))}
    <div class="ex-field" class:wide={field.type==='textarea'}>
-    {#if readonly}<span class="ex-label">{field.label}</span><span class="ex-value">{fieldValue(field,values?.[field.key])}</span>{#if values?.statuses?.[field.key]}<small>{values.statuses[field.key]}</small>{/if}
+    {#if readonly}<span class="ex-label">{field.label}</span><span class="ex-value">{fieldValue(field,fieldValues?.[field.key])}</span>{#if fieldValues?.statuses?.[field.key]}<small>{fieldValues.statuses[field.key]}</small>{/if}
     {:else}
      <label for={prefix+'-'+field.key}><span class="ex-caption">{field.label}{#if required}<span class="ex-required"> *</span>{/if}</span></label>
-     {#if field.type==='textarea'}<textarea id={prefix+'-'+field.key} bind:value={values[field.key]} rows="3" maxlength="2000" disabled={busy}></textarea>
+     {#if field.type==='textarea'}<textarea id={prefix+'-'+field.key} bind:value={fieldValues[field.key]} rows="3" maxlength="2000" disabled={busy}></textarea>
      {:else if field.type==='currency'||field.type==='select'}
-      <select id={prefix+'-'+field.key} bind:value={values[field.key]} required={required} disabled={busy||(prefix==='invoice'&&field.key==='currency'&&invoiceCurrencyLocked)}><option value="">Choose…</option>{#each [...new Set([...(field.type==='currency'?options.currencies||[]:field.choices||[]),...(values[field.key]?[values[field.key]]:[])])] as item}<option value={item}>{item}</option>{/each}</select>
-     {:else if field.type==='date'}<input id={prefix+'-'+field.key} type="date" bind:value={values[field.key]} required={required} disabled={busy}/>
-     {:else if field.type==='money'||field.type==='number'}<input id={prefix+'-'+field.key} type="text" inputmode="decimal" pattern={field.type==='money'?'(0|[1-9][0-9]{0,14})([.][0-9]{1,2})?':'(0|[1-9][0-9]{0,14})([.][0-9]{1,6})?'} bind:value={values[field.key]} required={required} disabled={busy} maxlength="30" title={field.type==='money'?'Enter an amount with up to two decimal places.':'Enter a positive decimal number.'}/>
-     {:else}<input id={prefix+'-'+field.key} bind:value={values[field.key]} required={required} disabled={busy} maxlength="500"/>{/if}
+      <select id={prefix+'-'+field.key} bind:value={fieldValues[field.key]} required={required} disabled={busy||(prefix==='invoice'&&field.key==='currency'&&invoiceCurrencyLocked)}><option value="">Choose…</option>{#each [...new Set([...(field.type==='currency'?options.currencies||[]:field.choices||[]),...(fieldValues[field.key]?[fieldValues[field.key]]:[])])] as item}<option value={item}>{item}</option>{/each}</select>
+     {:else if field.type==='date'}<input id={prefix+'-'+field.key} type="date" bind:value={fieldValues[field.key]} required={required} disabled={busy}/>
+     {:else if field.type==='money'||field.type==='number'}<input id={prefix+'-'+field.key} type="text" inputmode="decimal" pattern={field.type==='money'?'(0|[1-9][0-9]{0,14})([.][0-9]{1,2})?':'(0|[1-9][0-9]{0,14})([.][0-9]{1,6})?'} bind:value={fieldValues[field.key]} required={required} disabled={busy} maxlength="30" title={field.type==='money'?'Enter an amount with up to two decimal places.':'Enter a positive decimal number.'}/>
+     {:else}<input id={prefix+'-'+field.key} bind:value={fieldValues[field.key]} required={required} disabled={busy} maxlength={field.maxLength||500}/>{/if}
      {#if field.hint}<small>{field.hint}</small>{/if}{#if prefix==='invoice'&&field.key==='currency'&&invoiceCurrencyLocked}<small>Currency is fixed while the export has saved receipts or approved adjustments.</small>{/if}
     {/if}
    </div>
@@ -196,16 +207,18 @@
 {/snippet}
 
 {#snippet workflowSummary(r:Row)}
- <section class="ex-workflow-summary" class:correction={r.workflow_status==='Changes requested'} aria-label="Invoice approval status">
-  <div class="ex-workflow-status"><span class="ex-status" class:complete={r.workflow_status==='Approved'} class:submitted={r.workflow_status==='Submitted'} class:correction={r.workflow_status==='Changes requested'}>{r.workflow_status||'Draft'}</span><p>{r.workflow_status==='Submitted'?'Awaiting MD or Super Admin approval. Invoice details and documents are locked during review.':r.workflow_status==='Approved'?'Approved invoice. Reopen with a reason before changing invoice details or documents.':r.workflow_status==='Changes requested'?'Review the comments, correct the invoice and submit it again.':'Save the invoice, attach its documents and submit it for approval when ready.'}</p></div>
+ <section class="ex-workflow-summary" class:correction={r.workflow_status==='Changes requested'} aria-label={isJV?'JV approval status':'Invoice approval status'}>
+  <div class="ex-workflow-status"><span class="ex-status" class:complete={r.workflow_status==='Approved'} class:submitted={r.workflow_status==='Submitted'} class:correction={r.workflow_status==='Changes requested'}>{r.workflow_status||'Draft'}</span><p>{r.workflow_status==='Submitted'?`Awaiting MD or Super Admin approval. ${isJV?'JV':'Invoice'} details and documents are locked during review.`:r.workflow_status==='Approved'?`Approved ${recordLabel}. Reopen with a reason before changing ${recordLabel} details or documents.`:r.workflow_status==='Changes requested'?`Review the comments, correct the ${recordLabel} and submit it again.`:`Save the ${recordLabel}, attach its documents and submit it for approval when ready.`}</p></div>
   {#if r.review_note}<div class="ex-correction-note"><strong>{r.workflow_status==='Changes requested'?'Corrections requested':'Latest review note'}</strong><p class="ex-prewrap">{r.review_note}</p><small>{r.reviewed_by_name||'Reviewer'}{#if r.reviewed_at} · {dateTime(r.reviewed_at)}{/if}</small></div>{/if}
   {#if r.workflow_status==='Submitted'&&r.submitted_by_name}<small>Submitted by {r.submitted_by_name} · {dateTime(r.submitted_at)}</small>{/if}
-  {#if r.workflow_status==='Submitted'&&permissions.approve&&(Number(r.created_by)===user.id||Number(r.submitted_by)===user.id)}<small>Another MD or Super Admin must review an invoice you created or submitted.</small>{/if}
+  {#if r.workflow_status==='Submitted'&&permissions.approve&&(Number(r.created_by)===user.id||Number(r.submitted_by)===user.id)}<small>Another MD or Super Admin must review {isJV?'a JV':'an invoice'} you created or submitted.</small>{/if}
  </section>
 {/snippet}
 
 {#snippet panels(r:Row,readonly:boolean)}
- {#if tab==='shipment'}
+ {#if tab==='shipment'&&isJV}
+  <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">JV details</h3>{@render fields(jvFields,r,'jv',readonly)}</section>
+ {:else if tab==='shipment'}
   <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">Shipment & invoice</h3>
    {#if readonly}<div class="ex-record-links"><div><span class="ex-label">Party</span><strong>{r.party_name}</strong></div><div><span class="ex-label">Linked production PO</span><strong>{(options.orders||[]).find((o:Row)=>o.id===r.order_id)?.po||r.order_po||'Not linked'}</strong></div><div><span class="ex-label">Register reference</span><strong>{exportReference(r.id)}</strong></div></div>
    {:else if !form.company_id}<div class="ex-link-fields ex-invoice-company"><label for="export-invoice-company"><span class="ex-caption">Company name <span class="ex-required">*</span></span></label><div class="ex-company-choice"><select id="export-invoice-company" bind:value={form.party_name} required disabled={busy}><option value="">Choose invoice company</option>{#each invoiceCompanies as name}<option value={name}>{name}</option>{/each}</select><button type="button" class="ex-button secondary" disabled={busy} aria-expanded={addingCompany} onclick={()=>{addingCompany=!addingCompany;companyError='';if(addingCompany)void focus('export-new-company')}}><Plus size={16}/>Add more company</button></div><small>These company names are saved for export invoices only.</small>
@@ -217,8 +230,26 @@
   <section class="ex-section"><h3>Drawback & RoSCTL</h3>{@render fields(incentiveFields,r.profile,'incentive',readonly)}</section>
   {#if !readonly}<details class="ex-section"><summary>Special codes & field notes</summary><p class="ex-muted">Use these for FOC, HC, NIL or other explanations. Amount fields accept numbers only.</p><div class="ex-grid">{#each profileStatusFields as f}<label>{f.label}<input bind:value={r.profile.statuses[f.key]} maxlength="160" disabled={busy} placeholder="Optional code or note"/></label>{/each}</div></details>{/if}
  {:else if tab==='receipts'}
-  <section class="ex-section"><div class="ex-section-heading"><div><h3 id="export-panel-title" tabindex="-1">Receipts & banking</h3><p class="ex-muted">Record each payment once. Bank charges reduce outstanding separately; do not repeat the same charge in both categories.</p></div>{#if !readonly}<button type="button" class="ex-button secondary" disabled={busy||(r.receipts||[]).length>=100} onclick={addReceipt}><Plus size={16}/>Add receipt</button>{/if}</div>
-  {#each r.receipts||[] as receipt,i}<article class="ex-repeat"><div class="ex-section-heading"><h4>Receipt {i+1}{#if readonly&&receipt.reference} · {receipt.reference}{/if}</h4>{#if !readonly}<button type="button" class="ex-button quiet" disabled={busy} aria-label={'Remove receipt '+(i+1)} onclick={()=>removeRow('receipts',i)}><Trash2 size={16}/>Remove</button>{/if}</div>{@render fields(receiptFields,receipt,'receipt-'+i,readonly)}<details class="ex-subsection" open={readonly}><summary>Conversion, bank advice & allocation</summary><p class="ex-muted">Values are entered from the bank advice. Converted amount and Convert amount remain separate; gross and net figures are supporting details.</p>{@render fields(conversionFields,receipt,'conversion-'+i,readonly)}</details></article>{:else}{@render empty('No receipts recorded',readonly?'Payments and bank advice will appear here when added.':'Add a receipt when payment or bank advice is available. No bank charges are assumed.')}{/each}
+  <section class="ex-section ex-banking"><div class="ex-section-heading"><div><h3 id="export-panel-title" tabindex="-1">Receipts & banking</h3><p class="ex-muted">Follow the sequence for each receipt. Applied payments and confirmed bank charges reduce the invoice balance once.</p></div>{#if !readonly}<button type="button" class="ex-button secondary" disabled={busy||(r.receipts||[]).length>=100} onclick={addReceipt}><Plus size={16}/>Add receipt</button>{/if}</div>
+  {#each r.receipts||[] as receipt,i}
+   <article class="ex-repeat ex-bank-receipt"><div class="ex-section-heading"><h4>Receipt {i+1}{#if receipt.reference} · {receipt.reference}{/if}</h4>{#if !readonly}<button type="button" class="ex-button quiet" disabled={busy} aria-label={'Remove receipt '+(i+1)} onclick={()=>removeRow('receipts',i)}><Trash2 size={16}/>Remove</button>{/if}</div>
+    <ol class="ex-bank-sequence">{#each bankingStages as stage,stageIndex}
+     <li class="ex-bank-stage"><div class="ex-bank-stage-heading"><span class="ex-bank-number" aria-hidden="true">{stageIndex+1}</span><h5>{stage.title}</h5></div>
+      {#if stage.hint}<p class="ex-muted">{stage.hint}</p>{/if}
+      {#if stage.fields.length}{@render fields(stage.fields,receipt,'receipt-'+i,readonly)}{/if}
+      {#if stage.key==='advice'}{@const difference=foreignChargeDifference(receipt)}
+       <div class="ex-bank-calculation" aria-live="polite"><span>FCR − credited amount = foreign bank charges</span>{#if difference?.error}<strong class="ex-file-error">{difference.error}</strong>{:else if difference}<strong>{moneyText(difference.amount,receipt.currency||'')}</strong><small>Calculated from the two foreign currency amounts. Saved with the receipt.</small>{:else}<strong>Enter FCR and credited amount</strong><small>Existing confirmed charges remain unchanged until both values are entered.</small>{/if}</div>
+      {/if}
+      {#if stage.documents}<div class="ex-bank-documents">{#each stage.documents as document}{@const saved=(detail?.files||[]).filter((file:Row)=>file.kind===document.key).length}{@const queued=invoiceSave.files.filter(file=>file.kind===document.key).length}<button type="button" class="ex-button secondary" disabled={busy} onclick={()=>showDocuments(document.key)}><Paperclip size={15}/>{document.label}<span>{saved?saved+' saved':queued?queued+' queued':canAttachInvoice?'Attach':'View'}</span></button>{/each}</div>{/if}
+      {#if stage.key==='documents'&&permissions.edit&&permissions.download&&['Finance','Finance Head','Super Admin'].includes(user.role)}
+       {#if readonly&&detail&&!invoiceSave.files.length}{#if i===0}{#key String(r.id)+':'+String(r.version)}<ExportBankEmail record={r} files={detail.files||[]} userID={user.id} bind:busy={emailBusy}/>{/key}{:else}<p class="ex-muted">Bank email is shared by this invoice. Review recipients and documents under Receipt 1.</p>{/if}
+       {:else}<p class="ex-muted">Save the draft and its documents to review and send an email to the bank.</p>{/if}
+      {/if}
+     </li>
+    {/each}</ol>
+    <details class="ex-subsection ex-bank-additional"><summary>Additional receipt details</summary><p class="ex-muted">Invoice currency equivalents, existing charge records, Tally references and earlier conversion details.</p>{@render fields(additionalReceiptFields,receipt,'receipt-extra-'+i,readonly)}</details>
+   </article>
+  {:else}{@render empty('No receipts recorded',readonly?'Payments and bank advice will appear here when added.':'Add a receipt to begin with the foreign bank reference and amount.')}{/each}
   </section>
  {:else if tab==='ebrc'}
   <section class="ex-section"><div class="ex-section-heading"><div><h3 id="export-panel-title" tabindex="-1">eBRC register</h3><p class="ex-muted">Invoice {r.invoice_number||'not entered'} · Multiple certificates can be linked to the same invoice. These records do not add to payment received.</p></div>{#if !readonly}<button type="button" class="ex-button secondary" disabled={busy||(r.ebrcs||[]).length>=100} onclick={addEbrc}><Plus size={16}/>Add eBRC</button>{/if}</div>
@@ -228,10 +259,10 @@
   <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">Scrip sale</h3><p class="ex-muted">Record the agreed sale amount, percentage and currency separately.</p>{@render fields(scripFields,r.profile,'scrip',readonly)}</section>
   <section class="ex-section"><h3>Clearance & transport partners</h3>{@render fields(clearanceFields,r.profile,'clearance',readonly)}<div class="ex-subsection">{@render fields([{key:'linked_bank',label:'Linked bank'}],r.profile,'linked-bank',readonly)}</div></section>
  {:else if tab==='documents'}
-  <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">Document checklist</h3><p class="ex-muted">Attach each document in its own category. An invoice document is required before submission. PDF, PNG, JPG, Word or Excel · up to 10 MB per file.</p>
+  <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">Document checklist</h3><p class="ex-muted">{isJV?'Attach a supporting JV document before submission. You can attach the JV, BL or AWB copy here.':'Attach each document in its own category. An invoice document is required before submission.'} PDF, PNG, JPG, Word or Excel · up to 10 MB per file.</p>
   {#if !readonly}<p class="ex-notice">Choose documents here, then save the draft to attach them. Queued files stay on this form until saved.</p>{/if}
-  <ul class="ex-checklist">{#each docKinds() as kind}{@const files=(detail?.files||[]).filter((f:Row)=>f.kind===kind.key)}{@const queued=invoiceSave.files.filter(item=>item.kind===kind.key&&!files.some((file:Row)=>file.id===item.id))}<li>
-   <div class="ex-document-kind"><span class:attached={files.length>0} class="ex-document-indicator">{#if files.length}<Check size={15}/>{:else}<FileText size={15}/>{/if}</span><strong>{kind.label}{#if kind.key==='invoice'}<span class="ex-required"> *</span>{/if}</strong>{#if files.length}<small>{files.length} attached</small>{/if}
+  <ul class="ex-checklist">{#each docKinds() as kind}{@const files=(detail?.files||[]).filter((f:Row)=>f.kind===kind.key)}{@const queued=invoiceSave.files.filter(item=>item.kind===kind.key&&!files.some((file:Row)=>file.id===item.id))}<li id={'document-category-'+kind.key} tabindex="-1">
+   <div class="ex-document-kind"><span class:attached={files.length>0} class="ex-document-indicator">{#if files.length}<Check size={15}/>{:else}<FileText size={15}/>{/if}</span><strong>{kind.label}{#if kind.key===requiredDocument.kind}<span class="ex-required"> *</span>{/if}</strong>{#if files.length}<small>{files.length} attached</small>{/if}
     {#if canAttachInvoice}<label class="ex-button secondary ex-upload-label ex-checklist-attach"><Paperclip size={16}/>Attach document<input id={'document-input-'+kind.key} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" aria-label={'Attach '+kind.label+' document'} disabled={busy} onchange={event=>readonly?attachInvoiceFiles(event,kind.key):queueInvoiceFiles(event,kind.key)}/></label>{:else if !files.length}<small>No document attached</small>{/if}
    </div>
    {#if files.length||queued.length}<ul class="ex-document-files">{#each files as file}<li><div class="ex-document-info"><strong>{file.filename}</strong><small>{Math.max(1,Math.round(file.size/1024))} KB · {exportDate(file.created_at)}</small></div><div class="ex-actions">
@@ -243,10 +274,11 @@
   {#if readonly&&invoiceSave.files.length}<div class="ex-upload"><button type="button" class="ex-button secondary" disabled={busy} onclick={flushInvoiceDocuments}>Retry / confirm attachments</button><small>Completed uploads are kept. Unconfirmed uploads use the same protected request.</small></div>{/if}
   </section>
  {:else if tab==='history'}
-  <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">Invoice comments</h3><p class="ex-muted">Questions, correction reasons and approval notes stay with the invoice.</p>
+  <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">{isJV?'JV comments':'Invoice comments'}</h3><p class="ex-muted">Questions, correction reasons and approval notes stay with the {recordLabel}.</p>
    <ol class="ex-history ex-comments">{#each detail?.comments||[] as comment}<li><div><strong>{comment.author_name}</strong><small>{dateTime(comment.created_at)}</small><p class="ex-prewrap">{comment.note}</p></div></li>{:else}<li><p class="ex-muted">No comments yet.</p></li>{/each}</ol>
    {#if readonly&&actions.comment}<form class="ex-comment-form" onsubmit={addComment}><label>Add a comment<textarea bind:value={commentNote} rows="3" maxlength="2000" required disabled={busy}></textarea></label><button class="ex-button secondary" disabled={busy||!commentNote.trim()}>Add comment</button></form>{/if}
   </section>
+  {#if !isJV}
   <section class="ex-section"><h3>Finance & audit file checks</h3><div class="ex-review-grid">{#each ['finance','audit'] as kind}{@const check=r[kind+'_check']}<div><h4>{kind==='finance'?'Finance file check':'Audit file check'}</h4><span class="ex-status" class:complete={check?.status==='Checked'}>{check?.status||'Not checked'}</span>{#if check?.actor_name}<p>{check.actor_name} · {dateTime(check.at)}</p>{/if}{#if check?.note}<p class="ex-prewrap">{check.note}</p>{/if}</div>{/each}</div>
   {#if !readonly}<p class="ex-notice">Saving edits resets the file checks so the revised export can be reviewed.</p>
   {:else if permissions.finance_check||permissions.audit_check}<div class="ex-review-form"><div class="ex-grid"><label>Check result<select bind:value={reviewStatus} disabled={busy}><option>Checked</option><option>Needs correction</option></select></label><label class="wide">Review note<textarea bind:value={reviewNote} maxlength="2000" rows="2" disabled={busy}></textarea></label></div><div class="ex-actions">{#if permissions.finance_check}<button class="ex-button secondary" disabled={busy||!reviewNote.trim()} onclick={()=>check('finance')}>Record finance check</button>{/if}{#if permissions.audit_check}<button class="ex-button secondary" disabled={busy||!reviewNote.trim()} onclick={()=>check('audit')}>Record audit check</button>{/if}</div></div>{/if}
@@ -256,50 +288,56 @@
    {#if readonly&&(d.status==='Pending finance'&&permissions.discount_first||d.status==='Pending final'&&permissions.discount_final&&Number(d.first_by)!==user.id)}<label>Decision reason<textarea bind:value={decisionNotes[d.id]} rows="2" maxlength="2000" disabled={busy}></textarea></label><div class="ex-actions"><button class="ex-button primary" disabled={busy||!decisionNotes[d.id]?.trim()} onclick={()=>discountDecision(d,d.status==='Pending finance'?'first_approve':'final_approve')}>{d.status==='Pending finance'?'Approve finance review':'Give final approval'}</button><button class="ex-button secondary" disabled={busy||!decisionNotes[d.id]?.trim()} onclick={()=>discountDecision(d,'reject')}>Reject request</button></div>{/if}</article>{:else}<p class="ex-muted">No shortfall requests for this invoice.</p>{/each}
    {#if readonly&&permissions.edit&&moneyMinor(r.balance?.outstanding)>0n&&!(detail?.discounts||[]).some((d:Row)=>['Pending finance','Pending final'].includes(d.status))}<form class="ex-request-form" onsubmit={requestDiscount}><h4>Request shortfall adjustment</h4><div class="ex-grid"><label>Requested amount ({r.currency})<input type="text" inputmode="decimal" pattern={'(0|[1-9][0-9]{0,14})([.][0-9]{1,2})?'} bind:value={discountAmount} required disabled={busy}/></label><label class="wide">Reason / supporting reference<textarea bind:value={discountReason} rows="3" maxlength="2000" required disabled={busy}></textarea></label></div><button class="ex-button primary" disabled={busy||!discountAmount||!discountReason.trim()}>Send to Finance Head</button></form>{/if}
   </section>
-  <section class="ex-section"><h3>Revision history</h3><ol class="ex-history">{#each detail?.history||[] as item}<li><div><strong>{item.action}</strong><small>{item.actor_name} · {dateTime(item.created_at)}</small></div>{#if readonly}<button class="ex-button quiet" disabled={busy} onclick={()=>history(item.id)}>View revision<ChevronRight size={16}/></button>{/if}</li>{:else}<li><p class="ex-muted">The first saved export starts its history.</p></li>{/each}</ol>
-  {#if revision}<section class="ex-revision"><div class="ex-section-heading"><h4 id="export-revision-title" tabindex="-1">Saved revision · {dateTime(revision.created_at)}</h4><button class="ex-button quiet" onclick={()=>revision=null}>Close revision</button></div><p>{revision.action} · {revision.actor_name}</p>{@render fields(coreFields,revision.snapshot,'past-invoice',true)}<div class="ex-subsection">{@render fields([...shipmentFields,...incentiveFields,...scripFields,...clearanceFields],revision.snapshot.profile||{},'past-profile',true)}</div>{#each revision.snapshot.receipts||[] as receipt,i}<h4>Receipt {i+1}</h4>{@render fields([...receiptFields,...conversionFields],receipt,'past-receipt-'+i,true)}{/each}{#each revision.snapshot.ebrcs||[] as ebrc,i}<h4>eBRC {i+1}</h4>{@render fields(ebrcFields,ebrc,'past-ebrc-'+i,true)}{/each}</section>{/if}
+  {/if}
+  <section class="ex-section"><h3>Revision history</h3><ol class="ex-history">{#each detail?.history||[] as item}<li><div><strong>{item.action}</strong><small>{item.actor_name} · {dateTime(item.created_at)}</small></div>{#if readonly}<button class="ex-button quiet" disabled={busy} onclick={()=>history(item.id)}>View revision<ChevronRight size={16}/></button>{/if}</li>{:else}<li><p class="ex-muted">The first saved {isJV?'JV':'export'} starts its history.</p></li>{/each}</ol>
+  {#if revision}<section class="ex-revision"><div class="ex-section-heading"><h4 id="export-revision-title" tabindex="-1">Saved revision · {dateTime(revision.created_at)}</h4><button class="ex-button quiet" onclick={()=>revision=null}>Close revision</button></div><p>{revision.action} · {revision.actor_name}</p>{#if isJV}{@render fields(jvFields,revision.snapshot,'past-jv',true)}{:else}{@render fields(coreFields,revision.snapshot,'past-invoice',true)}<div class="ex-subsection">{@render fields([...shipmentFields,...incentiveFields,...scripFields,...clearanceFields],revision.snapshot.profile||{},'past-profile',true)}</div>{#each revision.snapshot.receipts||[] as receipt,i}<h4>Receipt {i+1}</h4>{@render fields(allReceiptFields,receipt,'past-receipt-'+i,true)}{/each}{#each revision.snapshot.ebrcs||[] as ebrc,i}<h4>eBRC {i+1}</h4>{@render fields(ebrcFields,ebrc,'past-ebrc-'+i,true)}{/each}{/if}</section>{/if}
   </section>
  {/if}
 {/snippet}
 
 <section class="export-workspace" bind:this={root} aria-busy={busy} onfocusin={revealFocusedField}>
  {#if !editing&&!detail}
-  <header class="ex-register-heading"><div><h1 id="export-register-title" tabindex="-1">Export documentation</h1><p>Invoices, shipping documents and payment follow-up in one register.</p></div><div class="ex-actions"><button class="ex-button secondary" disabled={busy} onclick={()=>run(start)}><RefreshCw size={16}/>Refresh</button>{#if options.permissions?.edit}<button id="export-new" class="ex-button primary" disabled={busy||(!company&&!options.permissions?.standalone)} onclick={fresh}><Plus size={17}/>Add export invoice</button>{/if}</div></header>
-  <div class="ex-company-row"><label>Company filter<select value={company} disabled={busy} onchange={e=>selectCompany(e.currentTarget.value)}><option value="">No company / unassigned</option>{#each options.companies||[] as c}<option value={String(c.id)}>{c.name}</option>{/each}</select></label>{#if options.permissions?.download&&(company||options.permissions?.standalone)}<div class="ex-actions"><a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button secondary" href={exportURL('register')}><Download size={16}/>Excel register</a><div class="ex-statement-download">{#if partyFilter}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button secondary" href={exportURL('statement')}><Download size={16}/>Party outstanding</a>{:else}<button class="ex-button secondary" disabled aria-describedby="export-statement-help"><Download size={16}/>Party outstanding</button><small id="export-statement-help">Select a party to download its outstanding statement.</small>{/if}</div></div>{/if}</div>
+  <nav class="ex-tabs ex-register-tabs" aria-label="Documentation registers"><button class:active={!isJV} aria-current={!isJV?'page':undefined} disabled={busy} onclick={()=>selectRegister('export')}>Export invoices</button><button class:active={isJV} aria-current={isJV?'page':undefined} disabled={busy} onclick={()=>selectRegister('jv')}>JV</button></nav>
+  <header class="ex-register-heading"><div><h1 id="export-register-title" tabindex="-1">{isJV?'JV register':'Export documentation'}</h1><p>{isJV?'JV references, dates, parties and amounts in one register.':'Invoices, shipping documents and payment follow-up in one register.'}</p></div><div class="ex-actions"><button class="ex-button secondary" disabled={busy} onclick={()=>run(start)}><RefreshCw size={16}/>Refresh</button>{#if options.permissions?.edit}<button id="export-new" class="ex-button primary" disabled={busy||((isJV||!company)&&!options.permissions?.standalone)} onclick={fresh}><Plus size={17}/>{isJV?'Add JV':'Add export invoice'}</button>{/if}</div></header>
+  <div class="ex-company-row">{#if !isJV}<label>Company filter<select value={company} disabled={busy} onchange={e=>selectCompany(e.currentTarget.value)}><option value="">No company / unassigned</option>{#each options.companies||[] as c}<option value={String(c.id)}>{c.name}</option>{/each}</select></label>{/if}{#if options.permissions?.download&&(!isJV&&company||options.permissions?.standalone)}<div class="ex-actions"><a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button secondary" href={exportURL('register')}><Download size={16}/>Excel register</a>{#if !isJV}<div class="ex-statement-download">{#if partyFilter}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button secondary" href={exportURL('statement')}><Download size={16}/>Party outstanding</a>{:else}<button class="ex-button secondary" disabled aria-describedby="export-statement-help"><Download size={16}/>Party outstanding</button><small id="export-statement-help">Select a party to download its outstanding statement.</small>{/if}</div>{/if}</div>{/if}</div>
   {#if error}<p class="ex-error" role="alert" tabindex="-1">{error}</p>{/if}{#if notice}<p class="ex-notice" role="status">{notice}</p>{/if}
-  {#if savedID}<div class="ex-saved-recovery"><p>The export was saved, but its refreshed details could not be loaded.</p><button class="ex-button secondary" disabled={busy} onclick={()=>open(savedID)}>Open saved export</button></div>{/if}
-  {#if !loading&&!company&&!options.permissions?.standalone&&!error}<section class="ex-company-required"><h2>Select an assigned company</h2><p>Your account can work with company-linked exports. Choose an assigned company above to view its invoices.</p>{#if companySetupURL}<a class="ex-button secondary" href={companySetupURL}>Open Company Setup</a>{/if}</section>{:else}
-  <div class="ex-filters"><label class="ex-search"><span>Search register</span><div><Search size={17}/><input bind:value={search} placeholder="Invoice, party, shipping bill or reference"/></div></label><label>Financial year<select bind:value={year}><option value="">All years</option>{#each years as value}<option>{value}</option>{/each}</select></label><label>Party<select bind:value={partyFilter}><option value="">All parties</option>{#each registerParties as party}<option value={partyKey(party)}>{party.name}</option>{/each}</select></label><label>Currency<select bind:value={currencyFilter}><option value="">All currencies</option>{#each options.currencies||[] as value}<option>{value}</option>{/each}</select></label><label>Approval status<select bind:value={workflowFilter}><option value="">All statuses</option>{#each exportWorkflowStatuses as value}<option>{value}</option>{/each}</select></label></div>
-  <div class="ex-register-meta"><strong>{records.length} {records.length===1?'export':'exports'}</strong><span>Outstanding is kept separately for each currency.</span></div>
+  {#if savedID}<div class="ex-saved-recovery"><p>The {isJV?'JV':'export'} was saved, but its refreshed details could not be loaded.</p><button class="ex-button secondary" disabled={busy} onclick={()=>open(savedID)}>{isJV?'Open saved JV':'Open saved export'}</button></div>{/if}
+  {#if !loading&&(isJV||!company)&&!options.permissions?.standalone&&!error}<section class="ex-company-required"><h2>{isJV?'JV access is not assigned':'Select an assigned company'}</h2><p>{isJV?'JV records are available to authorised Finance and management users.':'Your account can work with company-linked exports. Choose an assigned company above to view its invoices.'}</p>{#if !isJV&&companySetupURL}<a class="ex-button secondary" href={companySetupURL}>Open Company Setup</a>{/if}</section>{:else}
+  <div class="ex-filters"><label class="ex-search"><span>Search register</span><div><Search size={17}/><input bind:value={search} placeholder={isJV?'JV reference, party or Tally reference':'Invoice, party, shipping bill or reference'}/></div></label><label>Financial year<select bind:value={year}><option value="">All years</option>{#each years as value}<option>{value}</option>{/each}</select></label><label>Party<select bind:value={partyFilter}><option value="">All parties</option>{#each registerParties as party}<option value={partyKey(party)}>{party.name}</option>{/each}</select></label><label>Currency<select bind:value={currencyFilter}><option value="">All currencies</option>{#each options.currencies||[] as value}<option>{value}</option>{/each}</select></label><label>Approval status<select bind:value={workflowFilter}><option value="">All statuses</option>{#each exportWorkflowStatuses as value}<option>{value}</option>{/each}</select></label></div>
+  <div class="ex-register-meta"><strong>{records.length} {isJV?(records.length===1?'JV':'JVs'):(records.length===1?'export':'exports')}</strong><span>{isJV?'Amounts are totalled separately for each currency.':'Outstanding is kept separately for each currency.'}</span></div>
+  {#if isJV}<div class="ex-table-scroll"><table class="ex-jv-table"><thead><tr>{#each jvFields as field}<th class:numeric={field.type==='money'}>{field.label}</th>{/each}</tr></thead><tbody>{#each records as r}<tr><td><button id={'export-open-'+r.id} class="ex-reference" disabled={busy} onclick={()=>open(r.id)}>{r.invoice_number}</button><small><span class="ex-status" class:complete={r.workflow_status==='Approved'} class:submitted={r.workflow_status==='Submitted'} class:correction={r.workflow_status==='Changes requested'}>{r.workflow_status||'Draft'}</span></small></td><td>{exportDate(r.profile?.export_date)}</td><td>{r.party_name}</td><td>{r.currency}</td><td class="numeric">{moneyText(r.invoice_amount)}</td><td>{r.profile?.shipping_mode||'—'}</td><td>{r.profile?.jv_by_date||'—'}</td><td>{r.profile?.scrip_tally_reference||'—'}</td></tr>{:else}<tr><td colspan="8">{@render empty(loading?'Loading JV register…':search||year||partyFilter||currencyFilter||workflowFilter?'No matching JVs':'No JV records yet',loading?'Fetching your authorised JV records.':search||year||partyFilter||currencyFilter||workflowFilter?'Change the search or filters to see more records.':options.permissions?.edit?'Select Add JV to enter its reference, party and amount.':'Authorised JV records will appear here.')}</td></tr>{/each}</tbody></table></div>{:else}
   <div class="ex-table-scroll"><table><thead><tr><th>S.No.</th><th>Invoice / reference</th><th>Party</th><th>Approval</th><th>Shipment</th><th class="numeric">Invoice amount</th><th class="numeric">Outstanding</th><th>File checks</th></tr></thead><tbody>{#each records as r,i}<tr><td class="ex-sequence">{i+1}</td><td><button id={'export-open-'+r.id} class="ex-reference" disabled={busy} onclick={()=>open(r.id)}>{r.invoice_number}</button><small>{r.profile?.export_reference||exportReference(r.id)} · {fiscalYear(r)}</small></td><td>{r.party_name}</td><td><span class="ex-status" class:complete={r.workflow_status==='Approved'} class:submitted={r.workflow_status==='Submitted'} class:correction={r.workflow_status==='Changes requested'}>{r.workflow_status||'Draft'}</span></td><td>{r.profile?.shipping_mode||'—'}<small>{r.profile?.shipping_bill_number||'No shipping bill'}</small></td><td class="numeric">{moneyText(r.invoice_amount,r.currency)}</td><td class="numeric"><strong>{moneyText(r.balance?.outstanding,r.currency)}</strong>{#if moneyMinor(r.balance?.outstanding)<0n}<small>Overpaid</small>{/if}</td><td><span class="ex-check-state" class:checked={r.finance_check?.status==='Checked'}>Finance: {r.finance_check?.status||'Pending'}</span><span class="ex-check-state" class:checked={r.audit_check?.status==='Checked'}>Audit: {r.audit_check?.status||'Pending'}</span></td></tr>{:else}<tr><td colspan="8">{@render empty(loading?'Loading export register…':search||year||partyFilter||currencyFilter||workflowFilter?'No matching exports':'No export records yet',loading?'Fetching your authorised invoices.':search||year||partyFilter||currencyFilter||workflowFilter?'Change the search or filters to see more records.':options.permissions?.edit?'Select Add export invoice to start its invoice, payment and document file.':'Exports available to your company and assigned buyers will appear here.')}</td></tr>{/each}</tbody></table></div>
-  {#if filteredTotals.length}<div class="ex-currency-totals">{#each filteredTotals as total}<p><strong>{total.currency}</strong><span>{total.count} invoices</span><span>Invoice total {moneyText(total.invoice)}</span><span>Outstanding <strong>{moneyText(total.outstanding)}</strong></span></p>{/each}</div>{/if}
+  {/if}
+  {#if filteredTotals.length}<div class="ex-currency-totals">{#each filteredTotals as total}<p><strong>{total.currency}</strong><span>{total.count} {isJV?'JVs':'invoices'}</span><span>{isJV?'Amount total':'Invoice total'} {moneyText(total.invoice)}</span>{#if !isJV}<span>Outstanding <strong>{moneyText(total.outstanding)}</strong></span>{/if}</p>{/each}</div>{/if}
   {/if}
  {:else}
   {#if editing}
    <form class="ex-editor" onsubmit={save} oninput={()=>dirty=true} onchange={()=>dirty=true} use:enter={'edit-'+(form.id||'new')}>
-    <header class="ex-task-heading"><div><h1 id="export-task-title" tabindex="-1">{form.id?'Edit export invoice':'Add export invoice'}</h1><p>{form.invoice_number||'Invoice & shipping file'}{#if form.id} · {exportReference(form.id)}{/if}</p></div><div class="ex-actions"><button type="button" class="ex-button header-secondary" disabled={busy} onclick={cancel}>Cancel</button><button class="ex-button header-secondary" name="intent" value="save" disabled={busy}>{busy?'Saving…':'Save draft'}</button><button class="ex-button primary" name="intent" value="submit" disabled={busy}>Save & submit</button></div></header>
+    <header class="ex-task-heading"><div><h1 id="export-task-title" tabindex="-1">{isJV?(form.id?'Edit JV':'Add JV'):(form.id?'Edit export invoice':'Add export invoice')}</h1><p>{form.invoice_number||(isJV?'JV details':'Invoice & shipping file')}{#if form.id&&!isJV} · {exportReference(form.id)}{/if}</p></div><div class="ex-actions"><button type="button" class="ex-button header-secondary" disabled={busy} onclick={cancel}>Cancel</button><button class="ex-button header-secondary" name="intent" value="save" disabled={busy}>{busy?'Saving…':'Save draft'}</button><button class="ex-button primary" name="intent" value="submit" disabled={busy}>Save & submit</button></div></header>
     {#if error}<p class="ex-error" role="alert" tabindex="-1">{error}</p>{/if}
     {#if notice}<p class="ex-notice" role="status">{notice}</p>{/if}
-    {#if uncertainSave}<p class="ex-notice" role="status">A save or upload is not confirmed yet. Retry the same action to check its result. If the server says it was already submitted, use Cancel to check the saved invoice or register before starting again.</p>{/if}
+    {#if uncertainSave}<p class="ex-notice" role="status">A save or upload is not confirmed yet. Retry the same action to check its result. If the server says it was already submitted, use Cancel to check the saved {recordLabel} or register before starting again.</p>{/if}
     {@render workflowSummary(form)}
-    <nav class="ex-tabs" aria-label="Export sections">{#each exportTabs as item}<button type="button" class:active={tab===item.key} aria-current={tab===item.key?'page':undefined} onclick={()=>showTab(item.key)}>{item.label}</button>{/each}</nav>
+    <nav class="ex-tabs" aria-label={isJV?'JV sections':'Export sections'}>{#each tabs as item}<button type="button" class:active={tab===item.key} aria-current={tab===item.key?'page':undefined} onclick={()=>showTab(item.key)}>{item.label}</button>{/each}</nav>
     <div class="ex-panel" use:enter={tab}>{@render panels(form,false)}</div>
-    <footer class="ex-task-footer"><span>{dirty?'Unsaved changes':'No unsaved changes'}{#if !hasInvoiceDocument} · Invoice document required to submit{/if}</span><button type="button" class="ex-button secondary" disabled={busy} onclick={cancel}>Cancel</button><button class="ex-button secondary" name="intent" value="save" disabled={busy}>{busy?'Saving…':'Save draft'}</button><button class="ex-button primary" name="intent" value="submit" disabled={busy}>Save & submit</button></footer>
+    <footer class="ex-task-footer"><span>{dirty?'Unsaved changes':'No unsaved changes'}{#if !hasRequiredDocument} · {isJV?'Supporting JV document':'Invoice document'} required to submit{/if}</span><button type="button" class="ex-button secondary" disabled={busy} onclick={cancel}>Cancel</button><button class="ex-button secondary" name="intent" value="save" disabled={busy}>{busy?'Saving…':'Save draft'}</button><button class="ex-button primary" name="intent" value="submit" disabled={busy}>Save & submit</button></footer>
    </form>
   {:else if detail}
    {@const r=detail.record}{@const balance=r.balance||{}}
-   <button class="ex-back" disabled={busy} onclick={back}><ArrowLeft size={16}/>Export register</button>
-   <header class="ex-task-heading"><div><h1 id="export-task-title" tabindex="-1">{r.invoice_number}</h1><p>{r.party_name} · {exportReference(r.id)}</p></div><div class="ex-actions"><button class="ex-button header-secondary" disabled={busy} onclick={()=>run(refreshDetail)} aria-label="Refresh export details"><RefreshCw size={16}/></button>{#if permissions.download}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button header-secondary" href={'/api/exports/'+r.id+'/export'}><Download size={16}/>Excel file</a>{/if}{#if actions.edit}<button class="ex-button primary" disabled={busy} onclick={edit}>Edit invoice</button>{/if}</div></header>
+   <button class="ex-back" disabled={busy} onclick={back}><ArrowLeft size={16}/>{isJV?'JV register':'Export register'}</button>
+   <header class="ex-task-heading"><div><h1 id="export-task-title" tabindex="-1">{r.invoice_number}</h1><p>{r.party_name}{#if !isJV} · {exportReference(r.id)}{/if}</p></div><div class="ex-actions"><button class="ex-button header-secondary" disabled={busy} onclick={()=>run(refreshDetail)} aria-label={isJV?'Refresh JV details':'Refresh export details'}><RefreshCw size={16}/></button>{#if permissions.download}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button header-secondary" href={'/api/exports/'+r.id+'/export'}><Download size={16}/>Excel file</a>{/if}{#if actions.edit}<button class="ex-button primary" disabled={busy} onclick={edit}>{isJV?'Edit JV':'Edit invoice'}</button>{/if}</div></header>
    {#if error}<p class="ex-error" role="alert" tabindex="-1">{error}</p>{/if}{#if notice}<p class="ex-notice" role="status">{notice}</p>{/if}
    {@render workflowSummary(r)}
+   {#if !isJV}
    <dl class="ex-balance"><div><dt>Bill amount</dt><dd>{moneyText(r.invoice_amount,r.currency)}</dd></div><div><dt>Payment received</dt><dd>{moneyText(balance.payment_received,r.currency)}</dd></div><div><dt>Foreign bank charges</dt><dd>{moneyText(balance.foreign_bank_charges,r.currency)}</dd></div><div><dt>Bank charges</dt><dd>{moneyText(balance.bank_charges,r.currency)}</dd></div><div><dt>Approved adjustment</dt><dd>{moneyText(balance.approved_discount,r.currency)}</dd></div><div class="outstanding"><dt>{moneyMinor(balance.outstanding)<0n?'Overpaid balance':'Outstanding / short amount'}</dt><dd>{moneyText(balance.outstanding,r.currency)}</dd></div></dl>
    <p class="ex-balance-basis">Invoice less payments, recorded foreign and local bank charges, and finally approved adjustments. Gross/net advice figures and eBRC amounts are not counted again.</p>
-   <nav class="ex-tabs" aria-label="Export sections">{#each exportTabs as item}<button type="button" class:active={tab===item.key} aria-current={tab===item.key?'page':undefined} onclick={()=>showTab(item.key)}>{item.label}</button>{/each}</nav>
+   {/if}
+   <nav class="ex-tabs" aria-label={isJV?'JV sections':'Export sections'}>{#each tabs as item}<button type="button" class:active={tab===item.key} aria-current={tab===item.key?'page':undefined} onclick={()=>showTab(item.key)}>{item.label}</button>{/each}</nav>
    <div class="ex-panel" use:enter={tab}>{@render panels(r,true)}</div>
    {#if actions.submit||actions.approve||actions.request_changes||actions.reopen}
     <footer class="ex-task-footer ex-workflow-footer">
-     {#if actions.approve||actions.request_changes||actions.reopen}<label class="ex-workflow-input" for="export-workflow-note">{actions.reopen?'Reason to reopen for correction':'Review comment'}<textarea id="export-workflow-note" bind:value={workflowNote} rows="2" maxlength="2000" disabled={busy} aria-describedby="export-workflow-help"></textarea><small id="export-workflow-help">{actions.reopen?'A reason is required. Reopening removes the approval until the invoice is reviewed again.':'Include a clear correction reason when sending the invoice back.'}</small></label>{:else}<span>Ready for MD or Super Admin review</span>{/if}
-     <div class="ex-actions">{#if actions.reopen}<button class="ex-button secondary" disabled={busy||!workflowNote.trim()} onclick={()=>workflow('reopen')}>Reopen for correction</button>{/if}{#if actions.request_changes}<button class="ex-button secondary" disabled={busy||!workflowNote.trim()} onclick={()=>workflow('request_changes')}>Request changes</button>{/if}{#if actions.approve}<button class="ex-button primary" disabled={busy} onclick={()=>workflow('approve')}>Approve invoice</button>{/if}{#if actions.submit}<button class="ex-button primary" disabled={busy} onclick={()=>workflow('submit')}>{r.workflow_status==='Changes requested'?'Resubmit for approval':'Submit for approval'}</button>{/if}</div>
+     {#if actions.approve||actions.request_changes||actions.reopen}<label class="ex-workflow-input" for="export-workflow-note">{actions.reopen?'Reason to reopen for correction':'Review comment'}<textarea id="export-workflow-note" bind:value={workflowNote} rows="2" maxlength="2000" disabled={busy} aria-describedby="export-workflow-help"></textarea><small id="export-workflow-help">{actions.reopen?`A reason is required. Reopening removes the approval until the ${recordLabel} is reviewed again.`:`Include a clear correction reason when sending the ${recordLabel} back.`}</small></label>{:else}<span>Ready for MD or Super Admin review</span>{/if}
+     <div class="ex-actions">{#if actions.reopen}<button class="ex-button secondary" disabled={busy||!workflowNote.trim()} onclick={()=>workflow('reopen')}>Reopen for correction</button>{/if}{#if actions.request_changes}<button class="ex-button secondary" disabled={busy||!workflowNote.trim()} onclick={()=>workflow('request_changes')}>Request changes</button>{/if}{#if actions.approve}<button class="ex-button primary" disabled={busy} onclick={()=>workflow('approve')}>{isJV?'Approve JV':'Approve invoice'}</button>{/if}{#if actions.submit}<button class="ex-button primary" disabled={busy} onclick={()=>workflow('submit')}>{r.workflow_status==='Changes requested'?'Resubmit for approval':'Submit for approval'}</button>{/if}</div>
     </footer>
    {/if}
   {/if}
@@ -312,6 +350,8 @@
  @media(max-width:1150px){.ex-filters{grid-template-columns:1fr 1fr}.ex-grid,.ex-grid.read{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-balance{grid-template-columns:repeat(3,minmax(0,1fr))}.ex-balance>div{border-bottom:1px solid #dde7e3}.ex-register-heading,.ex-company-row{flex-wrap:wrap}.ex-register-heading,.ex-company-row,.ex-filters{padding-left:22px;padding-right:22px}.ex-panel{padding:0 22px}.ex-task-heading{padding:18px 22px;align-items:flex-start}.ex-task-heading .ex-actions{justify-content:flex-end}.ex-checklist{grid-template-columns:1fr}.ex-record-links{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-table-scroll th,.ex-table-scroll td{height:auto!important;min-height:0;padding:14px 15px!important}.ex-table-scroll td button{min-width:max-content}.ex-upload small{width:100%}}
  @media(max-width:620px){.ex-grid,.ex-grid.read,.ex-filters,.ex-review-grid,.ex-record-links{grid-template-columns:1fr}.ex-task-heading{flex-wrap:wrap}.ex-task-heading h1{font-size:21px}.ex-task-heading .ex-actions{width:100%;justify-content:flex-start}.ex-balance{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-register-meta{align-items:flex-start;flex-direction:column}.ex-section-heading{flex-wrap:wrap}.ex-task-footer{padding:14px 18px}.ex-task-footer>span{display:none}.ex-currency-totals p{gap:9px 18px}.ex-history li{align-items:flex-start;flex-wrap:wrap}}
  @media(min-width:1024px){
+  .ex-register-tabs{padding-top:4px}
+  .ex-jv-table td{max-width:280px;overflow-wrap:anywhere}
   .ex-filters{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
   .ex-task-heading{flex-wrap:wrap}
   .ex-workflow-summary{padding:20px 28px;border-bottom:1px solid var(--ex-line);background:#f4f7f9}
@@ -345,6 +385,16 @@
   .ex-document-files .ex-button{font-size:12px;padding:7px}
   .ex-document-files .ex-file-error{color:#8e2c27}
   .ex-document-fallback{flex-basis:100%;font-size:12px;line-height:1.6;color:var(--ex-muted);margin:2px 0 0}
+
+  .ex-banking .ex-section-heading{margin-bottom:16px}.ex-banking .ex-muted{font-size:12px;line-height:1.6;margin:7px 0 14px}
+  .ex-bank-receipt{padding-top:22px}.ex-bank-receipt> .ex-section-heading{padding-bottom:14px;margin-bottom:0}
+  .ex-bank-sequence{list-style:none;margin:0;padding:0}.ex-bank-stage{padding:22px 0;border-top:1px solid var(--ex-line)}
+  .ex-bank-stage-heading{display:flex;align-items:center;gap:10px;margin-bottom:16px}.ex-bank-stage-heading h5{font-size:15px;line-height:1.5;color:var(--ex-ink);margin:0;font-weight:750}
+  .ex-bank-number{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;flex-shrink:0;border-radius:6px;background:#e8f1ef;color:#175c55;font-size:12px;font-weight:750;font-variant-numeric:tabular-nums}
+  .ex-banking .ex-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px 18px}.ex-banking .ex-field{gap:5px}.ex-banking .ex-caption,.ex-banking .ex-label{font-size:12px}.ex-banking :is(input,select){min-height:40px;padding:8px 10px;font-size:13px}.ex-banking .ex-value{font-size:13px;line-height:1.5}
+  .ex-bank-documents{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.ex-bank-documents .ex-button{min-height:36px;padding:8px 10px;font-size:12px}.ex-bank-documents span{font-size:11px;font-weight:400;color:var(--ex-muted);margin-left:3px}
+  .ex-bank-calculation{display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px;margin-top:16px;padding:12px 14px;background:#edf5f1;border-radius:8px;font-size:12px;line-height:1.5}.ex-bank-calculation>strong{font-variant-numeric:tabular-nums}.ex-bank-calculation>small{flex-basis:100%}.ex-bank-calculation .ex-file-error{color:#8e2c27}
+  .ex-bank-additional{margin-top:0}.ex-checklist>li{scroll-margin-top:125px}.ex-checklist>li:focus{outline:3px solid #58a9a1;outline-offset:5px}
 
  }
 

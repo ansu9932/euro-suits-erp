@@ -8,7 +8,10 @@ export type ExportField = {
  hint?: string;
  required?: boolean;
  source?: string;
+ profile?: boolean;
+ maxLength?: number;
 };
+export type ExportRecordKind='export'|'jv';
 export type ExportTab = 'shipment' | 'receipts' | 'ebrc' | 'clearance' | 'documents' | 'history';
 export type ExportWorkspaceProps = {user: User; dirty?: boolean};
 export type ExportRecord = Row & {id:number;version:number;company_id:number|null;profile:Row;receipts:Row[];ebrcs:Row[]};
@@ -17,7 +20,9 @@ export function exportPartyKey(party:Row):string {
  return party.party_type==='manual'?'manual:'+String(party.party_name??party.name??'').trim().toLowerCase():`${party.party_type}:${party.party_id??party.id??''}`;
 }
 export function exportRegisterQuery(company:string,filters:Row={}):URLSearchParams {
+ if(filters.record_kind==='jv')company='';
  const query=new URLSearchParams({scope:company?'company':'standalone'});
+ if(filters.record_kind==='jv')query.set('record_kind','jv');
  if(company)query.set('company_id',company);
  for(const key of ['fy','currency','search','status'])if(String(filters[key]||'').trim())query.set(key,String(filters[key]).trim());
  if(filters.party){
@@ -28,6 +33,9 @@ export function exportRegisterQuery(company:string,filters:Row={}):URLSearchPara
  return query;
 }
 export function exportInvoiceBody(form:Row):Row {
+ if(form.record_kind==='jv')return {record_kind:'jv',company_id:null,party_type:'manual',party_id:null,order_id:null,
+  party_name:String(form.party_name||'').trim(),invoice_number:form.invoice_number,currency:form.currency,invoice_amount:form.invoice_amount,
+  profile:{export_date:form.profile?.export_date||'',shipping_mode:form.profile?.shipping_mode||'',jv_by_date:form.profile?.jv_by_date||'',scrip_tally_reference:form.profile?.scrip_tally_reference||''},receipts:[],ebrcs:[],version:form.version};
  const standalone=!form.company_id;
  return {company_id:standalone?null:Number(form.company_id),party_type:standalone?'manual':form.party_type,
   party_id:standalone?null:Number(form.party_id),order_id:standalone||!form.order_id?null:Number(form.order_id),
@@ -35,6 +43,18 @@ export function exportInvoiceBody(form:Row):Row {
   invoice_number:form.invoice_number,currency:form.currency,invoice_amount:form.invoice_amount,
   profile:form.profile,receipts:form.receipts,ebrcs:form.ebrcs,version:form.version};
 }
+export function newJVForm():Row{return {record_kind:'jv',company_id:null,party_type:'manual',party_id:null,party_name:'EURO SUITS MFG',order_id:null,workflow_status:'Draft',invoice_number:'',currency:'',invoice_amount:'',profile:{export_date:'',shipping_mode:'HANDO',jv_by_date:'',scrip_tally_reference:''},receipts:[],ebrcs:[]}}
+export const jvFields:ExportField[]=[
+ {key:'invoice_number',label:'JV Ref',required:true},
+ {key:'export_date',label:'Date',type:'date',profile:true},
+ {key:'party_name',label:'Party Name',required:true,maxLength:160},
+ {key:'currency',label:'Currency',type:'currency',required:true},
+ {key:'invoice_amount',label:'Amount',type:'money',required:true},
+ {key:'shipping_mode',label:'Mode',type:'select',choices:['HANDO','Sea','Air','Courier','Hand-carried'],profile:true},
+ {key:'jv_by_date',label:'By / Date',profile:true},
+ {key:'scrip_tally_reference',label:'Tally Ref',profile:true}
+];
+export const jvTabs:{key:ExportTab;label:string}[]=[{key:'shipment',label:'JV details'},{key:'documents',label:'Documents'},{key:'history',label:'Reviews & history'}];
 
 export const exportTabs: {key:ExportTab;label:string}[] = [
  {key:'shipment',label:'Shipment & invoice'}, {key:'receipts',label:'Receipts & banking'},
@@ -105,6 +125,89 @@ export const conversionFields:ExportField[] = [
  {key:'linked_bank',label:'Linked bank',source:'AO'},
  {key:'conversion_note',label:'Conversion / allocation note',type:'textarea',hint:'Manual values from the bank advice; no assumed exchange-rate or allocation formula.'}
 ];
+export type BankingStage = {key:string;title:string;fields:ExportField[];hint?:string;documents?:{key:string;label:string}[]};
+export const bankingStages:BankingStage[] = [
+ {key:'foreign',title:'Foreign receipt',fields:[
+  {key:'reference',label:'Foreign bank reference'},
+  {key:'gross_payment_received',label:'Foreign bank amount',type:'money'},
+  {key:'receipt_date',label:'Received date',type:'date'},
+  {key:'payment_received',label:'Received amount applied to invoice',type:'money',hint:'Count this payment once in settlement.'},
+  {key:'currency',label:'Foreign currency',type:'currency'},
+  {key:'fcr_amount',label:'FCR · foreign currency amount',type:'money'}
+ ],documents:[{key:'payment_details',label:'Receipt document'}]},
+ {key:'instruction',title:'BOB Forex account · instructions',fields:[
+  {key:'forex_account',label:'Forex account'},
+  {key:'instruction_action',label:'Action',type:'select',choices:['Credit FC account','Disposal','Conversion']},
+  {key:'fc_account_currency',label:'FC account currency',type:'select',choices:['USD','GBP']},
+  {key:'disposal_credit_target',label:'Disposal / conversion credit',type:'select',choices:['PC','CC']},
+  {key:'bank_instruction_reference',label:'Instruction reference'}
+ ]},
+ {key:'documents',title:'Submit documents to bank',fields:[],hint:'Keep each file in its document category. Review the saved documents and email recipients before sending.',documents:[
+  {key:'shipping_bill',label:'Shipping bill'},{key:'bill_of_lading',label:'BL / AWB'},{key:'packing_list',label:'Packing list'},{key:'invoice',label:'Invoice'}
+ ]},
+ {key:'advice',title:'Foreign bank advice',fields:[
+  {key:'bank_advice_reference',label:'Bank advice reference'},
+  {key:'bank_advice_date',label:'Advice date',type:'date'},
+  {key:'bank_advice_amount',label:'Amount credited in foreign currency',type:'money',hint:'Use the same currency as FCR above.'},
+  {key:'foreign_bank_charges_invoice_amount',label:'Foreign charges in invoice currency',type:'money',hint:'Required when the foreign currency differs from the invoice.'}
+ ],documents:[{key:'bank_advice',label:'Bank advice'}]},
+ {key:'inr',title:'INR received · BOB advice',hint:'INR advice and conversion figures are supporting records. Enter confirmed charges applied to the invoice separately below.',fields:[
+  {key:'inr_advice_reference',label:'BOB bank reference'},
+  {key:'inr_advice_date',label:'Received / advice date',type:'date'},
+  {key:'inr_bank_charges',label:'Bank charges difference (INR)',type:'money'},
+  {key:'inr_conversion_rate',label:'Conversion rate',type:'number'},
+  {key:'inr_received_amount',label:'Received amount (INR)',type:'money'},
+  {key:'bank_charges',label:'Indian bank charges applied to invoice',type:'money'},
+  {key:'bank_charges_currency',label:'Indian bank charge currency',type:'currency'},
+  {key:'bank_charges_invoice_amount',label:'Indian charges in invoice currency',type:'money',hint:'Required when the bank charge currency differs from the invoice.'}
+ ]},
+ {key:'allocation',title:'Credits, conversion charges & GST',fields:[
+  {key:'credit_bank_017',label:'Credit · account 017 reference'},
+  {key:'credit_bank_017_amount',label:'Account 017 amount',type:'money'},
+  {key:'credit_bank_017_currency',label:'Account 017 currency',type:'currency'},
+  {key:'credit_bank_344',label:'Credit · account 344 reference'},
+  {key:'credit_bank_344_amount',label:'Account 344 amount',type:'money'},
+  {key:'credit_bank_344_currency',label:'Account 344 currency',type:'currency'},
+  {key:'packing_credit',label:'Credit · PC reference'},
+  {key:'packing_credit_amount',label:'PC amount',type:'money'},
+  {key:'packing_credit_currency',label:'PC currency',type:'currency'},
+  {key:'conversion_debit_account',label:'Conversion charges · debit account'},
+  {key:'gst_amount',label:'GST amount',type:'money'},
+  {key:'gst_currency',label:'GST currency',type:'currency'}
+ ]}
+];
+const sequencedReceiptKeys=new Set(bankingStages.flatMap(stage=>stage.fields.map(field=>field.key)));
+export const additionalReceiptFields=[...receiptFields,...conversionFields].filter(field=>!sequencedReceiptKeys.has(field.key));
+export const allReceiptFields=[...bankingStages.flatMap(stage=>stage.fields),...additionalReceiptFields];
+export function newExportReceipt(currency=''):Row{return {currency,forex_account:'BOB FOREX ACCOUNT',inr_currency:'INR',gst_currency:'INR',statuses:{}}}
+export function foreignChargeDifference(receipt:Row):{amount:string;error:string}|null{
+ const decimal=/^(0|[1-9][0-9]{0,14})([.][0-9]{1,2})?$/;
+ if(!decimal.test(String(receipt.fcr_amount??''))||!decimal.test(String(receipt.bank_advice_amount??'')))return null;
+ const difference=moneyMinor(receipt.fcr_amount)-moneyMinor(receipt.bank_advice_amount);
+ if(difference<0n)return {amount:'',error:'The credited amount cannot exceed FCR. Check both figures.'};
+ return {amount:minorDecimal(difference),error:''};
+}
+export const bankEmailDocumentKinds=['invoice','shipping_bill','bill_of_lading','packing_list','bank_advice','payment_details'];
+export function bankEmailRecipients(value:string):string[]{return [...new Set(value.split(/[,;\n]/).map(item=>item.trim().toLowerCase()).filter(Boolean))]}
+export function bankEmailRecipientError(value:string):string{
+ const recipients=bankEmailRecipients(value);
+ if(!recipients.length)return 'Enter the bank email address.';
+ if(recipients.length>5)return 'Use no more than five bank email recipients.';
+ return recipients.some(email=>!/^([^\s@<>]+)@([^\s@<>]+)\.([^\s@<>]+)$/.test(email))?'Enter valid email addresses, separated by commas.':'';
+}
+
+export function bankEmailCanConfirm(message:Row|null,userID:number,invoiceVersion:number):boolean{
+ return !!message&&['Prepared','Failed'].includes(message.status)&&Number(message.created_by)===userID&&Number(message.invoice_version)===invoiceVersion;
+}
+export function bankEmailAttachmentError(selected:number[],available:Row[]):string{
+ if(!selected.length)return 'Select the saved documents to send to the bank.';
+ if(selected.length>12)return 'Select no more than twelve documents per bank email.';
+ const files=selected.map(id=>available.find(file=>Number(file.id)===id));
+ if(files.some(file=>!file)||new Set(selected).size!==selected.length)return 'Refresh the invoice and select its current saved documents.';
+ if(files.reduce((total,file)=>total+Number(file!.size),0)>15*1024*1024)return 'Select documents totalling no more than 15 MB per bank email.';
+ return '';
+}
+
 export const ebrcFields:ExportField[] = [
  {key:'export_reference',label:'eBRC export reference',source:'eBRC C'},
  {key:'ebrc_amount',label:'eBRC amount',type:'money',source:'eBRC E'},
@@ -170,7 +273,8 @@ export function invoiceCompanyChoices(choices:Row[],current=''):string[]{
  return names;
 }
 export function invoiceFileKey(file:File):string{return [file.name,file.size,file.lastModified,file.type].join(':')}
-export function hasRequiredInvoiceDocument(saved:Row[],queued:InvoiceFile[]):boolean{return saved.some(file=>file.kind==='invoice')||queued.some(file=>file.kind==='invoice')}
+export function exportRequiredDocument(recordKind:ExportRecordKind):{kind:string;label:string}{return recordKind==='jv'?{kind:'jv_supporting',label:'supporting JV document'}:{kind:'invoice',label:'invoice document'}}
+export function hasRequiredInvoiceDocument(saved:Row[],queued:InvoiceFile[],kind='invoice'):boolean{return saved.some(file=>file.kind===kind)||queued.some(file=>file.kind===kind)}
 export function exportFileCanPreview(file:Row):boolean{return ['application/pdf','image/png','image/jpeg'].includes(String(file.mime||'').toLowerCase())}
 export function invoiceFileError(file:File):string{
  if(!file.size)return 'Choose a document that is not empty.';
