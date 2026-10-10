@@ -4,27 +4,30 @@
  import {Plus,ArrowLeft,Download,FileText,Search,RefreshCw,Trash2,Paperclip,Check,ChevronRight,Eye} from '@lucide/svelte';
  import {api,uploadTo} from './api';
  import ExportBankEmail from './ExportBankEmail.svelte';
+ import ExportDocumentField from './ExportDocumentField.svelte';
+ import ExportReconciliationWorkspace from './ExportReconciliationWorkspace.svelte';
  import {enter} from './motion';
  import type {Row,User} from './types';
- import {invoiceFields,jvFields,jvTabs,newJVForm,incentiveFields,bankingStages,additionalReceiptFields,allReceiptFields,newExportReceipt,foreignChargeDifference,ebrcFields,scripFields,clearanceFields,exportTabs,moneyText,moneyMinor,minorDecimal,exportDate,exportReference,exportWorkflowStatuses,exportPartyKey,exportRegisterQuery,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,exportFileCanPreview,exportRequiredDocument,hasRequiredInvoiceDocument,saveInvoiceFiles,type InvoiceSaveState,type ExportRecordKind,type ExportField,type ExportTab} from './exportDocumentation';
+ import {invoiceFields,jvFields,jvTabs,newJVForm,incentiveFields,bankingStages,additionalReceiptFields,allReceiptFields,newExportReceipt,ensureReceiptKeys,receiptDocumentSlots,documentInSlot,receiptDocumentLabel,foreignChargeDifference,ebrcFields,scripFields,clearanceFields,exportTabs,moneyText,moneyMinor,minorDecimal,exportDate,exportReference,exportWorkflowStatuses,exportPartyKey,exportRegisterQuery,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,exportFileCanPreview,exportRequiredDocument,hasRequiredInvoiceDocument,saveInvoiceFiles,type InvoiceSaveState,type ExportRecordKind,type ExportField,type ExportTab} from './exportDocumentation';
  let {user,dirty=$bindable(false)}:{user:User&{portal?:string;setup_grants?:string[]};dirty?:boolean}=$props();
  let options:Row=$state({companies:[],parties:[],orders:[],currencies:[],permissions:{},document_kinds:[]});
  let listing:Row=$state({records:[],totals:[]}),detail:Row|null=$state(null),form:Row=$state({profile:{},receipts:[],ebrcs:[]});
  let registerKind:ExportRecordKind=$state('export');
+ let reconciliationSection=$state(false),reconciliationBusy=$state(false),initialReconciliationInvoice=$state(0);
  let isJV=$derived.by(()=>registerKind==='jv');
- let tabs=$derived(isJV?jvTabs:exportTabs);
+ let tabs=$derived(isJV?jvTabs:exportTabs.filter(item=>item.key!=='ebrc'));
  let recordLabel=$derived(isJV?'JV':'invoice');
  let company=$state(''),search=$state(''),year=$state(''),partyFilter=$state(''),currencyFilter=$state(''),workflowFilter=$state(''),tab:ExportTab=$state('shipment');
  let working=$state(false),emailBusy=$state(false);
- let busy=$derived(working||emailBusy);
+ let busy=$derived(working||emailBusy||reconciliationBusy);
  let editing=$state(false),loading=$state(true),error=$state(''),notice=$state(''),reviewNote=$state(''),reviewStatus=$state('Checked');
  let discountAmount=$state(''),discountReason=$state(''),decisionNotes:Record<number,string>=$state({}),revision:Row|null=$state(null);
  let workflowNote=$state(''),commentNote=$state('');
  let addingCompany=$state(false),newCompanyName=$state(''),companyError=$state('');
  let invoiceSave:InvoiceSaveState=$state({savedContent:'',pendingSave:null,files:[]});
  let root:HTMLElement; let returnID='export-new'; let savedID=$state(0); let focusFrame=0;
- const coreFields=invoiceFields.filter(f=>['invoice_number','currency','invoice_amount'].includes(f.key));
- const shipmentFields=invoiceFields.filter(f=>!['invoice_number','currency','invoice_amount'].includes(f.key));
+ const coreFields=invoiceFields.filter(f=>['invoice_number','invoice_date','currency','invoice_amount'].includes(f.key));
+ const shipmentFields=invoiceFields.filter(f=>!['invoice_number','invoice_date','currency','invoice_amount'].includes(f.key));
  let permissions=$derived.by(()=>detail?.permissions||options.permissions||{});
  let invoiceCurrencyLocked=$derived.by(()=>!!form.id&&((detail?.record?.receipts||[]).length>0||(detail?.discounts||[]).some((d:Row)=>d.status==='Approved')));
  let parties=$derived(options.parties||[]);
@@ -55,7 +58,7 @@
  async function loadOptions(){options=await api('/exports/options'+(isJV?'?record_kind=jv':company?'?company_id='+encodeURIComponent(company):''))}
  async function loadRegister(){listing=await api('/exports?'+query())}
  async function start(){await loadOptions();if(!isJV&&company||options.permissions?.standalone)await loadRegister()}
- onMount(()=>{void run(start)});
+ onMount(()=>{const query=new URLSearchParams(window.location.search);if(query.get('section')==='reconciliation'){reconciliationSection=true;initialReconciliationInvoice=Math.max(0,Number(query.get('invoice_id'))||0);loading=false}else void run(start)});
  onDestroy(()=>{if(focusFrame)cancelAnimationFrame(focusFrame)});
  function revealFocusedField(event:FocusEvent){
   const target=event.target;
@@ -80,12 +83,14 @@
 
  beforeNavigate(n=>{if(!dirty)return;if(n.type==='leave'){n.cancel();return}if(!window.confirm(`Discard the unsaved ${isJV?'JV':'export'} changes?`))n.cancel()});
  async function selectCompany(value:string){if(value===company||busy)return;if(dirty&&!window.confirm(`Discard the unsaved ${isJV?'JV':'export'} changes?`))return;company=value;detail=null;editing=false;dirty=false;resetInvoiceStaging();listing={records:[],totals:[]};options={...options,parties:[],orders:[],permissions:{}};partyFilter='';year='';currencyFilter='';workflowFilter='';search='';notice='';await run(async()=>{await loadOptions();if(company||options.permissions?.standalone)await loadRegister()})}
- async function selectRegister(value:ExportRecordKind){if(value===registerKind||busy)return;registerKind=value;detail=null;editing=false;dirty=false;savedID=0;resetInvoiceStaging();listing={records:[],totals:[]};options={...options,parties:[],orders:[],permissions:{}};partyFilter='';year='';currencyFilter='';workflowFilter='';search='';notice='';loading=true;await run(start);await focus('export-register-title')}
+ async function selectRegister(value:ExportRecordKind){if(busy||value===registerKind&&!reconciliationSection)return;if(dirty&&!window.confirm('Leave unsaved reconciliation changes? Saved invoice details and documents remain.'))return;reconciliationSection=false;registerKind=value;detail=null;editing=false;dirty=false;savedID=0;resetInvoiceStaging();listing={records:[],totals:[]};options={...options,parties:[],orders:[],permissions:{}};partyFilter='';year='';currencyFilter='';workflowFilter='';search='';notice='';loading=true;await run(start);await focus('export-register-title')}
+ async function selectReconciliation(invoiceID=0){if(busy||reconciliationSection)return;if(dirty&&!window.confirm('Leave unsaved invoice changes?'))return;detail=null;editing=false;dirty=false;resetInvoiceStaging();initialReconciliationInvoice=invoiceID;reconciliationSection=true;notice='';error=''}
+ async function openReconciledInvoice(id:number){if(busy)return;reconciliationSection=false;dirty=false;await open(id);if(detail){company=detail.record.company_id?String(detail.record.company_id):'';await run(async()=>{await loadOptions();await loadRegister()})}}
  function resetInvoiceStaging(saved=false){invoiceSave={savedContent:saved?invoiceContent(form):'',pendingSave:null,files:[]};addingCompany=false;newCompanyName='';companyError=''}
  function changeParty(value:string){const p=parties.find((p:Row)=>partyKey(p)===value);form.party_type=p?.party_type||'';form.party_id=p?.id||'';form.order_id=null;dirty=true}
  function fresh(){if(busy||!options.permissions?.edit||((isJV||!company)&&!options.permissions?.standalone))return;returnID='export-new';error='';notice='';detail=null;form=isJV?newJVForm():{company_id:company?Number(company):null,party_type:company?'':'manual',party_id:null,party_name:'',order_id:null,workflow_status:'Draft',invoice_number:'',currency:'',invoice_amount:'',profile:{statuses:{}},receipts:[],ebrcs:[]};resetInvoiceStaging();editing=true;dirty=true;tab='shipment';void focus('export-task-title')}
  async function open(id:number){returnID='export-open-'+id;await run(async()=>{const loaded:Row=await api('/exports/'+id);detail=loaded;registerKind=loaded.record.record_kind==='jv'?'jv':'export';resetInvoiceStaging();savedID=0;editing=false;dirty=false;tab='shipment';revision=null;reviewNote='';workflowNote='';commentNote='';discountAmount='';discountReason='';notice='';await focus('export-task-title')})}
- function edit(){if(!detail||busy||!actions.edit)return;if(invoiceSave.files.length){error=`Finish confirming the queued attachments before editing the ${recordLabel}.`;return}form=structuredClone($state.snapshot(detail.record));form.profile??={};form.profile.statuses??={};form.receipts??=[];form.ebrcs??=[];resetInvoiceStaging(true);editing=true;dirty=false;error='';notice='';revision=null;void focus('export-task-title')}
+ function edit(){if(!detail||busy||!actions.edit)return;if(invoiceSave.files.length){error=`Finish confirming the queued attachments before editing the ${recordLabel}.`;return}form=structuredClone($state.snapshot(detail.record));form.profile??={};form.profile.statuses??={};form.receipts??=[];form.ebrcs??=[];resetInvoiceStaging(true);const missingKeys=form.receipts.some((receipt:Row)=>!receipt.receipt_key);ensureReceiptKeys(form.receipts);editing=true;dirty=missingKeys;error='';notice='';revision=null;void focus('export-task-title')}
  async function cancel(){
   if(busy||dirty&&!window.confirm(uncertainSave?`A previous save or upload is unconfirmed. Leave this form and check the saved ${recordLabel} or register before starting it again?`:`Discard unsaved changes and queued documents? Saved ${recordLabel} details and attached files will remain.`))return;
   const id=form.id;editing=false;dirty=false;error='';resetInvoiceStaging();
@@ -99,20 +104,20 @@
   if(!name||name.length>160||/[\r\n]/.test(name)){companyError='Enter a company name between 1 and 160 characters on one line.';await focus('export-new-company');return}
   await run(async()=>{const item=await api('/exports/parties',{name});options.standalone_parties=[...(options.standalone_parties||[]).filter((choice:Row)=>choice.id!==item.id),item];form.party_name=item.name;addingCompany=false;newCompanyName='';dirty=true;notice=item.created?'Company added to the export invoice list.':'The existing company name is selected.';await focus('export-invoice-company')});
  }
- function queueInvoiceFiles(event:Event,kind:string){
+ function queueInvoiceFiles(event:Event,kind:string,receipt_key='',field_key=''){
   const input=event.currentTarget as HTMLInputElement,files=Array.from(input.files||[]);input.value='';if(busy||!canAttachInvoice)return;
   const invalid=files.map(file=>invoiceFileError(file)).find(Boolean);if(invalid){error=invalid;return}
   if((detail?.files||[]).length+invoiceSave.files.length+files.length>100){error=`Each ${recordLabel} can have at most 100 documents.`;return}
-  for(const file of files){const key=kind+':'+invoiceFileKey(file);if(!invoiceSave.files.some(item=>item.key===key))invoiceSave.files.push({file,key,kind,status:'queued'})}
+  for(const file of files){const key=[kind,receipt_key,field_key,invoiceFileKey(file)].join(':');if(!invoiceSave.files.some(item=>item.key===key))invoiceSave.files.push({file,key,kind,...(receipt_key?{receipt_key,field_key}:{}),status:'queued'})}
   dirty=true;error='';notice='Documents queued under their checklist categories. Save the draft to attach them.';
  }
  function removeQueuedInvoiceFile(key:string){if(busy)return;const item=invoiceSave.files.find(file=>file.key===key);if(!item||item.status==='uploaded'||item.path||!window.confirm(`Remove ${item.file.name} from the document queue?`))return;invoiceSave.files=invoiceSave.files.filter(file=>file.key!==key);dirty=editing||invoiceSave.files.length>0}
  async function flushInvoiceDocuments(){
   await run(async()=>{await saveInvoiceFiles(form,invoiceSave,api,uploadTo);detail=await api('/exports/'+form.id);resetInvoiceStaging();dirty=false;notice='Documents attached under their checklist categories.';await loadRegister()});
  }
- async function attachInvoiceFiles(event:Event,kind:string){
+ async function attachInvoiceFiles(event:Event,kind:string,receipt_key='',field_key=''){
   if(!invoiceSave.files.length){form=structuredClone($state.snapshot(detail!.record));resetInvoiceStaging(true)}
-  queueInvoiceFiles(event,kind);if(!error&&invoiceSave.files.length)await flushInvoiceDocuments();
+  queueInvoiceFiles(event,kind,receipt_key,field_key);if(!error&&invoiceSave.files.length)await flushInvoiceDocuments();
  }
  async function removeSavedDocument(file:Row){
   if(busy||!detail||!actions.remove||uncertainSave)return;
@@ -120,7 +125,7 @@
   await run(async()=>{
    const id=detail!.record.id,version=editing||invoiceSave.files.length?form.version:detail!.record.version;
    const removed=await api(`/exports/${id}/files/${file.id}/remove`,{version});
-   if(editing||invoiceSave.files.length){form.version=removed.version;form.workflow_status='Draft'}
+   if(editing||invoiceSave.files.length){form.version=removed.version;form.workflow_status='Draft';form.documentation_cleared=null}
    detail!.record.version=removed.version;detail!.record.workflow_status='Draft';detail!.files=detail!.files.filter((entry:Row)=>entry.id!==file.id);
    invoiceSave.files=invoiceSave.files.filter(entry=>entry.id!==file.id);previewFallback=0;
    notice='Document removed from the active checklist. The action remains in the audit history.';
@@ -165,9 +170,8 @@
  }
  async function addComment(event:SubmitEvent){event.preventDefault();if(!detail||!actions.comment||!commentNote.trim())return;await run(async()=>{await api('/exports/'+detail!.record.id+'/comments',{version:detail!.record.version,note:commentNote.trim()});commentNote='';notice=`Comment added to the ${recordLabel} history.`;await refreshDetail()})}
 
- function addReceipt(){form.receipts.push(newExportReceipt(form.currency||''));dirty=true;void focus('receipt-'+(form.receipts.length-1)+'-reference')}
- function addEbrc(){form.ebrcs.push({status:'Pending',currency:form.currency||'',shipping_bill_number:form.profile.shipping_bill_number||'',shipping_bill_date:form.profile.shipping_bill_date||'',statuses:{}});dirty=true;void focus('ebrc-'+(form.ebrcs.length-1)+'-export_reference')}
- function removeRow(key:'receipts'|'ebrcs',i:number){if(window.confirm(`Remove ${key==='receipts'?'receipt':'eBRC'} ${i+1} from these unsaved changes?`)){form[key].splice(i,1);dirty=true}}
+ function addReceipt(){form.receipts.push(newExportReceipt(form.currency||''));dirty=true;void focus('receipt-'+(form.receipts.length-1)+'-inward_reference')}
+ function removeRow(key:'receipts'|'ebrcs',i:number){if(busy||uncertainSave)return;if(key==='receipts'){const receiptKey=form.receipts[i]?.receipt_key;if(receiptKey&&[...(detail?.files||[]),...invoiceSave.files].some(file=>file.receipt_key===receiptKey)){error='Remove this receipt’s attached or queued documents before removing the receipt.';return}}if(window.confirm(`Remove ${key==='receipts'?'receipt':'eBRC'} ${i+1} from these unsaved changes?`)){form[key].splice(i,1);dirty=true}}
  async function check(kind:'finance'|'audit'){await run(async()=>{await api(`/exports/${detail!.record.id}/check`,{version:detail!.record.version,kind,status:reviewStatus,note:reviewNote});await refreshDetail();reviewNote='';notice=`${kind==='finance'?'Finance':'Audit'} check recorded.`})}
  async function requestDiscount(e:SubmitEvent){e.preventDefault();await run(async()=>{await api(`/exports/${detail!.record.id}/discount`,{version:detail!.record.version,action:'request',amount:discountAmount,reason:discountReason});await refreshDetail();discountAmount='';discountReason='';notice='Shortfall request sent to Finance Head for the first review.'})}
  async function discountDecision(d:Row,action:string){await run(async()=>{await api(`/exports/${detail!.record.id}/discount`,{version:detail!.record.version,action,discount_id:d.id,reason:decisionNotes[d.id]||''});await refreshDetail();decisionNotes[d.id]='';notice=action==='final_approve'?'Shortfall approved and balance updated.':'Shortfall review recorded.'})}
@@ -209,10 +213,16 @@
 {#snippet workflowSummary(r:Row)}
  <section class="ex-workflow-summary" class:correction={r.workflow_status==='Changes requested'} aria-label={isJV?'JV approval status':'Invoice approval status'}>
   <div class="ex-workflow-status"><span class="ex-status" class:complete={r.workflow_status==='Approved'} class:submitted={r.workflow_status==='Submitted'} class:correction={r.workflow_status==='Changes requested'}>{r.workflow_status||'Draft'}</span><p>{r.workflow_status==='Submitted'?`Awaiting MD or Super Admin approval. ${isJV?'JV':'Invoice'} details and documents are locked during review.`:r.workflow_status==='Approved'?`Approved ${recordLabel}. Reopen with a reason before changing ${recordLabel} details or documents.`:r.workflow_status==='Changes requested'?`Review the comments, correct the ${recordLabel} and submit it again.`:`Save the ${recordLabel}, attach its documents and submit it for approval when ready.`}</p></div>
+  {#if !isJV}<small>eBRC numbers and certificates can be managed separately in Reconciliation.</small>{/if}
+  {#if !isJV&&r.documentation_cleared?.at}<p class="ex-documentation-state"><span class="ex-status complete">Documentation cleared</span> {dateTime(r.documentation_cleared.at)} · eBRC {r.documentation_cleared.ebrc_number}</p>{/if}
   {#if r.review_note}<div class="ex-correction-note"><strong>{r.workflow_status==='Changes requested'?'Corrections requested':'Latest review note'}</strong><p class="ex-prewrap">{r.review_note}</p><small>{r.reviewed_by_name||'Reviewer'}{#if r.reviewed_at} · {dateTime(r.reviewed_at)}{/if}</small></div>{/if}
   {#if r.workflow_status==='Submitted'&&r.submitted_by_name}<small>Submitted by {r.submitted_by_name} · {dateTime(r.submitted_at)}</small>{/if}
   {#if r.workflow_status==='Submitted'&&permissions.approve&&(Number(r.created_by)===user.id||Number(r.submitted_by)===user.id)}<small>Another MD or Super Admin must review {isJV?'a JV':'an invoice'} you created or submitted.</small>{/if}
  </section>
+{/snippet}
+
+{#snippet documentField(kind:string,label:string,readonly:boolean,receiptKey='',fieldKey='',prefix='inline-document')}
+ <ExportDocumentField {label} inputID={prefix+'-'+kind} files={(detail?.files||[]).filter((file:Row)=>documentInSlot(file,kind,receiptKey,fieldKey))} queued={invoiceSave.files.filter(file=>documentInSlot(file,kind,receiptKey,fieldKey))} canAttach={canAttachInvoice} canRemove={!!actions.remove} canDownload={!!permissions.download} {busy} uncertain={uncertainSave} onattach={event=>readonly?attachInvoiceFiles(event,kind,receiptKey,fieldKey):queueInvoiceFiles(event,kind,receiptKey,fieldKey)} onremove={removeSavedDocument} onremovequeued={removeQueuedInvoiceFile}/>
 {/snippet}
 
 {#snippet panels(r:Row,readonly:boolean)}
@@ -230,31 +240,33 @@
   <section class="ex-section"><h3>Drawback & RoSCTL</h3>{@render fields(incentiveFields,r.profile,'incentive',readonly)}</section>
   {#if !readonly}<details class="ex-section"><summary>Special codes & field notes</summary><p class="ex-muted">Use these for FOC, HC, NIL or other explanations. Amount fields accept numbers only.</p><div class="ex-grid">{#each profileStatusFields as f}<label>{f.label}<input bind:value={r.profile.statuses[f.key]} maxlength="160" disabled={busy} placeholder="Optional code or note"/></label>{/each}</div></details>{/if}
  {:else if tab==='receipts'}
-  <section class="ex-section ex-banking"><div class="ex-section-heading"><div><h3 id="export-panel-title" tabindex="-1">Receipts & banking</h3><p class="ex-muted">Follow the sequence for each receipt. Applied payments and confirmed bank charges reduce the invoice balance once.</p></div>{#if !readonly}<button type="button" class="ex-button secondary" disabled={busy||(r.receipts||[]).length>=100} onclick={addReceipt}><Plus size={16}/>Add receipt</button>{/if}</div>
-  {#each r.receipts||[] as receipt,i}
-   <article class="ex-repeat ex-bank-receipt"><div class="ex-section-heading"><h4>Receipt {i+1}{#if receipt.reference} · {receipt.reference}{/if}</h4>{#if !readonly}<button type="button" class="ex-button quiet" disabled={busy} aria-label={'Remove receipt '+(i+1)} onclick={()=>removeRow('receipts',i)}><Trash2 size={16}/>Remove</button>{/if}</div>
-    <ol class="ex-bank-sequence">{#each bankingStages as stage,stageIndex}
+  <section class="ex-section ex-banking"><div class="ex-section-heading"><div><h3 id="export-panel-title" tabindex="-1">Receipts & banking</h3><p class="ex-muted">Complete the three sections for each receipt. Manage eBRC documentation in the Reconciliation section.</p></div>{#if !readonly}<button type="button" class="ex-button secondary" disabled={busy||(r.receipts||[]).length>=100} onclick={addReceipt}><Plus size={16}/>Add receipt</button>{/if}</div>
+   <div class="ex-bank-context">{@render fields([{key:'invoice_number',label:'Invoice number'},{key:'invoice_date',label:'Invoice date',type:'date',profile:true},{key:'invoice_amount',label:'Invoice amount',type:'money'},{key:'currency',label:'Invoice currency'}],r,'bank-invoice-context',true)}</div>
+  {#each r.receipts||[] as receipt,i(receipt.receipt_key||receipt)}{@const difference=foreignChargeDifference(receipt)}
+   <article class="ex-repeat ex-bank-receipt"><div class="ex-section-heading"><h4>Receipt {i+1}{#if receipt.reference} · {receipt.reference}{/if}</h4>{#if !readonly}<button type="button" class="ex-button quiet" disabled={busy||uncertainSave} aria-label={'Remove receipt '+(i+1)} onclick={()=>removeRow('receipts',i)}><Trash2 size={16}/>Remove</button>{/if}</div>
+    <ol class="ex-bank-sequence">{#each bankingStages as stage,stageIndex}{@const slot=receiptDocumentSlots[stage.key]}
      <li class="ex-bank-stage"><div class="ex-bank-stage-heading"><span class="ex-bank-number" aria-hidden="true">{stageIndex+1}</span><h5>{stage.title}</h5></div>
-      {#if stage.hint}<p class="ex-muted">{stage.hint}</p>{/if}
-      {#if stage.fields.length}{@render fields(stage.fields,receipt,'receipt-'+i,readonly)}{/if}
-      {#if stage.key==='advice'}{@const difference=foreignChargeDifference(receipt)}
-       <div class="ex-bank-calculation" aria-live="polite"><span>FCR − credited amount = foreign bank charges</span>{#if difference?.error}<strong class="ex-file-error">{difference.error}</strong>{:else if difference}<strong>{moneyText(difference.amount,receipt.currency||'')}</strong><small>Calculated from the two foreign currency amounts. Saved with the receipt.</small>{:else}<strong>Enter FCR and credited amount</strong><small>Existing confirmed charges remain unchanged until both values are entered.</small>{/if}</div>
+      {#if stage.key==='disposal'}<div class="ex-bank-carried"><span>Bill / remittance amount</span><strong>{moneyText(receipt.gross_payment_received,receipt.currency||'')}</strong><small>From this receipt’s inward advice.</small></div>{/if}
+      {@render fields(stage.fields,receipt,'receipt-'+i,readonly)}
+      {#if receipt.receipt_key}{@render documentField(slot.kind,slot.label,readonly,receipt.receipt_key,slot.field,'receipt-'+i+'-'+slot.field)}{:else}<p class="ex-muted">Edit and save this receipt to attach its {slot.label.toLowerCase()} document. Earlier shared documents remain in Documents.</p>{/if}
+      {#if stage.key==='inward'}
+       {#if i===0}<div class="ex-bank-shipping"><h6>Invoice & transport details · shared by all receipts</h6>
+        <div class="ex-bank-document-row"><div>{@render fields([{key:'invoice_number',label:'Invoice number'},{key:'invoice_date',label:'Invoice date',type:'date',profile:true}],r,'inward-invoice',true)}</div>{@render documentField('invoice','Invoice document',readonly,'','','bank-invoice')}</div>
+        <div class="ex-bank-document-row"><div>{@render fields([{key:'transport_document_number',label:'BL / AWB number'},{key:'transport_document_date',label:'BL / AWB date',type:'date'}],r.profile,'inward-bl',readonly)}</div>{@render documentField('bill_of_lading','BL / AWB document',readonly,'','','bank-bl')}</div>
+        {@render fields([{key:'port_of_loading',label:'Port of loading'},{key:'port_of_departure',label:'Port of departure'}],r.profile,'inward-ports',readonly)}
+       </div>{:else}<p class="ex-muted">Invoice, BL / AWB and port details are shared by this invoice and shown under Receipt 1.</p>{/if}
       {/if}
-      {#if stage.documents}<div class="ex-bank-documents">{#each stage.documents as document}{@const saved=(detail?.files||[]).filter((file:Row)=>file.kind===document.key).length}{@const queued=invoiceSave.files.filter(file=>file.kind===document.key).length}<button type="button" class="ex-button secondary" disabled={busy} onclick={()=>showDocuments(document.key)}><Paperclip size={15}/>{document.label}<span>{saved?saved+' saved':queued?queued+' queued':canAttachInvoice?'Attach':'View'}</span></button>{/each}</div>{/if}
-      {#if stage.key==='documents'&&permissions.edit&&permissions.download&&['Finance','Finance Head','Super Admin'].includes(user.role)}
-       {#if readonly&&detail&&!invoiceSave.files.length}{#if i===0}{#key String(r.id)+':'+String(r.version)}<ExportBankEmail record={r} files={detail.files||[]} userID={user.id} bind:busy={emailBusy}/>{/key}{:else}<p class="ex-muted">Bank email is shared by this invoice. Review recipients and documents under Receipt 1.</p>{/if}
-       {:else}<p class="ex-muted">Save the draft and its documents to review and send an email to the bank.</p>{/if}
-      {/if}
+      {#if stage.key==='credit'}<p class="ex-muted">Foreign credited amount uses {receipt.currency||'the inward advice currency'}. Conversion, received amount and charges above are in INR.</p>{/if}
      </li>
     {/each}</ol>
-    <details class="ex-subsection ex-bank-additional"><summary>Additional receipt details</summary><p class="ex-muted">Invoice currency equivalents, existing charge records, Tally references and earlier conversion details.</p>{@render fields(additionalReceiptFields,receipt,'receipt-extra-'+i,readonly)}</details>
+    <details class="ex-subsection ex-bank-additional"><summary>Settlement & additional receipt details</summary><p class="ex-muted">Enter the payment applied to this invoice and confirmed settlement charges here. Advice, conversion and allocation figures do not count a second time.</p>{@render fields(additionalReceiptFields,receipt,'receipt-extra-'+i,readonly)}{#if difference}<p class="ex-bank-calculation"><span>FCR − foreign credited amount</span><strong>{difference.error||moneyText(difference.amount,receipt.currency||'')}</strong></p>{/if}</details>
    </article>
-  {:else}{@render empty('No receipts recorded',readonly?'Payments and bank advice will appear here when added.':'Add a receipt to begin with the foreign bank reference and amount.')}{/each}
+  {:else}{@render empty('No receipts recorded',readonly?'Payments and bank advice will appear here when added.':'Add a receipt to start its inward remittance advice.')}{/each}
   </section>
- {:else if tab==='ebrc'}
-  <section class="ex-section"><div class="ex-section-heading"><div><h3 id="export-panel-title" tabindex="-1">eBRC register</h3><p class="ex-muted">Invoice {r.invoice_number||'not entered'} · Multiple certificates can be linked to the same invoice. These records do not add to payment received.</p></div>{#if !readonly}<button type="button" class="ex-button secondary" disabled={busy||(r.ebrcs||[]).length>=100} onclick={addEbrc}><Plus size={16}/>Add eBRC</button>{/if}</div>
-  {#each r.ebrcs||[] as ebrc,i}<article class="ex-repeat"><div class="ex-section-heading"><h4>eBRC {i+1}</h4>{#if !readonly}<button type="button" class="ex-button quiet" disabled={busy} aria-label={'Remove eBRC '+(i+1)} onclick={()=>removeRow('ebrcs',i)}><Trash2 size={16}/>Remove</button>{/if}</div>{@render fields(ebrcFields,ebrc,'ebrc-'+i,readonly)}</article>{:else}{@render empty('No eBRC records yet','Add each certificate, its amount, shipping bill date and file number as it becomes available.')}{/each}
-  </section>
+  <details class="ex-section ex-bank-email-pack"><summary>Bank email & supporting documents</summary><p class="ex-muted">Shared by this invoice. Review recipients and the selected files before sending.</p>
+   {@render documentField('packing_list','Packing list',readonly,'','','bank-packing')}
+   {#if permissions.edit&&permissions.download&&['Finance','Finance Head','Super Admin'].includes(user.role)}{#if readonly&&detail&&!invoiceSave.files.length}{#key String(r.id)+':'+String(r.version)}<ExportBankEmail record={r} files={detail.files||[]} userID={user.id} bind:busy={emailBusy}/>{/key}{:else}<p class="ex-muted">Save the draft and documents to review the bank email.</p>{/if}{/if}
+  </details>
  {:else if tab==='clearance'}
   <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">Scrip sale</h3><p class="ex-muted">Record the agreed sale amount, percentage and currency separately.</p>{@render fields(scripFields,r.profile,'scrip',readonly)}</section>
   <section class="ex-section"><h3>Clearance & transport partners</h3>{@render fields(clearanceFields,r.profile,'clearance',readonly)}<div class="ex-subsection">{@render fields([{key:'linked_bank',label:'Linked bank'}],r.profile,'linked-bank',readonly)}</div></section>
@@ -265,11 +277,11 @@
    <div class="ex-document-kind"><span class:attached={files.length>0} class="ex-document-indicator">{#if files.length}<Check size={15}/>{:else}<FileText size={15}/>{/if}</span><strong>{kind.label}{#if kind.key===requiredDocument.kind}<span class="ex-required"> *</span>{/if}</strong>{#if files.length}<small>{files.length} attached</small>{/if}
     {#if canAttachInvoice}<label class="ex-button secondary ex-upload-label ex-checklist-attach"><Paperclip size={16}/>Attach document<input id={'document-input-'+kind.key} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" aria-label={'Attach '+kind.label+' document'} disabled={busy} onchange={event=>readonly?attachInvoiceFiles(event,kind.key):queueInvoiceFiles(event,kind.key)}/></label>{:else if !files.length}<small>No document attached</small>{/if}
    </div>
-   {#if files.length||queued.length}<ul class="ex-document-files">{#each files as file}<li><div class="ex-document-info"><strong>{file.filename}</strong><small>{Math.max(1,Math.round(file.size/1024))} KB · {exportDate(file.created_at)}</small></div><div class="ex-actions">
+   {#if files.length||queued.length}<ul class="ex-document-files">{#each files as file}<li><div class="ex-document-info"><strong>{file.filename}</strong><small>{receiptDocumentLabel(file,r.receipts||[])}</small><small>{Math.max(1,Math.round(file.size/1024))} KB · {exportDate(file.created_at)}</small></div><div class="ex-actions">
     {#if permissions.download}{#if exportFileCanPreview(file)}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button quiet" href={'/api/export-files/'+file.id+'?preview=1'} target="_blank" rel="noopener noreferrer" aria-label={'Preview '+file.filename}><Eye size={15}/>Preview</a>{:else}<button type="button" class="ex-button quiet" disabled={busy} onclick={()=>previewFallback=previewFallback===file.id?0:file.id} aria-expanded={previewFallback===file.id}><Eye size={15}/>Download / open</button>{/if}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button quiet" href={'/api/export-files/'+file.id+'?download=1'} download aria-label={'Download '+file.filename}><Download size={15}/>Download</a>{/if}
     {#if actions.remove}<button type="button" class="ex-button quiet" disabled={busy||uncertainSave} aria-label={'Remove '+file.filename} onclick={()=>removeSavedDocument(file)}><Trash2 size={15}/>Remove</button>{/if}
    </div>{#if previewFallback===file.id}<p class="ex-document-fallback" role="status">Word and Excel documents open in their own apps. Download this file to view it.</p>{/if}</li>{/each}
-   {#each queued as item (item.key)}<li><div class="ex-document-info"><strong>{item.file.name}</strong><small>{Math.max(1,Math.round(item.file.size/1024))} KB · {item.status==='uploaded'?'Attached':item.status==='uploading'?'Uploading…':item.status==='uncertain'?'Awaiting upload confirmation':item.status==='failed'?'Upload failed — retry or remove':'Queued for the next save'}</small>{#if item.error}<small class="ex-file-error">{item.error}</small>{/if}</div><div class="ex-actions">{#if item.status==='uploaded'}<span class="ex-status complete">Attached</span>{#if permissions.download}{#if exportFileCanPreview({mime:item.file.type})}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button quiet" href={'/api/export-files/'+item.id+'?preview=1'} target="_blank" rel="noopener noreferrer" aria-label={'Preview '+item.file.name}><Eye size={15}/>Preview</a>{/if}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button quiet" href={'/api/export-files/'+item.id+'?download=1'} download aria-label={'Download '+item.file.name}><Download size={15}/>Download</a>{/if}{#if detail&&actions.remove}<button type="button" class="ex-button quiet" disabled={busy||uncertainSave} aria-label={'Remove '+item.file.name} onclick={()=>removeSavedDocument({id:item.id,filename:item.file.name})}><Trash2 size={15}/>Remove</button>{:else if !detail&&editing}<button type="button" class="ex-button quiet" disabled={busy} onclick={async()=>{await cancel();if(!editing){tab='documents';await focus('export-panel-title')}}}>Open saved draft</button>{/if}{:else if !item.path}<button type="button" class="ex-button quiet" disabled={busy} aria-label={'Remove queued document '+item.file.name} onclick={()=>removeQueuedInvoiceFile(item.key)}><Trash2 size={15}/>Remove queued</button>{/if}</div></li>{/each}</ul>{/if}
+   {#each queued as item (item.key)}<li><div class="ex-document-info"><strong>{item.file.name}</strong><small>{receiptDocumentLabel(item,r.receipts||[])}</small><small>{Math.max(1,Math.round(item.file.size/1024))} KB · {item.status==='uploaded'?'Attached':item.status==='uploading'?'Uploading…':item.status==='uncertain'?'Awaiting upload confirmation':item.status==='failed'?'Upload failed — retry or remove':'Queued for the next save'}</small>{#if item.error}<small class="ex-file-error">{item.error}</small>{/if}</div><div class="ex-actions">{#if item.status==='uploaded'}<span class="ex-status complete">Attached</span>{#if permissions.download}{#if exportFileCanPreview({mime:item.file.type})}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button quiet" href={'/api/export-files/'+item.id+'?preview=1'} target="_blank" rel="noopener noreferrer" aria-label={'Preview '+item.file.name}><Eye size={15}/>Preview</a>{/if}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button quiet" href={'/api/export-files/'+item.id+'?download=1'} download aria-label={'Download '+item.file.name}><Download size={15}/>Download</a>{/if}{#if detail&&actions.remove}<button type="button" class="ex-button quiet" disabled={busy||uncertainSave} aria-label={'Remove '+item.file.name} onclick={()=>removeSavedDocument({id:item.id,filename:item.file.name})}><Trash2 size={15}/>Remove</button>{:else if !detail&&editing}<button type="button" class="ex-button quiet" disabled={busy} onclick={async()=>{await cancel();if(!editing){tab='documents';await focus('export-panel-title')}}}>Open saved draft</button>{/if}{:else if !item.path}<button type="button" class="ex-button quiet" disabled={busy} aria-label={'Remove queued document '+item.file.name} onclick={()=>removeQueuedInvoiceFile(item.key)}><Trash2 size={15}/>Remove queued</button>{/if}</div></li>{/each}</ul>{/if}
   </li>{/each}</ul>
   {#if readonly&&invoiceSave.files.length}<div class="ex-upload"><button type="button" class="ex-button secondary" disabled={busy} onclick={flushInvoiceDocuments}>Retry / confirm attachments</button><small>Completed uploads are kept. Unconfirmed uploads use the same protected request.</small></div>{/if}
   </section>
@@ -296,8 +308,9 @@
 {/snippet}
 
 <section class="export-workspace" bind:this={root} aria-busy={busy} onfocusin={revealFocusedField}>
- {#if !editing&&!detail}
-  <nav class="ex-tabs ex-register-tabs" aria-label="Documentation registers"><button class:active={!isJV} aria-current={!isJV?'page':undefined} disabled={busy} onclick={()=>selectRegister('export')}>Export invoices</button><button class:active={isJV} aria-current={isJV?'page':undefined} disabled={busy} onclick={()=>selectRegister('jv')}>JV</button></nav>
+ {#if !editing&&!detail}<nav class="ex-tabs ex-register-tabs" aria-label="Documentation registers"><button class:active={!reconciliationSection&&!isJV} aria-current={!reconciliationSection&&!isJV?'page':undefined} disabled={busy} onclick={()=>selectRegister('export')}>Export invoices</button><button class:active={!reconciliationSection&&isJV} aria-current={!reconciliationSection&&isJV?'page':undefined} disabled={busy} onclick={()=>selectRegister('jv')}>JV</button><button class:active={reconciliationSection} aria-current={reconciliationSection?'page':undefined} disabled={busy} onclick={()=>selectReconciliation()}>Reconciliation</button></nav>{/if}
+ {#if reconciliationSection}<ExportReconciliationWorkspace initialInvoice={initialReconciliationInvoice} bind:dirty bind:busy={reconciliationBusy} onopeninvoice={openReconciledInvoice}/>
+ {:else if !editing&&!detail}
   <header class="ex-register-heading"><div><h1 id="export-register-title" tabindex="-1">{isJV?'JV register':'Export documentation'}</h1><p>{isJV?'JV references, dates, parties and amounts in one register.':'Invoices, shipping documents and payment follow-up in one register.'}</p></div><div class="ex-actions"><button class="ex-button secondary" disabled={busy} onclick={()=>run(start)}><RefreshCw size={16}/>Refresh</button>{#if options.permissions?.edit}<button id="export-new" class="ex-button primary" disabled={busy||((isJV||!company)&&!options.permissions?.standalone)} onclick={fresh}><Plus size={17}/>{isJV?'Add JV':'Add export invoice'}</button>{/if}</div></header>
   <div class="ex-company-row">{#if !isJV}<label>Company filter<select value={company} disabled={busy} onchange={e=>selectCompany(e.currentTarget.value)}><option value="">No company / unassigned</option>{#each options.companies||[] as c}<option value={String(c.id)}>{c.name}</option>{/each}</select></label>{/if}{#if options.permissions?.download&&(!isJV&&company||options.permissions?.standalone)}<div class="ex-actions"><a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button secondary" href={exportURL('register')}><Download size={16}/>Excel register</a>{#if !isJV}<div class="ex-statement-download">{#if partyFilter}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button secondary" href={exportURL('statement')}><Download size={16}/>Party outstanding</a>{:else}<button class="ex-button secondary" disabled aria-describedby="export-statement-help"><Download size={16}/>Party outstanding</button><small id="export-statement-help">Select a party to download its outstanding statement.</small>{/if}</div>{/if}</div>{/if}</div>
   {#if error}<p class="ex-error" role="alert" tabindex="-1">{error}</p>{/if}{#if notice}<p class="ex-notice" role="status">{notice}</p>{/if}
@@ -325,7 +338,7 @@
   {:else if detail}
    {@const r=detail.record}{@const balance=r.balance||{}}
    <button class="ex-back" disabled={busy} onclick={back}><ArrowLeft size={16}/>{isJV?'JV register':'Export register'}</button>
-   <header class="ex-task-heading"><div><h1 id="export-task-title" tabindex="-1">{r.invoice_number}</h1><p>{r.party_name}{#if !isJV} · {exportReference(r.id)}{/if}</p></div><div class="ex-actions"><button class="ex-button header-secondary" disabled={busy} onclick={()=>run(refreshDetail)} aria-label={isJV?'Refresh JV details':'Refresh export details'}><RefreshCw size={16}/></button>{#if permissions.download}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button header-secondary" href={'/api/exports/'+r.id+'/export'}><Download size={16}/>Excel file</a>{/if}{#if actions.edit}<button class="ex-button primary" disabled={busy} onclick={edit}>{isJV?'Edit JV':'Edit invoice'}</button>{/if}</div></header>
+   <header class="ex-task-heading"><div><h1 id="export-task-title" tabindex="-1">{r.invoice_number}</h1><p>{r.party_name}{#if !isJV} · {exportReference(r.id)}{/if}</p></div><div class="ex-actions"><button class="ex-button header-secondary" disabled={busy} onclick={()=>run(refreshDetail)} aria-label={isJV?'Refresh JV details':'Refresh export details'}><RefreshCw size={16}/></button>{#if permissions.download}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button header-secondary" href={'/api/exports/'+r.id+'/export'}><Download size={16}/>Excel file</a>{/if}{#if !isJV}<button class="ex-button header-secondary" disabled={busy||dirty} onclick={()=>selectReconciliation(r.id)}>Reconciliation</button>{/if}{#if actions.edit}<button class="ex-button primary" disabled={busy} onclick={edit}>{isJV?'Edit JV':'Edit invoice'}</button>{/if}</div></header>
    {#if error}<p class="ex-error" role="alert" tabindex="-1">{error}</p>{/if}{#if notice}<p class="ex-notice" role="status">{notice}</p>{/if}
    {@render workflowSummary(r)}
    {#if !isJV}
@@ -392,9 +405,14 @@
   .ex-bank-stage-heading{display:flex;align-items:center;gap:10px;margin-bottom:16px}.ex-bank-stage-heading h5{font-size:15px;line-height:1.5;color:var(--ex-ink);margin:0;font-weight:750}
   .ex-bank-number{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;flex-shrink:0;border-radius:6px;background:#e8f1ef;color:#175c55;font-size:12px;font-weight:750;font-variant-numeric:tabular-nums}
   .ex-banking .ex-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px 18px}.ex-banking .ex-field{gap:5px}.ex-banking .ex-caption,.ex-banking .ex-label{font-size:12px}.ex-banking :is(input,select){min-height:40px;padding:8px 10px;font-size:13px}.ex-banking .ex-value{font-size:13px;line-height:1.5}
-  .ex-bank-documents{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.ex-bank-documents .ex-button{min-height:36px;padding:8px 10px;font-size:12px}.ex-bank-documents span{font-size:11px;font-weight:400;color:var(--ex-muted);margin-left:3px}
-  .ex-bank-calculation{display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px;margin-top:16px;padding:12px 14px;background:#edf5f1;border-radius:8px;font-size:12px;line-height:1.5}.ex-bank-calculation>strong{font-variant-numeric:tabular-nums}.ex-bank-calculation>small{flex-basis:100%}.ex-bank-calculation .ex-file-error{color:#8e2c27}
+  .ex-bank-calculation{display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px;margin-top:16px;padding:12px 14px;background:#edf5f1;border-radius:8px;font-size:12px;line-height:1.5}.ex-bank-calculation>strong{font-variant-numeric:tabular-nums}
   .ex-bank-additional{margin-top:0}.ex-checklist>li{scroll-margin-top:125px}.ex-checklist>li:focus{outline:3px solid #58a9a1;outline-offset:5px}
+
+  .ex-bank-context{padding:14px 16px;background:#f4f7f9;margin:0 0 8px;border-radius:8px}.ex-bank-context .ex-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 18px}
+  .ex-bank-carried{display:flex;align-items:center;gap:8px 18px;flex-wrap:wrap;padding:10px 12px;background:#edf5f1;border-radius:8px;font-size:12px;margin:0 0 16px}.ex-bank-carried strong{font-variant-numeric:tabular-nums}.ex-bank-carried small{margin-left:auto}
+  .ex-bank-shipping{margin-top:20px;padding-top:18px;border-top:1px solid var(--ex-line)}.ex-bank-shipping h6{font-size:13px;line-height:1.5;margin:0 0 14px;font-weight:750}.ex-bank-document-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,1fr);gap:20px;align-items:start;padding:14px 0}.ex-bank-document-row .ex-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+  .ex-documentation-state{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;line-height:1.6;color:#205f48;margin:14px 0 0}
 
  }
 

@@ -65,6 +65,7 @@ export const invoiceFields:ExportField[] = [
  {key:'export_reference',label:'Export reference',source:'B'},
  {key:'export_date',label:'Export date',type:'date',source:'C'},
  {key:'invoice_number',label:'Invoice number',required:true,source:'E'},
+ {key:'invoice_date',label:'Invoice date',type:'date',profile:true},
  {key:'currency',label:'Invoice currency',type:'currency',required:true,source:'F'},
  {key:'invoice_amount',label:'Invoice amount',type:'money',required:true,source:'G'},
  {key:'shipping_bill_number',label:'Shipping bill number',source:'H'},
@@ -72,6 +73,9 @@ export const invoiceFields:ExportField[] = [
  {key:'eway_bill_number',label:'E-way bill number',source:'K'},
  {key:'shipping_mode',label:'Shipping mode',type:'select',choices:['Sea','Air','Courier','Hand-carried'],source:'L'},
  {key:'transport_document_number',label:'Bill of lading / AWB number',source:'M'},
+ {key:'transport_document_date',label:'Bill of lading / AWB date',type:'date'},
+ {key:'port_of_loading',label:'Port of loading'},
+ {key:'port_of_departure',label:'Port of departure'},
  {key:'advance_license_number',label:'Advance licence number',source:'N'},
  {key:'port_code',label:'Port code',source:'AN'},
  {key:'shipment_status',label:'Shipment applicability',type:'select',choices:['Commercial shipment','Free-of-charge samples','Hand delivery','Not applicable','Other']},
@@ -126,7 +130,7 @@ export const conversionFields:ExportField[] = [
  {key:'conversion_note',label:'Conversion / allocation note',type:'textarea',hint:'Manual values from the bank advice; no assumed exchange-rate or allocation formula.'}
 ];
 export type BankingStage = {key:string;title:string;fields:ExportField[];hint?:string;documents?:{key:string;label:string}[]};
-export const bankingStages:BankingStage[] = [
+const legacyBankingStages:BankingStage[] = [
  {key:'foreign',title:'Foreign receipt',fields:[
   {key:'reference',label:'Foreign bank reference'},
   {key:'gross_payment_received',label:'Foreign bank amount',type:'money'},
@@ -176,10 +180,63 @@ export const bankingStages:BankingStage[] = [
   {key:'gst_currency',label:'GST currency',type:'currency'}
  ]}
 ];
+export const bankingStages:BankingStage[] = [
+ {key:'inward',title:'Inward remittance advice',fields:[
+  {key:'inward_reference',label:'Our reference number',maxLength:160},
+  {key:'receipt_date',label:'Advice / received date',type:'date'},
+  {key:'gross_payment_received',label:'Bill / remittance amount',type:'money'},
+  {key:'currency',label:'Remittance currency',type:'currency'},
+  {key:'inward_due_date',label:'Due date',type:'date'}
+ ]},
+ {key:'disposal',title:'Disposal instruction',fields:[
+  {key:'disposal_credit_account',label:'Credit account',maxLength:160},
+  {key:'disposal_debit_account',label:'Debit account',maxLength:160}
+ ]},
+ {key:'credit',title:'Credit advice',fields:[
+  {key:'credit_advice_bill_number',label:'Bank bill number',maxLength:160},
+  {key:'reference',label:'Foreign bank reference'},
+  {key:'bank_advice_date',label:'Credit advice date',type:'date'},
+  {key:'bank_advice_amount',label:'Foreign currency amount credited',type:'money'},
+  {key:'inr_conversion_rate',label:'Conversion rate to INR',type:'number'},
+  {key:'inr_received_amount',label:'Received amount (INR)',type:'money'},
+  {key:'inr_bank_charges',label:'Bank charges (INR)',type:'money'},
+  {key:'credit_advice_credit_account',label:'Credit account',maxLength:160},
+  {key:'credit_advice_debit_account',label:'Debit account',maxLength:160}
+ ]}
+];
 const sequencedReceiptKeys=new Set(bankingStages.flatMap(stage=>stage.fields.map(field=>field.key)));
-export const additionalReceiptFields=[...receiptFields,...conversionFields].filter(field=>!sequencedReceiptKeys.has(field.key));
+const legacyReceiptFields=[...new Map([...receiptFields,...conversionFields,...legacyBankingStages.flatMap(stage=>stage.fields)].map(field=>[field.key,field])).values()];
+export const additionalReceiptFields=legacyReceiptFields.filter(field=>!sequencedReceiptKeys.has(field.key));
 export const allReceiptFields=[...bankingStages.flatMap(stage=>stage.fields),...additionalReceiptFields];
-export function newExportReceipt(currency=''):Row{return {currency,forex_account:'BOB FOREX ACCOUNT',inr_currency:'INR',gst_currency:'INR',statuses:{}}}
+export function newExportReceipt(currency=''):Row{return {receipt_key:crypto.randomUUID(),currency,forex_account:'BOB FOREX ACCOUNT',inr_currency:'INR',gst_currency:'INR',statuses:{}}}
+export function ensureReceiptKeys(receipts:Row[]):void{for(const receipt of receipts)if(!receipt.receipt_key)receipt.receipt_key=crypto.randomUUID()}
+export const receiptDocumentSlots:Record<string,{kind:string;field:string;label:string}>={
+ inward:{kind:'payment_details',field:'inward_remittance',label:'Inward remittance advice'},
+ disposal:{kind:'payment_details',field:'disposal_instruction',label:'Disposal instruction'},
+ credit:{kind:'bank_advice',field:'credit_advice',label:'Credit advice'}
+};
+export function documentInSlot(file:Row,kind:string,receiptKey='',fieldKey=''):boolean{
+ return file.kind===kind&&String(file.receipt_key||'')===receiptKey&&String(file.field_key||'')===fieldKey;
+}
+export function receiptDocumentLabel(file:Row,receipts:Row[]):string{
+ if(!file.receipt_key)return 'Shared invoice document';
+ const index=receipts.findIndex(receipt=>receipt.receipt_key===file.receipt_key);
+ const slot=Object.values(receiptDocumentSlots).find(slot=>slot.field===file.field_key);
+ return `${index>=0?'Receipt '+(index+1):'Earlier receipt'} · ${slot?.label||'Receipt document'}`;
+}
+export function savedEbrcNumbers(record:Row):string[]{return [...new Set<string>((record.ebrcs||[]).map((entry:Row)=>String(entry.ebrc_number||'').trim()).filter(Boolean))]}
+export function reconciliationSelectionValid(record:Row,files:Row[],number:string,fileID:number):boolean{
+ return savedEbrcNumbers(record).includes(number)&&files.some(file=>file.kind==='ebrc'&&Number(file.id)===fileID);
+}
+export function reconciliationRegisterQuery():URLSearchParams{return new URLSearchParams({record_kind:'export'})}
+export function canonicalSavedEbrcNumber(record:Row,input:string):string{
+ const identity=(value:string)=>value.trim().split(/\s+/).join(' ').toUpperCase();
+ return savedEbrcNumbers(record).find(number=>identity(number)===identity(input))||'';
+}
+export function reconciliationAlreadyCleared(record:Row,number:string,fileID:number):boolean{
+ const cleared=record.documentation_cleared;
+ return !!cleared?.at&&cleared.ebrc_number===number&&Number(cleared.file_id)===fileID;
+}
 export function foreignChargeDifference(receipt:Row):{amount:string;error:string}|null{
  const decimal=/^(0|[1-9][0-9]{0,14})([.][0-9]{1,2})?$/;
  if(!decimal.test(String(receipt.fcr_amount??''))||!decimal.test(String(receipt.bank_advice_amount??'')))return null;
@@ -260,7 +317,7 @@ export const exportDate=(value:unknown)=>value?new Date(String(value).slice(0,10
 export const exportReference=(id:number)=>'EX-'+String(id).padStart(6,'0');
 
 
-export type InvoiceFile = {file:File;key:string;kind:string;status:'queued'|'uploading'|'uploaded'|'failed'|'uncertain';path?:string;error?:string;id?:number};
+export type InvoiceFile = {file:File;key:string;kind:string;receipt_key?:string;field_key?:string;status:'queued'|'uploading'|'uploaded'|'failed'|'uncertain';path?:string;error?:string;id?:number};
 export type InvoiceSaveAttempt = {path:string;body:Row;content:string};
 export type InvoiceSaveState = {savedContent:string;pendingSave:InvoiceSaveAttempt|null;files:InvoiceFile[]};
 type Mutation = (path:string,body:Row)=>Promise<Row>;
@@ -297,7 +354,7 @@ export async function saveInvoiceFiles(form:Row,state:InvoiceSaveState,mutate:Mu
   catch(error){if(!uncertainInvoiceWrite(error))state.pendingSave=null;throw error}
  };
  const attach=async(entry:InvoiceFile)=>{
-  entry.path??=`/exports/${form.id}/files?version=${form.version}&kind=${encodeURIComponent(entry.kind)}`;
+  entry.path??=`/exports/${form.id}/files?version=${form.version}&kind=${encodeURIComponent(entry.kind)}`+(entry.receipt_key?`&receipt_key=${encodeURIComponent(entry.receipt_key)}&field_key=${encodeURIComponent(entry.field_key||'')}`:'');
   entry.status='uploading';entry.error='';
   try{const saved=await upload(entry.path,entry.file);entry.id=saved.id;entry.status='uploaded';form.version=saved.version}
   catch(error){entry.status=uncertainInvoiceWrite(error)?'uncertain':'failed';entry.error=(error as Error).message;if(entry.status==='failed')entry.path=undefined;throw error}

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {exportPartyKey,exportRegisterQuery,exportInvoiceBody,newJVForm,jvFields,jvTabs,moneyMinor,minorDecimal,exportWorkflowStatuses,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,exportRequiredDocument,bankingStages,additionalReceiptFields,allReceiptFields,receiptFields,conversionFields,newExportReceipt,foreignChargeDifference,bankEmailRecipients,bankEmailRecipientError,bankEmailDocumentKinds,bankEmailCanConfirm,bankEmailAttachmentError,uncertainInvoiceWrite,hasRequiredInvoiceDocument,exportFileCanPreview,saveInvoiceFiles} from '../src/lib/exportDocumentation.ts';
+import {exportPartyKey,exportRegisterQuery,exportInvoiceBody,newJVForm,jvFields,jvTabs,moneyMinor,minorDecimal,exportWorkflowStatuses,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,exportRequiredDocument,bankingStages,additionalReceiptFields,allReceiptFields,receiptFields,conversionFields,newExportReceipt,ensureReceiptKeys,receiptDocumentSlots,documentInSlot,receiptDocumentLabel,savedEbrcNumbers,reconciliationSelectionValid,reconciliationRegisterQuery,canonicalSavedEbrcNumber,reconciliationAlreadyCleared,foreignChargeDifference,bankEmailRecipients,bankEmailRecipientError,bankEmailDocumentKinds,bankEmailCanConfirm,bankEmailAttachmentError,uncertainInvoiceWrite,hasRequiredInvoiceDocument,exportFileCanPreview,saveInvoiceFiles} from '../src/lib/exportDocumentation.ts';
 
 test('unassigned register omits company ID instead of sending an invalid zero',()=>{
  assert.equal(exportRegisterQuery('').toString(),'scope=standalone');
@@ -154,10 +154,16 @@ test('banking sequence preserves every historical receipt field exactly once',()
  const keys=allReceiptFields.map(field=>field.key);
  assert.equal(keys.length,new Set(keys).size);
  for(const field of [...receiptFields,...conversionFields])assert.ok(keys.includes(field.key),field.key+' retained');
- assert.deepEqual(bankingStages.map(stage=>stage.key),['foreign','instruction','documents','advice','inr','allocation']);
+ assert.deepEqual(bankingStages.map(stage=>stage.key),['inward','disposal','credit']);
+ assert.deepEqual(bankingStages[0].fields.slice(0,2).map(field=>[field.key,field.label]),[['inward_reference','Our reference number'],['receipt_date','Advice / received date']]);
+ assert.deepEqual(bankingStages[2].fields.slice(0,2).map(field=>field.key),['credit_advice_bill_number','reference']);
+ assert.equal(bankingStages[0].fields.some(field=>field.key==='reference'),false);
+ assert.ok(additionalReceiptFields.some(field=>field.key==='bank_advice_reference'));
  assert.ok(additionalReceiptFields.some(field=>field.key==='invoice_currency_amount'));
  assert.ok(additionalReceiptFields.some(field=>field.key==='net_payment_received'));
- assert.deepEqual(bankingStages[2].documents.map(file=>file.key),['shipping_bill','bill_of_lading','packing_list','invoice']);
+ assert.equal(bankingStages[1].fields.some(field=>field.key==='gross_payment_received'),false);
+ assert.ok(additionalReceiptFields.some(field=>field.key==='payment_received'));
+ assert.ok(additionalReceiptFields.some(field=>field.key==='fcr_amount'));
 });
 test('new receipt defaults never invent settlement amounts, instructions or conversion rates',()=>{
  const first=newExportReceipt('USD'),second=newExportReceipt('GBP');
@@ -204,4 +210,56 @@ test('bank email attachment review rejects stale, duplicate, excessive and overs
 test('email validation failures remain editable while lost or replayed responses need status verification',()=>{
  assert.equal(uncertainInvoiceWrite({status:400}),false);assert.equal(uncertainInvoiceWrite({status:409}),false);
  assert.equal(uncertainInvoiceWrite({status:409,code:'action_already_submitted'}),true);assert.equal(uncertainInvoiceWrite({status:503}),true);assert.equal(uncertainInvoiceWrite(new Error('network failed')),true);
+});
+
+
+test('receipt keys remain stable through edits and reordering while legacy rows receive independent IDs',()=>{
+ const first=newExportReceipt('USD'),second=newExportReceipt('USD');assert.notEqual(first.receipt_key,second.receipt_key);
+ const rows=[{reference:'legacy'},{receipt_key:first.receipt_key,reference:'saved'}];ensureReceiptKeys(rows);
+ const legacy=rows[0].receipt_key;assert.match(legacy,/^[0-9a-f-]{36}$/);assert.equal(rows[1].receipt_key,first.receipt_key);
+ rows.reverse();ensureReceiptKeys(rows);assert.equal(rows[0].receipt_key,first.receipt_key);assert.equal(rows[1].receipt_key,legacy);
+});
+test('receipt document slots never borrow shared documents or another receipt’s advice',()=>{
+ assert.deepEqual(receiptDocumentSlots.inward,{kind:'payment_details',field:'inward_remittance',label:'Inward remittance advice'});
+ const scoped={kind:'payment_details',receipt_key:'receipt-a',field_key:'inward_remittance'};
+ assert.equal(documentInSlot(scoped,'payment_details','receipt-a','inward_remittance'),true);
+ assert.equal(documentInSlot(scoped,'payment_details','receipt-b','inward_remittance'),false);
+ assert.equal(documentInSlot(scoped,'payment_details','receipt-a','disposal_instruction'),false);
+ assert.equal(documentInSlot(scoped,'payment_details'),false);
+ assert.equal(documentInSlot({kind:'payment_details'},'payment_details','receipt-a','inward_remittance'),false);
+ assert.equal(documentInSlot({kind:'invoice',receipt_key:null,field_key:null},'invoice'),true);
+ assert.equal(receiptDocumentLabel(scoped,[{receipt_key:'receipt-b'},{receipt_key:'receipt-a'}]),'Receipt 2 · Inward remittance advice');
+ assert.equal(receiptDocumentLabel({kind:'bank_advice'},[]),'Shared invoice document');
+});
+test('receipt-specific upload scope survives the protected save and retry sequence',async()=>{
+ const form=draft();form.receipts=[newExportReceipt('USD')];const key=form.receipts[0].receipt_key;
+ const file={...queued('advice.pdf','payment_details'),receipt_key:key,field_key:'inward_remittance'};const state={savedContent:'',pendingSave:null,files:[file]},paths=[];let failed=false,saves=0;
+ await assert.rejects(saveInvoiceFiles(form,state,async(path,body)=>{saves++;assert.equal(body.receipts[0].receipt_key,key);return {id:8,version:1}},async(path)=>{paths.push(path);failed=true;throw Object.assign(new Error('busy'),{status:429})}));
+ await saveInvoiceFiles(form,state,async()=>{saves++;return {}},async(path)=>{paths.push(path);return {id:40,version:2}});
+ assert.equal(failed,true);assert.equal(saves,1);assert.equal(paths[0],paths[1]);
+ const query=new URL('https://example.test'+paths[0]).searchParams;assert.equal(query.get('receipt_key'),key);assert.equal(query.get('field_key'),'inward_remittance');assert.equal(query.get('kind'),'payment_details');
+});
+test('documentation clearance requires only a saved eBRC number and active eBRC file, independently of approval or balance',()=>{
+ const record={workflow_status:'Draft',balance:{outstanding:'1000.00'},ebrcs:[{status:'Pending',ebrc_number:' E-1 '},{status:'Received',ebrc_number:'E-2'},{ebrc_number:'E-1'}]},files=[{id:1,kind:'ebrc'},{id:2,kind:'invoice'}];
+ assert.deepEqual(savedEbrcNumbers(record),['E-1','E-2']);assert.equal(reconciliationSelectionValid(record,files,'E-1',1),true);
+ assert.equal(reconciliationSelectionValid(record,files,'E-3',1),false);assert.equal(reconciliationSelectionValid(record,files,'E-1',2),false);assert.equal(reconciliationSelectionValid(record,files,'E-1',3),false);
+ assert.equal(reconciliationSelectionValid({...record,workflow_status:'Approved',balance:{outstanding:'0.00'}},files,'E-1',1),true);
+});
+
+test('reconciliation lists all authorised exports without a company, unassigned or JV filter',()=>{
+ const query=reconciliationRegisterQuery();assert.deepEqual([...query.entries()],[['record_kind','export']]);
+});
+test('saved eBRC selection adopts existing canonical spelling after a duplicate add',()=>{
+ const record={ebrcs:[{ebrc_number:' BANK /  E-01 '},{ebrc_number:'E-02',legacy_reference:'retained'}]};
+ assert.equal(canonicalSavedEbrcNumber(record,'bank / e-01'),'BANK /  E-01');
+ assert.equal(canonicalSavedEbrcNumber(record,' E-02 '),'E-02');
+ assert.equal(canonicalSavedEbrcNumber(record,'E-03'),'');
+ assert.equal(record.ebrcs[1].legacy_reference,'retained');
+});
+test('the same cleared evidence cannot be submitted twice and replacement evidence stays actionable',()=>{
+ const record={documentation_cleared:{at:'2026-10-10T12:00:00Z',ebrc_number:'E-1',file_id:40}};
+ assert.equal(reconciliationAlreadyCleared(record,'E-1',40),true);
+ assert.equal(reconciliationAlreadyCleared(record,'E-2',40),false);
+ assert.equal(reconciliationAlreadyCleared(record,'E-1',41),false);
+ assert.equal(reconciliationAlreadyCleared({...record,documentation_cleared:{}},'E-1',40),false);
 });
