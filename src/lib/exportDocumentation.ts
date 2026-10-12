@@ -41,7 +41,11 @@ export function exportInvoiceBody(form:Row):Row {
   party_id:standalone?null:Number(form.party_id),order_id:standalone||!form.order_id?null:Number(form.order_id),
   ...(standalone?{party_name:String(form.party_name||'').trim()}:{}),
   invoice_number:form.invoice_number,currency:form.currency,invoice_amount:form.invoice_amount,
-  profile:form.profile,receipts:form.receipts,ebrcs:form.ebrcs,version:form.version};
+  profile:form.profile,receipts:form.receipts?.map((receipt:Row)=>{
+   // Older receipts predate the fixed-INR advice fields. Keep all saved values.
+   const needsINR=!String(receipt.inr_currency??'').trim()&&[receipt.inr_received_amount,receipt.inr_bank_charges].some(value=>String(value??'').trim()!=='');
+   return needsINR?{...receipt,inr_currency:'INR'}:receipt;
+  }),ebrcs:form.ebrcs,version:form.version};
 }
 export function newJVForm():Row{return {record_kind:'jv',company_id:null,party_type:'manual',party_id:null,party_name:'EURO SUITS MFG',order_id:null,workflow_status:'Draft',invoice_number:'',currency:'',invoice_amount:'',profile:{export_date:'',shipping_mode:'HANDO',jv_by_date:'',scrip_tally_reference:''},receipts:[],ebrcs:[]}}
 export const jvFields:ExportField[]=[

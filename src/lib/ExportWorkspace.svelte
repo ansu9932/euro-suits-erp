@@ -3,12 +3,11 @@
  import {beforeNavigate} from '$app/navigation';
  import {Plus,ArrowLeft,Download,FileText,Search,RefreshCw,Trash2,Paperclip,Check,ChevronRight,Eye} from '@lucide/svelte';
  import {api,uploadTo} from './api';
- import ExportBankEmail from './ExportBankEmail.svelte';
  import ExportDocumentField from './ExportDocumentField.svelte';
  import ExportReconciliationWorkspace from './ExportReconciliationWorkspace.svelte';
  import {enter} from './motion';
  import type {Row,User} from './types';
- import {invoiceFields,jvFields,jvTabs,newJVForm,incentiveFields,bankingStages,additionalReceiptFields,allReceiptFields,newExportReceipt,ensureReceiptKeys,receiptDocumentSlots,documentInSlot,receiptDocumentLabel,foreignChargeDifference,ebrcFields,scripFields,clearanceFields,exportTabs,moneyText,moneyMinor,minorDecimal,exportDate,exportReference,exportWorkflowStatuses,exportPartyKey,exportRegisterQuery,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,exportFileCanPreview,exportRequiredDocument,hasRequiredInvoiceDocument,saveInvoiceFiles,type InvoiceSaveState,type ExportRecordKind,type ExportField,type ExportTab} from './exportDocumentation';
+ import {invoiceFields,jvFields,jvTabs,newJVForm,incentiveFields,bankingStages,allReceiptFields,newExportReceipt,ensureReceiptKeys,receiptDocumentSlots,documentInSlot,receiptDocumentLabel,ebrcFields,scripFields,clearanceFields,exportTabs,moneyText,moneyMinor,minorDecimal,exportDate,exportReference,exportWorkflowStatuses,exportPartyKey,exportRegisterQuery,invoiceCompanyChoices,invoiceFileKey,invoiceFileError,invoiceContent,exportFileCanPreview,exportRequiredDocument,hasRequiredInvoiceDocument,saveInvoiceFiles,type InvoiceSaveState,type ExportRecordKind,type ExportField,type ExportTab} from './exportDocumentation';
  let {user,dirty=$bindable(false)}:{user:User&{portal?:string;setup_grants?:string[]};dirty?:boolean}=$props();
  let options:Row=$state({companies:[],parties:[],orders:[],currencies:[],permissions:{},document_kinds:[]});
  let listing:Row=$state({records:[],totals:[]}),detail:Row|null=$state(null),form:Row=$state({profile:{},receipts:[],ebrcs:[]});
@@ -18,8 +17,8 @@
  let tabs=$derived(isJV?jvTabs:exportTabs.filter(item=>item.key!=='ebrc'));
  let recordLabel=$derived(isJV?'JV':'invoice');
  let company=$state(''),search=$state(''),year=$state(''),partyFilter=$state(''),currencyFilter=$state(''),workflowFilter=$state(''),tab:ExportTab=$state('shipment');
- let working=$state(false),emailBusy=$state(false);
- let busy=$derived(working||emailBusy||reconciliationBusy);
+ let working=$state(false);
+ let busy=$derived(working||reconciliationBusy);
  let editing=$state(false),loading=$state(true),error=$state(''),notice=$state(''),reviewNote=$state(''),reviewStatus=$state('Checked');
  let discountAmount=$state(''),discountReason=$state(''),decisionNotes:Record<number,string>=$state({}),revision:Row|null=$state(null);
  let workflowNote=$state(''),commentNote=$state('');
@@ -242,7 +241,7 @@
  {:else if tab==='receipts'}
   <section class="ex-section ex-banking"><div class="ex-section-heading"><div><h3 id="export-panel-title" tabindex="-1">Receipts & banking</h3><p class="ex-muted">Complete the three sections for each receipt. Manage eBRC documentation in the Reconciliation section.</p></div>{#if !readonly}<button type="button" class="ex-button secondary" disabled={busy||(r.receipts||[]).length>=100} onclick={addReceipt}><Plus size={16}/>Add receipt</button>{/if}</div>
    <div class="ex-bank-context">{@render fields([{key:'invoice_number',label:'Invoice number'},{key:'invoice_date',label:'Invoice date',type:'date',profile:true},{key:'invoice_amount',label:'Invoice amount',type:'money'},{key:'currency',label:'Invoice currency'}],r,'bank-invoice-context',true)}</div>
-  {#each r.receipts||[] as receipt,i(receipt.receipt_key||receipt)}{@const difference=foreignChargeDifference(receipt)}
+  {#each r.receipts||[] as receipt,i(receipt.receipt_key||receipt)}
    <article class="ex-repeat ex-bank-receipt"><div class="ex-section-heading"><h4>Receipt {i+1}{#if receipt.reference} · {receipt.reference}{/if}</h4>{#if !readonly}<button type="button" class="ex-button quiet" disabled={busy||uncertainSave} aria-label={'Remove receipt '+(i+1)} onclick={()=>removeRow('receipts',i)}><Trash2 size={16}/>Remove</button>{/if}</div>
     <ol class="ex-bank-sequence">{#each bankingStages as stage,stageIndex}{@const slot=receiptDocumentSlots[stage.key]}
      <li class="ex-bank-stage"><div class="ex-bank-stage-heading"><span class="ex-bank-number" aria-hidden="true">{stageIndex+1}</span><h5>{stage.title}</h5></div>
@@ -260,14 +259,11 @@
       {#if stage.key==='credit'}<p class="ex-muted">Foreign credited amount uses {receipt.currency||'the inward advice currency'}. Conversion, received amount and charges above are in INR.</p>{/if}
      </li>
     {/each}</ol>
-    <details class="ex-subsection ex-bank-additional"><summary>Settlement & additional receipt details</summary><p class="ex-muted">Enter the payment applied to this invoice and confirmed settlement charges here. Advice, conversion and allocation figures do not count a second time.</p>{@render fields(additionalReceiptFields,receipt,'receipt-extra-'+i,readonly)}{#if difference}<p class="ex-bank-calculation"><span>FCR − foreign credited amount</span><strong>{difference.error||moneyText(difference.amount,receipt.currency||'')}</strong></p>{/if}</details>
+
    </article>
   {:else}{@render empty('No receipts recorded',readonly?'Payments and bank advice will appear here when added.':'Add a receipt to start its inward remittance advice.')}{/each}
   </section>
-  <details class="ex-section ex-bank-email-pack"><summary>Bank email & supporting documents</summary><p class="ex-muted">Shared by this invoice. Review recipients and the selected files before sending.</p>
-   {@render documentField('packing_list','Packing list',readonly,'','','bank-packing')}
-   {#if permissions.edit&&permissions.download&&['Finance','Finance Head','Super Admin'].includes(user.role)}{#if readonly&&detail&&!invoiceSave.files.length}{#key String(r.id)+':'+String(r.version)}<ExportBankEmail record={r} files={detail.files||[]} userID={user.id} bind:busy={emailBusy}/>{/key}{:else}<p class="ex-muted">Save the draft and documents to review the bank email.</p>{/if}{/if}
-  </details>
+
  {:else if tab==='clearance'}
   <section class="ex-section"><h3 id="export-panel-title" tabindex="-1">Scrip sale</h3><p class="ex-muted">Record the agreed sale amount, percentage and currency separately.</p>{@render fields(scripFields,r.profile,'scrip',readonly)}</section>
   <section class="ex-section"><h3>Clearance & transport partners</h3>{@render fields(clearanceFields,r.profile,'clearance',readonly)}<div class="ex-subsection">{@render fields([{key:'linked_bank',label:'Linked bank'}],r.profile,'linked-bank',readonly)}</div></section>
@@ -406,8 +402,7 @@
   .ex-bank-stage-heading{display:flex;align-items:center;gap:10px;margin-bottom:12px}.ex-bank-stage-heading h5{font-size:15px;line-height:1.5;color:var(--ex-ink);margin:0;font-weight:750}
   .ex-bank-number{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;flex-shrink:0;border-radius:6px;background:#e8f1ef;color:#175c55;font-size:12px;font-weight:750;font-variant-numeric:tabular-nums}
   .ex-banking .ex-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px}.ex-banking .ex-field{gap:5px}.ex-banking .ex-caption,.ex-banking .ex-label{font-size:12px}.ex-banking :is(input,select){min-height:40px;padding:8px 10px;font-size:13px}.ex-banking .ex-value{font-size:13px;line-height:1.5}
-  .ex-bank-calculation{display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px;margin-top:16px;padding:12px 14px;background:#edf5f1;border-radius:8px;font-size:12px;line-height:1.5}.ex-bank-calculation>strong{font-variant-numeric:tabular-nums}
-  .ex-bank-additional{margin-top:0}.ex-checklist>li{scroll-margin-top:125px}.ex-checklist>li:focus{outline:3px solid #58a9a1;outline-offset:5px}
+  .ex-checklist>li{scroll-margin-top:125px}.ex-checklist>li:focus{outline:3px solid #58a9a1;outline-offset:5px}
 
   .ex-bank-context{padding:14px 16px;background:#f4f7f9;margin:0 0 8px;border-radius:8px}.ex-bank-context .ex-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 18px}
   .ex-bank-carried{display:flex;align-items:center;gap:8px 18px;flex-wrap:wrap;padding:10px 12px;background:#edf5f1;border-radius:8px;font-size:12px;margin:0 0 16px}.ex-bank-carried strong{font-variant-numeric:tabular-nums}.ex-bank-carried small{margin-left:auto}
