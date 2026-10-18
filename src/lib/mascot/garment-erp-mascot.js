@@ -167,7 +167,7 @@ export function registerMascot(options = {}) {
   if (window.customElements.get(TAG)) return window.customElements.get(TAG);
 
   class GarmentERPMascot extends HTMLElement {
-    static get observedAttributes() { return ['dashboard-module', 'user-role', 'user-key', 'suspended']; }
+    static get observedAttributes() { return ['dashboard-module', 'user-role', 'user-key', 'suspended', 'assistant-enabled']; }
 
     constructor() {
       super();
@@ -219,6 +219,7 @@ export function registerMascot(options = {}) {
       window.addEventListener('resize', this._onResize, { passive: true });
       window.addEventListener('storage', this._onStorage);
       this._readPreferences();
+      this._renderHelpMode();
       this._applyTheme();
       this._renderPreferences();
       this._wake();
@@ -239,6 +240,7 @@ export function registerMascot(options = {}) {
 
     attributeChangedCallback(name, previous, value) {
       if (previous === value || !this._connected) return;
+      if (name === 'assistant-enabled') { this._renderHelpMode(); return; }
       if (name === 'suspended') { if (value !== null) this._closePanels(false); this._syncActivity(); return; }
       if (name === 'user-key') { this._readPreferences(); this._closePanels(false); this._message = ''; this._pendingResponse = null; this._messageIndex = 0; this._themeInitialized = false; this._elements.message.textContent = ''; this._elements.message.removeAttribute('aria-label'); this._status = 'under_construction'; this._emotion = 'neutral'; this._renderPreferences(); }
       this._applyTheme();
@@ -336,6 +338,15 @@ export function registerMascot(options = {}) {
       if (this._prefs.minimized) this._closePanels(false);
     }
 
+    _renderHelpMode() {
+      const enabled = this.hasAttribute('assistant-enabled');
+      this.shadowRoot.querySelector('.badge span').textContent = enabled ? 'Ask me' : 'Coming soon';
+      this._elements.character.setAttribute('aria-label', enabled ? 'Open Spooly task help' : 'Meet Spooly, your coming-soon assistant');
+      this._elements.dock.setAttribute('aria-label', enabled ? 'Restore Spooly task help' : 'Restore Spooly, coming-soon assistant');
+      if (enabled) this._elements.character.removeAttribute('aria-controls');
+      else this._elements.character.setAttribute('aria-controls', 'speech');
+    }
+
     _click(event) {
       const action = event.target.closest?.('[data-action]')?.dataset.action;
       if (!action) return;
@@ -351,6 +362,11 @@ export function registerMascot(options = {}) {
         return;
       }
       if (action === 'speak') {
+        if (this.hasAttribute('assistant-enabled')) {
+          this._closePanels(false);
+          this.dispatchEvent(new CustomEvent('spooly:help', {bubbles: true, composed: true}));
+          return;
+        }
         this._closePanels(false);
         this._elements.speech.hidden = false;
         this._elements.character.setAttribute('aria-expanded', 'true');
