@@ -22,9 +22,11 @@
  .material-dialog footer .button {overflow-wrap:anywhere;min-width:0}
 }
 
-/* Soft field surfaces distinguish editable controls from the white page. */
+/* Soft field surfaces distinguish editable controls from the white page.
+   BEM enterprise controls own their tokenized surfaces; all legacy controls
+   keep this rule. :where() adds no specificity to the exception. */
 @media screen {
- body :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]):not([type=color]):not([type=submit]):not([type=button]),select,textarea) {
+ body :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]):not([type=color]):not([type=submit]):not([type=button]),select,textarea):where(:not(.erp-form .erp-field__control)) {
   background-color:#eef5fa !important;
   color:#203246 !important;
   border:1px solid #a8bdce !important;

@@ -4,6 +4,7 @@
  import {installActionLocks} from '$lib/actionLock';
  import '../interactions.css';
  import '../readability.css';
+ import '$lib/styles/enterprise-forms/index.css';
  let {children}=$props();
  onMount(()=>{
   const removeActionLocks=installActionLocks();

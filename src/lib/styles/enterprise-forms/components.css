@@ -1,0 +1,86 @@
+/* 3. COMPONENTS — BEM block__element--modifier.
+ * Always use a real label, native required/disabled/readonly, and associated
+ * help/error text. Badges communicate status; they do not enforce behavior.
+ */
+.erp-form .erp-field { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.erp-form .erp-field__label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-weight: 700; color: var(--md-sys-color-on-surface); }
+.erp-form .erp-field__control {
+  display: block; inline-size: 100%; min-inline-size: var(--form-target); min-block-size: var(--form-target);
+  padding: var(--space-2) var(--space-3); border: 1px solid var(--md-sys-color-outline); border-radius: var(--form-radius);
+  background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface);
+  font: inherit; transition: border-color var(--form-duration), background-color var(--form-duration);
+  scroll-margin-block: var(--form-focus-clearance);
+}
+.erp-form textarea.erp-field__control { min-block-size: 104px; resize: vertical; }
+.erp-form select.erp-field__control { padding-inline-end: var(--space-8); } /* Keep native select arrow. */
+.erp-form .erp-field__control::placeholder { color: var(--md-sys-color-on-surface-variant); opacity: 1; }
+.erp-form .erp-field__control:hover:not(:disabled) { border-color: var(--md-sys-color-primary); }
+.erp-form .erp-field:focus-within .erp-field__label { color: var(--md-sys-color-primary); }
+.erp-form .erp-field__control:is(input,textarea):read-only { background: var(--md-sys-color-surface-container-high); border-style: dashed; }
+.erp-form .erp-field__control:disabled { opacity: 1; color: var(--md-sys-color-on-surface-variant); background: var(--md-sys-color-surface-container-high); cursor: not-allowed; }
+/* Avoid marking every untouched required control red on first render. */
+.erp-form .erp-field__control:invalid { border-style: dashed; }
+.erp-form .erp-field__control:is(:user-invalid,[aria-invalid="true"]),
+.erp-form--validated .erp-field__control:invalid { border-color: var(--md-sys-color-error); border-style: solid; background: var(--md-sys-color-error-container); }
+.erp-form .erp-field__help { margin: 0; font-size: var(--form-text-small); color: var(--md-sys-color-on-surface-variant); overflow-wrap: anywhere; }
+.erp-form .erp-field__error { margin: 0; color: var(--md-sys-color-error); font-weight: 600; }
+.erp-form .erp-field--warning .erp-field__control { border-color: var(--form-warning); }
+.erp-form .erp-field__warning { color: var(--form-warning); }
+/* Floating outlined labels: input first, then associated label. Use placeholder=" ".
+ * Dates/selects and autofilled controls keep the label raised with --raised.
+ */
+.erp-form .erp-field--floating { position: relative; padding-block-start: var(--space-2); }
+.erp-form .erp-field--floating > .erp-field__label { position: absolute; inset-inline-start: var(--space-3); inset-block-start: 20px; padding-inline: var(--space-1); background: var(--md-sys-color-surface-container); pointer-events: none; transform-origin: left center; transition: transform var(--form-duration) var(--form-ease); }
+.erp-form .erp-field--floating > .erp-field__control { min-block-size: 56px; padding-block: var(--space-4) var(--space-2); }
+.erp-form .erp-field--floating:focus-within > .erp-field__label,
+.erp-form .erp-field--floating > .erp-field__control:not(:placeholder-shown) + .erp-field__label,
+.erp-form .erp-field--floating > .erp-field__control:autofill + .erp-field__label,
+.erp-form .erp-field--raised > .erp-field__label { transform: translateY(-23px) scale(.875); }
+.erp-form .erp-input-group { display: flex; align-items: stretch; min-inline-size: 0; border-radius: var(--form-radius); background: var(--md-sys-color-surface-container-high); }
+.erp-form .erp-input-group > .erp-field__control { flex: 1; inline-size: 0; }
+.erp-form .erp-input-group__affix { display: flex; align-items: center; padding-inline: var(--space-3); color: var(--md-sys-color-on-surface-variant); white-space: nowrap; }
+.erp-form .erp-badge { display: inline-flex; padding: 2px var(--space-2); border: 1px solid currentColor; border-radius: var(--form-radius-small); font-size: var(--form-text-small); font-weight: 600; line-height: 1.4; color: var(--md-sys-color-on-surface-variant); background: var(--md-sys-color-surface-container); }
+.erp-form .erp-badge--required { color: var(--md-sys-color-on-primary-container); background: var(--md-sys-color-primary-container); }
+.erp-form .erp-badge--readonly { border-style: dashed; }
+.erp-form .erp-badge--optional { background: var(--md-sys-color-surface); }
+.erp-form .erp-badge--error { color: var(--md-sys-color-error); background: var(--md-sys-color-error-container); }
+.erp-form .erp-badge--warning { color: var(--form-warning); background: var(--form-warning-surface); }
+.erp-form .erp-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-inline-size: var(--form-target); min-block-size: var(--form-target); padding: var(--space-2) var(--space-4); border: 1px solid var(--md-sys-color-outline); border-radius: var(--form-radius); background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); font: 700 var(--form-text-body)/1.4 var(--form-font); text-decoration: none; cursor: pointer; }
+.erp-form .erp-button--primary { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); border-color: transparent; }
+.erp-form .erp-button:hover:not(:disabled) { box-shadow: var(--form-elevation-1); text-decoration: underline; text-underline-offset: 3px; }
+.erp-form .erp-button:is(:disabled,[aria-disabled="true"]) { cursor: not-allowed; opacity: .65; }
+.erp-form .erp-button:is([aria-busy="true"],[data-action-locked]) { cursor: wait; }
+.erp-form .erp-choice { display: flex; align-items: center; gap: var(--space-2); min-inline-size: var(--form-target); min-block-size: var(--form-target); padding: var(--space-2); cursor: pointer; }
+.erp-form .erp-choice > input { inline-size: 20px; block-size: 20px; flex: 0 0 20px; }
+/* Matrix: one semantic table, shared column sizing; never split header/body.
+ * No ARIA grid unless full grid keyboard behavior is implemented by the host.
+ */
+.erp-form .erp-matrix { overflow: auto; max-block-size: 28rem; border: 1px solid var(--md-sys-color-outline); border-radius: var(--form-radius); scroll-padding: 64px 8px 8px 160px; }
+.erp-form .erp-matrix__table { border-collapse: separate; border-spacing: 0; table-layout: fixed; inline-size: 100%; min-inline-size: var(--matrix-min-width, 640px); color: var(--md-sys-color-on-surface); font-variant-numeric: tabular-nums; }
+.erp-form .erp-matrix__table caption { text-align: start; padding: var(--space-3); font-weight: 700; }
+.erp-form .erp-matrix__table :is(th,td) { padding: var(--space-1); border: 0; border-inline-end: 1px solid var(--md-sys-color-outline-variant); border-block-end: 1px solid var(--md-sys-color-outline-variant); overflow: visible; white-space: normal; background: var(--md-sys-color-surface); color: inherit; }
+.erp-form .erp-matrix__table td { position: relative; } /* contain visually hidden cell labels */
+.erp-form .erp-matrix__table thead th { position: sticky; inset-block-start: 0; z-index: 3; block-size: var(--form-target); background: var(--form-header); color: var(--form-on-header); text-align: center; }
+.erp-form .erp-matrix__table th:first-child { inline-size: 140px; position: sticky; inset-inline-start: 0; z-index: 2; padding: var(--space-2); }
+.erp-form .erp-matrix__table thead th:first-child { z-index: 4; }
+.erp-form .erp-matrix__table .erp-field__control { text-align: end; border-radius: var(--form-radius-small); }
+/* Native details is keyboard-operable without JS. Supporting browsers animate
+ * its anonymous content grid; others retain the native instant disclosure.
+ */
+.erp-form .erp-accordion { border-block-end: 1px solid var(--md-sys-color-outline-variant); }
+.erp-form .erp-accordion__summary { min-block-size: var(--form-target); padding: var(--space-3); cursor: pointer; color: var(--md-sys-color-on-surface); font-weight: 700; }
+.erp-form .erp-accordion__content { min-block-size: 0; overflow: hidden; }
+.erp-form .erp-accordion__inner { padding: var(--space-3); }
+@supports selector(::details-content) {
+  .erp-form .erp-accordion::details-content { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--form-duration) var(--form-ease), content-visibility var(--form-duration) allow-discrete; }
+  .erp-form .erp-accordion[open]::details-content { grid-template-rows: 1fr; }
+}
+/* Tabbed wizard: anchors are honest section navigation, usable without JS.
+ * For actual tab widgets the host supplies ARIA, arrow keys and hidden state.
+ * A hidden panel must never remain focusable during a height animation.
+ */
+.erp-form .erp-wizard__tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); border-block-end: 1px solid var(--md-sys-color-outline); padding: var(--space-1); }
+.erp-form .erp-wizard__tab { display: inline-flex; align-items: center; min-inline-size: var(--form-target); min-block-size: var(--form-target); padding: var(--space-2) var(--space-4); color: var(--md-sys-color-on-surface); background: var(--md-sys-color-surface); border: 0; border-block-end: 3px solid transparent; text-decoration: none; }
+.erp-form .erp-wizard__tab:is(:hover,[aria-current="step"],[aria-selected="true"]) { border-block-end-color: var(--md-sys-color-primary); background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.erp-form .erp-wizard__panel { scroll-margin-block: var(--form-focus-clearance); }
+.erp-form .erp-wizard__panel[hidden] { display: none; }

@@ -1,0 +1,102 @@
+[
+  {
+    "name": "more than 50 fields",
+    "pass": true
+  },
+  {
+    "name": "no page overflow 1440",
+    "pass": true
+  },
+  {
+    "name": "target sizes 1440",
+    "pass": true
+  },
+  {
+    "name": "no page overflow 1163",
+    "pass": true
+  },
+  {
+    "name": "target sizes 1163",
+    "pass": true
+  },
+  {
+    "name": "no page overflow 768",
+    "pass": true
+  },
+  {
+    "name": "target sizes 768",
+    "pass": true
+  },
+  {
+    "name": "no page overflow 390",
+    "pass": true
+  },
+  {
+    "name": "target sizes 390",
+    "pass": true
+  },
+  {
+    "name": "keyboard opens native accordion",
+    "pass": true
+  },
+  {
+    "name": "closed content removed from keyboard path",
+    "pass": true
+  },
+  {
+    "name": "accordion preserves entered value",
+    "pass": true
+  },
+  {
+    "name": "floating label stays raised with value",
+    "pass": true
+  },
+  {
+    "name": "focus ring explicit",
+    "pass": true
+  },
+  {
+    "name": "twelve desktop columns",
+    "pass": true
+  },
+  {
+    "name": "matrix header sticky",
+    "pass": true
+  },
+  {
+    "name": "matrix columns aligned",
+    "pass": true
+  },
+  {
+    "name": "toolbar sticks in viewport",
+    "pass": true
+  },
+  {
+    "name": "reduced motion",
+    "pass": true
+  },
+  {
+    "name": "high contrast outline",
+    "pass": true
+  },
+  {
+    "name": "forced colors outline visible",
+    "pass": true
+  },
+  {
+    "name": "print expands closed accordion",
+    "pass": true
+  },
+  {
+    "name": "print hides actions",
+    "pass": true
+  },
+  {
+    "name": "error survives legacy styles",
+    "pass": true
+  },
+  {
+    "name": "floating text survives legacy styles",
+    "pass": true
+  }
+]

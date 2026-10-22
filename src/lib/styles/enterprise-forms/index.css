@@ -1,0 +1,11 @@
+/* Euro Suits enterprise forms — opt-in BEM architecture.
+ * Import once from the root layout. Nothing styles an existing form unless
+ * it has .erp-form and the component classes documented in README.md.
+ * Deliberately unlayered: incumbent ERP CSS is unlayered. Layering only this
+ * module would put it below every legacy rule regardless of specificity.
+ * Order: scoped tokens → layout → components → accessibility/print.
+ */
+@import './tokens.css';
+@import './layout.css';
+@import './components.css';
+@import './accessibility.css';

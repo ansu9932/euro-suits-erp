@@ -1,0 +1,44 @@
+/* 2. LAYOUT — block: erp-grid; modifiers: --span-*.
+ * Keep source order equal to reading/Tab order. No dense auto-placement.
+ * minmax(0, 1fr) is the overflow-safe version of twelve equal 1fr columns.
+ */
+.erp-form .erp-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+.erp-form .erp-grid > * { min-inline-size: 0; grid-column: span 12; }
+.erp-form .erp-grid > .erp-grid__item--span-3 { grid-column: span 3; }
+.erp-form .erp-grid > .erp-grid__item--span-4 { grid-column: span 4; }
+.erp-form .erp-grid > .erp-grid__item--span-6 { grid-column: span 6; }
+.erp-form .erp-grid > .erp-grid__item--span-12 { grid-column: span 12; }
+/* 30/70 of available width AFTER the gap; avoids percentage + gap overflow. */
+.erp-form .erp-master-detail { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 7fr); gap: var(--space-6); align-items: start; }
+.erp-form .erp-master-detail__nav { position: sticky; inset-block-start: var(--form-sticky-top); max-block-size: calc(100dvh - var(--form-sticky-top) - var(--space-6)); overflow: auto; padding: var(--space-2); background: var(--md-sys-color-surface-container-low); }
+.erp-form .erp-master-detail__workspace { min-inline-size: 0; }
+.erp-form .erp-master-detail__link { display: flex; align-items: center; min-block-size: var(--form-target); padding: var(--space-2) var(--space-3); border-radius: var(--form-radius-small); color: var(--md-sys-color-on-surface); text-decoration: none; overflow-wrap: anywhere; }
+.erp-form .erp-master-detail__link:is(:hover,[aria-current]) { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.erp-form .erp-master-detail__branch { padding-inline-start: var(--space-4); }
+.erp-form .erp-section { padding: var(--space-6) 0; border-block-end: 1px solid var(--md-sys-color-outline-variant); scroll-margin-block: var(--form-focus-clearance); }
+.erp-form .erp-section__title { font: 700 var(--form-text-heading)/1.35 var(--form-font-heading); color: var(--md-sys-color-on-surface); margin: 0 0 var(--space-4); }
+.erp-form .erp-form__header { position: sticky; inset-block-start: var(--form-sticky-top); z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-4); background: var(--form-header); color: var(--form-on-header); }
+.erp-form .erp-form__title { margin: 0; color: inherit; font: 700 var(--form-text-heading)/1.35 var(--form-font-heading); }
+.erp-form .erp-form__body { padding: var(--space-4); }
+/* Bottom sticky, opaque fallback; blur only the action surface, never fields. */
+.erp-form .erp-toolbar { position: sticky; inset-block-end: var(--form-sticky-bottom); z-index: 7; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); padding: var(--space-3) var(--space-4); padding-block-end: max(var(--space-3), env(safe-area-inset-bottom)); background: var(--md-sys-color-surface); box-shadow: var(--form-elevation-2); }
+.erp-form .erp-toolbar__status { margin-inline-end: auto; color: var(--md-sys-color-on-surface-variant); }
+@supports (backdrop-filter: blur(1px)) {
+  .erp-form .erp-toolbar { background: color-mix(in srgb, var(--md-sys-color-surface) 96%, transparent); backdrop-filter: blur(var(--form-backdrop-blur)); }
+}
+/* Responsive is opt-in. Current ERP desktop preference remains the default. */
+@media (max-width: 1023px) {
+  .erp-form--responsive .erp-master-detail { grid-template-columns: minmax(0, 1fr); }
+  .erp-form--responsive .erp-master-detail__nav { position: static; max-block-size: none; }
+  .erp-form--responsive .erp-grid > :is(.erp-grid__item--span-3,.erp-grid__item--span-4) { grid-column: span 6; }
+}
+@media (max-width: 639px) {
+  .erp-form--responsive .erp-grid > [class*="erp-grid__item--span-"] { grid-column: span 12; }
+  .erp-form--responsive .erp-form__header { position: static; }
+  .erp-form--responsive .erp-toolbar__status { flex-basis: 100%; }
+}
