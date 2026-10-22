@@ -1,0 +1,86 @@
+/* 2. DIALOG LAYOUT CONTRACT
+ * .ux-dialog = header + form; form = scrollable body + non-scrolling actions.
+ * A footer cannot stay outside the scrolling body reliably using CSS alone:
+ * the four existing form dialog components now provide this explicit wrapper.
+ * Native dialog showModal()/focus/Escape and existing Anime.js actions remain.
+ */
+@media screen and (min-width: 1024px) {
+  body:has(.erp-workspace) :is(.form-dialog,.company-modal,.material-modal,.sample-dialog),
+  .ui-form .ux-dialog {
+    width: min(800px, calc(100vw - 48px));
+    max-width: 800px;
+    max-height: calc(100dvh - 48px);
+    margin: auto;
+    border-radius: 12px;
+    background: #f7f8fa;
+    color: #1f2937;
+    box-shadow: 0 16px 56px rgb(15 23 42 / 20%);
+  }
+  body:has(.erp-workspace) :is(.sample-dialog.small,.material-compact) { max-width: 560px; }
+  /* Closed native dialogs must remain display:none. Role dialogs exist only
+     while open, so they do not need the [open] condition. */
+  body:has(.erp-workspace) :is(dialog.ux-dialog[open],.ux-dialog[role="dialog"]),
+  .ui-form dialog.ux-dialog[open] { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+  body:has(.erp-workspace) .ux-dialog__form,
+  .ui-form .ux-dialog__form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  body:has(.erp-workspace) .ux-dialog__body,
+  .ui-form .ux-dialog__body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 20px; scroll-padding-block: 16px; }
+  /* Existing long-form field groups get one calm card, not one card per field. */
+  body:has(.erp-workspace) .ux-dialog__body > :is(.form-grid,.company-form-grid) {
+    padding: 20px;
+    margin: 0 0 24px;
+    background: #fff;
+    border: 0;
+    border-radius: 10px;
+    box-shadow: var(--ui-card-shadow);
+  }
+  body:has(.erp-workspace) .ux-dialog__body > h3 { margin: 24px 0 12px; }
+  body:has(.erp-workspace) .ux-dialog__body > .access-checkboxes { padding: 12px; border-radius: 10px; background: #fff; }
+
+  body:has(.erp-workspace) .ux-dialog__body > .dialog-description { padding: 0 0 20px; margin: 0; font-size: 13px; }
+  body:has(.erp-workspace) :is(.dialog-header,.company-modal>header,.material-modal header,.sample-dialog>header,.drawer-header),
+  .ui-form .ux-dialog__header {
+    flex: 0 0 auto;
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    margin: 0;
+    padding: 16px 20px;
+    border-radius: 0;
+    background: var(--ui-header) !important;
+    color: #fff !important;
+    border-bottom: 1px solid #34566c;
+  }
+  body:has(.erp-workspace) :is(.dialog-header,.company-modal>header,.material-modal header,.sample-dialog>header,.drawer-header) :is(h2,h3,p,strong,small,span),
+  .ui-form .ux-dialog__header :is(h2,p) { color: #fff !important; margin: 0; }
+  body:has(.erp-workspace) :is(.dialog-header,.company-modal>header,.material-modal header,.sample-dialog>header,.drawer-header) h2 { font-size: 18px !important; line-height: 1.4; }
+  body:has(.erp-workspace) :is(.dialog-header,.company-modal>header,.material-modal header,.sample-dialog>header,.drawer-header) button { color: #fff !important; background: #27465e !important; border-color: #567286 !important; min-width: 44px; min-height: 44px; }
+  body:has(.erp-workspace) :is(.dialog-header,.company-modal>header,.material-modal header,.sample-dialog>header,.drawer-header) button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  body:has(.erp-workspace) :is(.ux-dialog__form>footer,.ux-dialog>footer,.material-dialog footer),
+  .ui-form .ux-dialog__footer {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    position: static;
+    gap: 12px;
+    margin: 0;
+    padding: 16px 20px;
+    border-top: 1px solid #e5e7eb;
+    background: #fff;
+    box-shadow: none;
+  }
+  body:has(.erp-workspace) .material-dialog { padding: 0; }
+  body:has(.erp-workspace) .material-modal-body { padding: 20px; background: #f7f8fa; }
+  /* Unconverted compact dialogs retain their native overflow/sticky footer. */
+  body:has(.erp-workspace) .sample-dialog:not(.ux-dialog)>footer { position: sticky; bottom: -28px; background: #fff; padding: 16px 20px; border-top: 1px solid #e5e7eb; }
+}
+/* New wrappers do not change existing narrow-screen flow or print layouts. */
+@media screen and (max-width: 1023px), print {
+  .ux-dialog__form, .ux-dialog__body { display: contents; }
+}
+@media print {
+  .ui-form .ui-actions, .ui-form .ux-dialog__footer { display: none; }
+  .ui-form .ui-form-card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+}

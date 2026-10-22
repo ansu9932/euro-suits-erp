@@ -1,0 +1,106 @@
+{
+  "checks": [
+    {
+      "name": "13px enquiry labels",
+      "pass": true
+    },
+    {
+      "name": "11px helper below input",
+      "pass": true
+    },
+    {
+      "name": "card 20px padding",
+      "pass": true
+    },
+    {
+      "name": "52 actual fields render",
+      "pass": true
+    },
+    {
+      "name": "dialog fits 1440",
+      "pass": true
+    },
+    {
+      "name": "body scrolls with stable actions 1440",
+      "pass": true
+    },
+    {
+      "name": "footer visible 1440",
+      "pass": true
+    },
+    {
+      "name": "dialog fits 1163",
+      "pass": true
+    },
+    {
+      "name": "body scrolls with stable actions 1163",
+      "pass": true
+    },
+    {
+      "name": "footer visible 1163",
+      "pass": true
+    },
+    {
+      "name": "blue focus border",
+      "pass": true
+    },
+    {
+      "name": "top-stacked wrapped label",
+      "pass": true
+    },
+    {
+      "name": "existing submit handler works",
+      "pass": true
+    },
+    {
+      "name": "user permission form body scrolls",
+      "pass": true
+    },
+    {
+      "name": "checkbox hit target and alignment",
+      "pass": true
+    },
+    {
+      "name": "password visibility preserved",
+      "pass": true
+    },
+    {
+      "name": "header close button contrasts",
+      "pass": true
+    },
+    {
+      "name": "native Escape closes user dialog",
+      "pass": true
+    },
+    {
+      "name": "sample body scroll and persistent actions",
+      "pass": true
+    },
+    {
+      "name": "sample add row preserves field values",
+      "pass": true
+    },
+    {
+      "name": "material form fits and actions visible",
+      "pass": true
+    },
+    {
+      "name": "small-screen wrapper remains transparent",
+      "pass": true
+    },
+    {
+      "name": "forced-color focus remains visible",
+      "pass": true
+    },
+    {
+      "name": "no API mutation attempted",
+      "pass": true
+    },
+    {
+      "name": "no runtime errors",
+      "pass": true
+    }
+  ],
+  "errors": [],
+  "writes": []
+}

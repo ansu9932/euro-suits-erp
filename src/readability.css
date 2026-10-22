@@ -1,5 +1,9 @@
+@import './lib/styles/global-forms/index.css';
+
+/* Existing small-screen presentation is retained. Desktop form rules live
+   in global-forms; do not add competing desktop overrides here. */
 /* Shared screen readability for office users; printed labels retain their dimensions. */
-@media screen {
+@media screen and (max-width: 1023px) {
  :root {font-size:16px !important;--muted:#506174;--text:#203246}
  body {font-weight:600;line-height:1.55}
  body :is(label,legend,th) {font-size:16px !important;font-weight:700 !important;line-height:1.5 !important}
@@ -25,7 +29,7 @@
 /* Soft field surfaces distinguish editable controls from the white page.
    BEM enterprise controls own their tokenized surfaces; all legacy controls
    keep this rule. :where() adds no specificity to the exception. */
-@media screen {
+@media screen and (max-width: 1023px) {
  body :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]):not([type=color]):not([type=submit]):not([type=button]),select,textarea):where(:not(.erp-form .erp-field__control)) {
   background-color:#eef5fa !important;
   color:#203246 !important;
@@ -50,7 +54,7 @@
  body :is(input[type=checkbox],input[type=radio]) {accent-color:#087f7c}
 }
 
-@media screen {
+@media screen and (max-width: 1023px) {
  body :is(label,legend) {color:#152536 !important}
  body :is(input,select,textarea) {color:#101e2c !important}
  body :is(input,textarea)::placeholder {color:#3b4b5c !important;opacity:1}
@@ -59,7 +63,7 @@
 }
 
 /* Compact, high-contrast ETF/ESF registration surface. */
-@media screen {
+@media screen and (max-width: 1023px) {
  body .material-dialog .material-modal-body {background:#eaf2ee}
  body .material-dialog :is(label,legend,input,select,textarea,p,td,li) {font-size:14px !important}
  body .material-dialog :is(small,.muted,.eyebrow,.material-helper) {font-size:12px !important}
@@ -70,20 +74,20 @@
 }
 
 /* Keep the form action visible throughout long forms. */
-@media screen {
+@media screen and (max-width: 1023px) {
  body .dialog-header {position:sticky;top:0;z-index:6;background:#eaf2ee;border-bottom:1px solid #bccdc5;padding:14px 24px}
  body .dialog-header h2, body .material-modal header h2 {font-size:18px !important;margin:0}
  body .material-modal header {position:sticky;top:0;z-index:6;background:#eaf2ee;padding:14px 24px}
  body .material-modal header .eyebrow {display:none}
 }
-@media screen {
+@media screen and (max-width: 1023px) {
  body .company-modal>header {position:sticky;top:0;z-index:6;background:#eaf2ee;padding:14px 24px;border-bottom:1px solid #bccdc5}
  body .company-modal>header h2 {font-size:18px !important;margin:0}
  body .company-modal>header .eyebrow {display:none}
 }
 
 /* Shared navy form title band. */
-@media screen {
+@media screen and (max-width: 1023px) {
  body :is(.sample-dialog>header,.dialog-header,.company-modal>header,.material-modal>header,.material-modal>form>header,.drawer-header) {
   background:#172b3e !important;
   color:#ffffff !important;

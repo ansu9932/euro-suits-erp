@@ -1,0 +1,9 @@
+/* Global desktop ERP form presentation. Existing routes adopt this through
+ * readability.css; no opt-in migration is needed. The .ui-* / .ux-dialog__*
+ * utilities expose the same patterns for new components.
+ * Scope: ERP shells and explicit .ui-form roots, excluding public marketing.
+ * Unlayered to interoperate with existing Svelte component styles. Only shared
+ * control properties use !important to override legacy scoped declarations.
+ */
+@import './forms.css';
+@import './dialogs.css';

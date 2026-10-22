@@ -1,0 +1,190 @@
+/* 1. Shared form tokens: navy/teal identity, quieter neutral field surfaces.
+ * Desktop-only is intentional. 44px preserves the existing target-size floor
+ * while meeting the requested min-height of 42px.
+ */
+@media screen and (min-width: 1024px) {
+  :root {
+    --ui-label: #1f2937;
+    --ui-help: #6b7280;
+    --ui-border: #d1d5db;
+    --ui-field: #f9fafb;
+    --ui-card: #fff;
+    --ui-focus: #2563eb;
+    --ui-focus-shadow: 0 0 0 3px rgb(37 99 235 / 15%);
+    --ui-primary: #087e78;
+    --ui-primary-hover: #06635e;
+    --ui-header: #142b40;
+    --ui-radius: 10px;
+    --ui-card-space: 20px;
+    --ui-section-gap: 24px;
+    --ui-card-shadow: 0 2px 8px rgb(0 0 0 / 6%);
+    --ui-target: 44px;
+  }
+
+  /* GROUPS. Reuse existing semantic sections; never wrap every individual
+     field in a card. Repeating rows/grids retain their native layout. */
+  body:has(.erp-workspace,.login-layout) :is(.company-section,.dev-section,.detail-card,.ex-section,.record-section,.material-section,.drawer-section,.ui-form-card),
+  .ui-form .ui-form-card {
+    min-width: 0;
+    padding: var(--ui-card-space);
+    margin-block: 0 var(--ui-section-gap);
+    border: 0;
+    border-radius: var(--ui-radius);
+    background: var(--ui-card);
+    box-shadow: var(--ui-card-shadow);
+  }
+  body:has(.erp-workspace,.login-layout) :is(.detail-card,.material-section) :is(.detail-card,.material-section) {
+    background: #f9fafb;
+    box-shadow: none;
+    border: 1px solid #e5e7eb;
+  }
+  body:has(.erp-workspace,.login-layout) :is(.form-grid,.company-form-grid,.enquiry-grid,.ex-grid),
+  .ui-form .ui-form-grid {
+    gap: 20px;
+    align-items: start;
+    min-width: 0;
+  }
+  .ui-form .ui-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .ui-form .ui-form-grid__wide { grid-column: 1 / -1; }
+
+  /* LABELS. Text fields stack; checkbox/radio labels and upload buttons keep
+     their native inline interaction. Nested prefix/option controls stay rows. */
+  body:has(.erp-workspace,.login-layout) label,
+  body:has(.erp-workspace,.login-layout) legend,
+  .ui-form :is(label,legend) {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.5 !important;
+    color: var(--ui-label) !important;
+  }
+  body:has(.erp-workspace,.login-layout) label:has(input,select,textarea):where(:not(:has(input[type="checkbox"],input[type="radio"]))):where(:not(.button,.ex-upload-label,.erp-choice)),
+  .ui-form .ui-field {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-width: 0;
+    text-align: start;
+  }
+  /* Separate labels already use their field parent's 6px gap. A wrapped
+     label uses gap rather than margin so helper text also gets equal space. */
+  body:has(.erp-workspace,.login-layout) :is(.enquiry-field,.ex-field) { gap: 6px; }
+  body:has(.erp-workspace,.login-layout) .ex-caption { font-size: 13px !important; font-weight: 600 !important; }
+  body:has(.erp-workspace,.login-layout) label > span:where(:not(.required,.ex-required,.material-required,.badge,.erp-badge)) {
+    font-size: 13px;
+    font-weight: 600;
+    color: inherit;
+    margin: 0;
+  }
+  body:has(.erp-workspace,.login-layout) :is(label > small,.enquiry-field > small,.ex-field > small,.checkbox-field > small,.material-helper,.ui-help),
+  .ui-form .ui-help {
+    display: block;
+    margin: 0;
+    font-size: 11px !important;
+    font-weight: 400 !important;
+    line-height: 1.6 !important;
+    color: var(--ui-help) !important;
+    overflow-wrap: anywhere;
+  }
+
+  /* CONTROLS. :where() prevents the old specificity escalation from multiple
+     :not([type]) terms. Do not style file/hidden/checkbox inputs as text fields. */
+  body:has(.erp-workspace,.login-layout) :is(input:where(:not([type="checkbox"],[type="radio"],[type="hidden"],[type="range"],[type="color"],[type="file"],[type="submit"],[type="button"])),select,textarea),
+  .ui-form .ui-control {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    min-height: var(--ui-target);
+    padding: 10px 12px;
+    margin-block-start: 0;
+    font: 400 14px/1.5 'DM Sans','Segoe UI',sans-serif !important;
+    color: #1f2937 !important;
+    background: var(--ui-field) !important;
+    border: 1px solid var(--ui-border) !important;
+    border-radius: 8px;
+    box-shadow: none;
+    transition: border-color 160ms, box-shadow 160ms, background-color 160ms;
+    scroll-margin-block: 140px;
+  }
+  body:has(.erp-workspace,.login-layout) label > :is(input:where(:not([type="checkbox"],[type="radio"])),select,textarea),
+  .ui-form .ui-control { width: 100%; }
+  body:has(.erp-workspace,.login-layout) textarea { min-height: 96px; resize: vertical; }
+  body:has(.erp-workspace,.login-layout) :is(input,textarea)::placeholder { color: var(--ui-help) !important; opacity: 1; font-weight: 400; }
+  body:has(.erp-workspace,.login-layout) :is(input,select,textarea):where(:not([type="checkbox"],[type="radio"])):focus,
+  .ui-form .ui-control:focus {
+    outline: none !important;
+    border-color: var(--ui-focus) !important;
+    background: #fff !important;
+    box-shadow: var(--ui-focus-shadow) !important;
+  }
+  body:has(.erp-workspace,.login-layout) :is(input,select,textarea):is(:disabled,[readonly]),
+  .ui-form .ui-control:is(:disabled,[readonly]) {
+    background: #f3f4f6 !important;
+    color: #4b5563 !important;
+    border-color: var(--ui-border) !important;
+  }
+  body:has(.erp-workspace,.login-layout) :is(input,select,textarea):disabled { cursor: not-allowed; }
+  body:has(.erp-workspace,.login-layout) :is(input,select,textarea)[aria-invalid="true"],
+  .ui-form .ui-control[aria-invalid="true"] { border-color: #b42318 !important; background: #fff6f5 !important; }
+
+  /* CHECKBOXES. The label is the full hit target, not just the small square. */
+  body:has(.erp-workspace,.login-layout) label:has(input:is([type="checkbox"],[type="radio"])),
+  .ui-form .ui-choice {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px !important;
+    min-width: var(--ui-target);
+    min-height: var(--ui-target);
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+  body:has(.erp-workspace,.login-layout) label:has(input:disabled) { cursor: default; }
+  body:has(.erp-workspace,.login-layout) input:is([type="checkbox"],[type="radio"]),
+  .ui-form .ui-choice > input {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    min-height: 18px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--ui-primary);
+  }
+  body:has(.erp-workspace,.login-layout) label:has(input:is([type="checkbox"],[type="radio"]):focus-visible),
+  .ui-form .ui-choice:focus-within { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+  body:has(.erp-workspace,.login-layout) :is(.access-checkboxes,.checkbox-grid) { gap: 8px 16px; }
+  body:has(.erp-workspace,.login-layout) :is(.checkbox-option,.inline-check,.feature-option):has(input:checked) { background: #edf7f4; border-color: #9bc4b9; }
+
+  /* ACTIONS. Teal is the existing primary brand. Focus blue is reserved for
+     navigation feedback. Busy/disabled behavior remains in the components. */
+  body:has(.erp-workspace,.login-layout) :is(.button,.ex-button,.ui-button),
+  .ui-form .ui-button { min-height: var(--ui-target); min-width: var(--ui-target); padding: 10px 16px; border-radius: 8px; font-size: 13px !important; font-weight: 600 !important; }
+  body:has(.erp-workspace,.login-layout) :is(.button.primary,.ex-button.primary),
+  .ui-form .ui-button--primary { background: var(--ui-primary); color: #fff; border: 1px solid var(--ui-primary); }
+  body:has(.erp-workspace,.login-layout) :is(.button.primary,.ex-button.primary):hover:not(:disabled),
+  .ui-form .ui-button--primary:hover:not(:disabled) { background: var(--ui-primary-hover); }
+  body:has(.erp-workspace,.login-layout) :is(.button.secondary,.ex-button.secondary),
+  .ui-form .ui-button--secondary { background: #fff; color: #334155; border: 1px solid var(--ui-border); }
+  body:has(.erp-workspace,.login-layout) :is(.editor-footer,.ex-task-footer,.company-actionbar,.ui-actions),
+  .ui-form .ui-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 20px; background: #fff; border-top: 1px solid #e5e7eb; }
+  .ui-form .ui-actions--sticky { position: sticky; bottom: 0; z-index: 5; }
+  /* New BEM forms also follow the latest top-stacked preference in ERP shells. */
+  body:has(.erp-workspace,.login-layout) .erp-field--floating > .erp-field__label { position: static; order: -1; transform: none; padding: 0; background: transparent; }
+  body:has(.erp-workspace,.login-layout) .erp-field--floating { padding-top: 0; }
+  body:has(.erp-workspace,.login-layout) .erp-field--floating > .erp-field__control { min-height: var(--ui-target); padding: 10px 12px; }
+}
+
+@media screen and (min-width: 1024px) and (prefers-contrast: more) {
+  body:has(.erp-workspace,.login-layout) :is(input,select,textarea):focus,
+  .ui-form .ui-control:focus { outline: 2px solid #1d4ed8 !important; outline-offset: 2px; }
+}
+@media (forced-colors: active) {
+  body:has(.erp-workspace,.login-layout) :is(input,select,textarea):focus,
+  .ui-form .ui-control:focus { outline: 2px solid Highlight !important; outline-offset: 2px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body:has(.erp-workspace,.login-layout) :is(input,select,textarea), .ui-form .ui-control { transition: none !important; }
+}

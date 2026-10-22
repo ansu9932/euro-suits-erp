@@ -13,10 +13,11 @@
  function roleChanged(){if(spec.permissionsByRole)values.permissions=[...(spec.permissionsByRole[values.role]||[])];}
  async function submit(e:SubmitEvent){e.preventDefault();if(busy)return;error='';for(const f of spec.fields){if(f.type==='multiselect'&&visible(f.key)&&f.required!==false&&!values[f.key]?.length){error='Select at least one '+f.label.toLowerCase()+'.';return;}}busy=true;try{await spec.submit(values);onclose();}catch(e){error=(e as Error).message;}finally{busy=false;}}
 </script>
-<dialog bind:this={dialog} class="form-dialog" oncancel={(e)=>{if(busy)e.preventDefault();else onclose();}}>
+<dialog bind:this={dialog} class="form-dialog ux-dialog" oncancel={(e)=>{if(busy)e.preventDefault();else onclose();}}>
  <div class="dialog-header"><div><h2>{spec.title}</h2></div><button type="button" class="icon-button" aria-label="Close form" onclick={onclose} disabled={busy}><X size={20}/></button></div>
- {#if spec.description}<p class="dialog-description">{spec.description}</p>{/if}
- <form onsubmit={submit}>
+ <form class="ux-dialog__form" onsubmit={submit}>
+  <div class="ux-dialog__body">
+{#if spec.description}<p class="dialog-description">{spec.description}</p>{/if}
   <div class="form-grid">
   {#each spec.fields as f}
    {#if visible(f.key)}
@@ -31,6 +32,7 @@
   {/each}
   </div>
   {#if error}<p class="form-error" role="alert">{error}</p>{/if}
+  </div>
   <footer class="dialog-footer"><button type="button" class="button secondary" onclick={onclose} disabled={busy}>Cancel</button><button class="button primary" disabled={busy}>{#if busy}<LoaderCircle size={16} class="spin"/>{/if}{busy?'Saving…':spec.submitLabel||'Save record'}</button></footer>
  </form>
 </dialog>
