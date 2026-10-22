@@ -17,7 +17,7 @@ This applies to existing classes automatically. It is distinct from the earlier 
 
 13px/600 dark labels; 6px label/control spacing; 11px/400 helper text in #6b7280; 14px input values; 44px minimum controls (retains the existing target floor while exceeding the requested 42px). Textareas remain vertically resizable. Borders use #d1d5db; focus uses #2563eb with a translucent 3px ring. High/forced contrast retains an explicit outline. Required/status text and readonly/disabled/error states remain distinct.
 
-Existing semantic sections use white cards, 10px corners, 20px padding, 24px separation and 0 2px 8px rgb(0 0 0 / 6%) elevation. Long form groups receive a card as a group, not one card per field. Checkbox/radio labels remain horizontal with 44px targets. Matrix/table input layout and prefix/select-action rows remain intact.
+Existing semantic sections use white cards, 10px corners, 16px padding, 16px separation and 0 2px 8px rgb(0 0 0 / 6%) elevation. Field grids use 12px row / 16px column gaps and preserve source order. Modal bodies use one 16px inset: direct grids have no second card padding. First/last child margins are trimmed; helper paragraphs use the grid gap. Header/footer padding is 12px 16px. Short dialogs shrink to content. Checkbox/radio labels remain horizontal with 44px targets. Matrix/table input layout and prefix/select-action rows remain intact.
 
 Dialog width is at most 800px with viewport gutters; compact dialogs remain at most 560px. The native dialog itself does not scroll for converted forms: only the body scrolls, leaving header/actions visible. The existing navy header and teal primary actions remain. Secondary actions use white surfaces and neutral outlines. The sample buyer-message instructions were moved from its placeholder into associated helper text beneath the textarea; wording is unchanged.
 
@@ -53,11 +53,11 @@ For a native dialog use `dialog.ux-dialog`, its header, then `form.ux-dialog__fo
 ## Validation
 
 - Inspected existing shared CSS, component structure and actual desktop dialogs before replacing competing styles.
-- 25 isolated Chromium checks passed using actual FormDialog, SetupUsers, EnquiryFields, SampleWorkspace and MaterialWorkspace components with synthetic API responses. Verified 1440/1163px sizing, top-stacked labels, helper placement, blue focus, internal scrolling, visible actions, checkbox targets, native Escape, password visibility, sample row addition/value preservation and an in-memory generic submit.
+- 33 isolated Chromium checks passed using actual FormDialog, SetupUsers, EnquiryFields, SampleWorkspace and MaterialWorkspace components with synthetic API responses. Verified 1440/1163px sizing, top-stacked labels, helper placement, blue focus, compact padding/gaps, short-form height, internal scrolling, visible actions, checkbox targets, native Escape, password visibility, sample row addition/value preservation and an in-memory generic submit.
 - No API writes were attempted. No live accounts, records or messaging used. All five affected script blocks are identical to HEAD.
 - 768px check verifies the new wrapper does not alter the existing small-screen flow. It is not a mobile redesign or full mobile regression certification.
 - High-contrast keyboard focus and reduced-motion rules retained. Impeccable mechanical scan: no findings.
-- Full existing frontend suite: 99/100 passed. The receipt-array identity assertion is the previously recorded baseline failure; it remains outside this styling change.
+- Prior release full frontend suite: 99/100 passed (not rerun for this CSS-only spacing follow-up). The receipt-array identity assertion is the previously recorded baseline failure; it remains outside this styling change.
 - No full accessibility certification or signed-in production-user walkthrough is claimed. Production deployment and served CSS verification are recorded separately.
 
 Builds use an isolated HEAD copy plus only the requested changes, preserving the unrelated local deletion of src/app.html and untracked .impeccable. The review route and local dev configuration are never committed or deployed. Roll back this frontend release only; no database restore or backend deployment is required.

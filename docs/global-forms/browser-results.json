@@ -9,7 +9,23 @@
       "pass": true
     },
     {
-      "name": "card 20px padding",
+      "name": "card 16px padding",
+      "pass": true
+    },
+    {
+      "name": "body has one 16px inset",
+      "pass": true
+    },
+    {
+      "name": "grid has no doubled inset or trailing margin",
+      "pass": true
+    },
+    {
+      "name": "compact two-column grid",
+      "pass": true
+    },
+    {
+      "name": "compact footer inset",
       "pass": true
     },
     {
@@ -57,6 +73,14 @@
       "pass": true
     },
     {
+      "name": "permission groups have 12px margins",
+      "pass": true
+    },
+    {
+      "name": "grid helper paragraph has no extra margins",
+      "pass": true
+    },
+    {
       "name": "checkbox hit target and alignment",
       "pass": true
     },
@@ -82,6 +106,14 @@
     },
     {
       "name": "material form fits and actions visible",
+      "pass": true
+    },
+    {
+      "name": "short form has no forced body height",
+      "pass": true
+    },
+    {
+      "name": "short form has one bottom inset",
       "pass": true
     },
     {
