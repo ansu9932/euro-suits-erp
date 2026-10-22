@@ -54,3 +54,7 @@ Existing dashboard Spooly opens a compact, nonmodal task guide. Guides are filte
 ## Multiple reporting managers — 22 October 2026
 
 Add User / Edit access supports multiple Reports to selections. The Users register and organisation tree display all assigned managers. Backend schema 27 preserves existing single assignments, validates every manager and prevents reporting cycles under the existing user-write lock. Employee replacement retains other reporting managers; deletion/deactivation guards cover every reporting link. Reporting relationships never grant additional record or feature access. See docs/multiple-reporting-managers/README.md for compatibility and validation boundaries.
+
+## Spooly free chat — 22 October 2026
+
+Spooly retains local guide search and adds a separate Chat mode for short public, non-confidential questions and follow-ups. Sending shares the typed question, up to three recent exchanges and permitted static guides with Gemini; it does not read ERP records or files. The send disclosure explains free-tier data use. Common sensitive patterns are blocked before provider calls, but this is not a guarantee that arbitrary text is non-confidential. Chat is not stored in the database or shared explanation cache. Existing permissions, CSRF, duplicate-click and free provider limits remain. The user explicitly chose to keep billing unlinked: live Search/Maps is unavailable, and nearest-location/verified port-code questions must not be presented as verified answers. See docs/spooly-chat/README.md.

@@ -1,5 +1,5 @@
 export type HelpGuide = {id:string;module:string;title:string;keywords:string;steps:string[];url?:string};
-export type HelpContext = {guides:HelpGuide[];ai_available:boolean;languages:string[]};
+export type HelpContext = {guides:HelpGuide[];ai_available:boolean;chat_available?:boolean;live_lookup_available?:boolean;chat_privacy?:string;languages:string[]};
 export type HelpReply = {topic:string;steps:string[];source:'guide'|'gemini';explanation:string;notice:string};
 
 const aliases:Record<string,string>={inovice:'invoice',ivoice:'invoice',invoic:'invoice',comany:'company',recipt:'receipt',recip:'receipt',banking:'bank',ebrc:'ebrc',jv:'jv',gst:'gst'};
@@ -13,4 +13,11 @@ export function findHelp(guides:HelpGuide[],query:string,context:string):HelpGui
   const hits=tokens.reduce((score,word)=>score+(haystack.some(term=>term===word||term.startsWith(word))?1:0),0);
   return {guide,index,score:tokens.length?hits*10:(guide.module===preferred?3:guide.module==='general'?2:1)};
  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.index-b.index).map(x=>x.guide);
+}
+
+export type ChatReply = {answer:string;kind:'answer'|'live_lookup'|'private_input'|'records_unavailable'|'unavailable';guides:HelpGuide[]};
+export type ChatExchange = {question:string;reply:ChatReply};
+// Only complete, non-sensitive exchanges form the next request; never persist.
+export function chatHistory(exchanges:ChatExchange[]):{role:'user'|'assistant';text:string}[]{
+ return exchanges.filter(x=>['answer','live_lookup','records_unavailable'].includes(x.reply.kind)).slice(-3).flatMap(x=>[{role:'user' as const,text:x.question},{role:'assistant' as const,text:x.reply.answer}]);
 }
