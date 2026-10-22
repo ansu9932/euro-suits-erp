@@ -50,3 +50,7 @@ Invoice date is distinct from export date. Our remittance reference is distinct 
 ## Spooly task guidance — 18 October 2026
 
 Existing dashboard Spooly opens a compact, nonmodal task guide. Guides are filtered by effective permissions. Search stays in the browser; optional English/Hindi/Kannada/Bengali explanations send only reviewed static help to the server-side Gemini free-tier connection. No business records, documents, identities or user-entered prompts go to Google. AI cannot create, approve, unlock or change ERP data. Provider limits/failures retain verified guidance. Editing forms keeps a compact help control; links open a separate tab and preserve drafts. Existing mascot preferences, reduced motion and cleanup remain.
+
+## Multiple reporting managers — 22 October 2026
+
+Add User / Edit access supports multiple Reports to selections. The Users register and organisation tree display all assigned managers. Backend schema 27 preserves existing single assignments, validates every manager and prevents reporting cycles under the existing user-write lock. Employee replacement retains other reporting managers; deletion/deactivation guards cover every reporting link. Reporting relationships never grant additional record or feature access. See docs/multiple-reporting-managers/README.md for compatibility and validation boundaries.
