@@ -77,7 +77,30 @@
     background: #fff;
     box-shadow: none;
   }
-  body:has(.erp-workspace) .material-dialog { padding: 0; }
+  /* Material registration is a full desktop workspace. Keep its native
+     modal focus/Escape behavior and only scroll the middle content area. */
+  body:has(.erp-workspace) dialog.material-dialog {
+    inset: 0;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  body:has(.erp-workspace) .material-dialog > form { height: 100%; max-height: none; }
+  body:has(.erp-workspace) .material-dialog .material-modal-body { flex: 1 1 auto; }
+  /* A label title wraps its required mark, so it cannot become a flex row. */
+  body:has(.erp-workspace) .material-field-title { display: block; }
+  body:has(.erp-workspace) .material-dialog label > :is(input,select,textarea) { margin-top: 0; }
+  body:has(.erp-workspace) .material-field-title .material-required { display: inline; }
+  body:has(.erp-workspace) .material-dialog .material-section > h3 { margin: 0 0 12px; }
+  body:has(.erp-workspace) .material-dialog .material-helper { margin-block: 8px 12px; }
+  @media (min-width: 1280px) {
+    body:has(.erp-workspace) .material-dialog .material-section .company-form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
   body:has(.erp-workspace) .material-modal-body { padding: 16px; background: #fff; }
   /* Unconverted compact dialogs retain their native overflow/sticky footer. */
   body:has(.erp-workspace) .sample-dialog:not(.ux-dialog)>footer { position: sticky; bottom: -28px; background: #fff; padding: 12px 16px; border-top: 1px solid #e5e7eb; }

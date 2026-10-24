@@ -58,3 +58,8 @@ Add User / Edit access supports multiple Reports to selections. The Users regist
 ## Spooly free chat — 22 October 2026
 
 Spooly retains local guide search and adds a separate Chat mode for short public, non-confidential questions and follow-ups. Sending shares the typed question, up to three recent exchanges and permitted static guides with Gemini; it does not read ERP records or files. The send disclosure explains free-tier data use. Common sensitive patterns are blocked before provider calls, but this is not a guarantee that arbitrary text is non-confidential. Chat is not stored in the database or shared explanation cache. Existing permissions, CSRF, duplicate-click and free provider limits remain. The user explicitly chose to keep billing unlinked: live Search/Maps is unavailable, and nearest-location/verified port-code questions must not be presented as verified answers. See docs/spooly-chat/README.md.
+
+
+## Material registration — 24 October 2026
+
+Fabric and trim registration/editing fill the desktop viewport (1024px+), keeping the navy heading and actions visible while the body scrolls. Required marks stay beside field titles; 12px row gaps and two/three columns remove excess space without changing field order. India generates ESF references and Dubai generates ETF for both material kinds. Existing references and barcodes stay unchanged, including historical ESTR/ETTR and entered legacy fabric references. Stored origin values remain India/Dubai. Supplier, company and feature permissions, version checks and audit history remain server-enforced.
