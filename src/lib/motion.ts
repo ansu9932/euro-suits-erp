@@ -116,3 +116,28 @@ export function workspaceMotion(node: HTMLElement, key: unknown = '') {
   destroy() { cancelAnimationFrame(frame); scope?.revert(); }
  };
 }
+
+// A changed registration origin changes the proposed ESF/ETF prefix. A single
+// short surface highlight connects those two facts without moving any fields.
+// Initial render/typing do not replay it; text is always visible without motion.
+export function referenceFeedback(node: HTMLElement, key: unknown) {
+ const preference = window.matchMedia('(prefers-reduced-motion: reduce), (forced-colors: active)');
+ let animation: ReturnType<typeof animate> | undefined;
+ const stop = () => { animation?.revert(); animation = undefined; };
+ const changed = () => { if (preference.matches) stop(); };
+ preference.addEventListener('change', changed);
+ return {
+  update(next: unknown) {
+   if (next === key) return;
+   key = next;
+   stop();
+   if (preference.matches) return;
+   animation = animate(node, {
+    backgroundColor: ['#d9eee8', getComputedStyle(node).backgroundColor],
+    duration: 280, ease: 'outCubic',
+    onComplete: instance => { instance.revert(); animation = undefined; }
+   });
+  },
+  destroy() { stop(); preference.removeEventListener('change', changed); }
+ };
+}

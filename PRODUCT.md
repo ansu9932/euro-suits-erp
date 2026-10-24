@@ -63,3 +63,8 @@ Spooly retains local guide search and adds a separate Chat mode for short public
 ## Material registration — 24 October 2026
 
 Fabric and trim registration/editing fill the desktop viewport (1024px+), keeping the navy heading and actions visible while the body scrolls. Required marks stay beside field titles; 12px row gaps and two/three columns remove excess space without changing field order. India generates ESF references and Dubai generates ETF for both material kinds. Existing references and barcodes stay unchanged, including historical ESTR/ETTR and entered legacy fabric references. Stored origin values remain India/Dubai. Supplier, company and feature permissions, version checks and audit history remain server-enforced.
+
+
+## Material form motion — 24 October 2026
+
+The existing Anime.js helper provides a 200ms content entrance under stationary material dialog heading/actions and a brief validation-error entrance. Changing registration origin highlights the ESF/ETF preview for 280ms; typing and initial preview rendering do not replay this highlight. Reduced motion disables these effects; forced colors disables the preview highlight. Animation styles/listeners are cleaned up on completion, interruption and unmount. Form fields, dimensions, native modal behavior, duplicate-click locks and business actions remain immediate.
