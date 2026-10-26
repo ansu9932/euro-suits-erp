@@ -1,0 +1,28 @@
+/* A clear, sky-lit entrance to the existing garment workflow. */
+.es-site {--grey:#526174;--paper:#fff;background:#fff}
+.es-site :is(h1,h2,h3){letter-spacing:-.03em}
+.es-site .es-nav {height:80px;background:#fff;border-bottom:1px solid #e0e7ee;backdrop-filter:none;gap:24px}
+.es-site .es-nav nav{gap:28px}
+.es-site .es-nav nav a{color:#40546a;font-size:14px}
+.es-site .es-nav-login{background:#142b40;color:#fff;border-radius:8px;min-height:44px;white-space:nowrap}
+.es-site .es-hero {max-width:none;min-height:680px;padding:56px max(5%,calc((100vw - 1400px)/2)) 88px;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:32px;overflow:hidden}
+.es-site .es-hero-copy{padding:0;min-width:0;max-width:720px}
+.es-site .es-hero h1{font-size:clamp(42px,4.9vw,76px);letter-spacing:-.035em;line-height:1.1;font-weight:700;text-wrap:balance}
+.es-site .es-hero h1 span{color:#075f60}
+.es-site .es-lead{max-width:48ch;color:#354f65;font-size:17px!important;line-height:1.65!important;margin:24px 0}
+.es-site .es-btn{border-radius:8px;font-size:14px;font-weight:600;gap:14px}
+.es-site .es-secondary{background:#fff;border-color:#bacbd8}
+.es-site .es-sculpture{height:510px;max-height:none;margin:0;min-width:0}
+.es-site .es-model-caption{font:12px/1.5 'Manrope',sans-serif;letter-spacing:0;color:#40546a;bottom:0;white-space:normal;text-align:center;width:100%}
+.es-site .es-hero-teams{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:28px;max-width:440px;color:#40546a;font-size:12px;font-weight:600}
+.es-site .es-hero-foot{left:5%;right:5%;bottom:22px;color:#40546a;font:11px/1.5 'Manrope',sans-serif;letter-spacing:.04em;gap:20px;flex-wrap:wrap}
+.es-site .es-motion{color:#40546a;font:12px/1.5 'Manrope',sans-serif!important}
+.es-site .es-threads{display:none}
+.es-site .brand-caption{color:#526174;letter-spacing:.14em}
+@media(max-width:1100px){.es-site .es-nav nav{gap:16px}.es-site .es-hero{min-height:600px;gap:20px}.es-site .es-sculpture{height:440px}}
+@media(max-width:900px){.es-site .es-nav{padding:0 24px}.es-site .es-nav nav{gap:12px}.es-site .es-nav nav a{font-size:12px}.es-site .es-hero{padding-top:40px;padding-bottom:110px}.es-site .es-sculpture{height:360px}.es-site .es-hero h1{font-size:44px}}
+@media(max-width:700px){.es-site .es-nav{height:72px;gap:12px;padding:0 18px}.es-site .es-hero{grid-template-columns:1fr;padding:40px 24px 110px;gap:16px}.es-site .es-hero h1{font-size:clamp(38px,10vw,52px)}.es-site .es-hero-copy{max-width:560px}.es-site .es-sculpture{height:330px;max-width:460px;width:100%;justify-self:center}.es-site .es-hero-foot{font-size:10px;gap:8px 16px}.es-site .es-hero-foot>a{display:none}.es-site .es-lead{font-size:16px!important}.es-site .es-actions{gap:10px}.es-site .es-actions .es-btn{padding:12px 16px}.es-site .es-model-caption{bottom:0}}
+@media(prefers-reduced-motion:reduce){.es-site .es-btn:hover{transform:none}}
+/* Header colors are explicit: legacy shared header rules use white text. */
+body .es-site .es-nav :is(.es-brand,.es-menu){color:#142b40!important}
+body .es-site .es-nav .es-nav-login{color:#fff!important}

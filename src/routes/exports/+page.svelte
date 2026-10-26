@@ -1,4 +1,5 @@
 <script lang="ts">
+ import SignInShell from '$lib/SignInShell.svelte';
  import {onMount} from 'svelte';
  import {ArrowLeft, LockKeyhole, LogOut} from '@lucide/svelte';
  import {api} from '$lib/api';
@@ -39,10 +40,7 @@
 {#if !ready}
  <main class="loading-screen"><img src="/logo.png" alt="Euro Suits"/><p>Opening Export Documentation…</p></main>
 {:else if !user}
- <main class="login-layout">
-  <section class="login-brand"><div class="login-brand-name"><img src="/logo.png" alt="Euro Suits logo"/><span>EURO SUITS</span></div><div><h1>Every shipment.<br/>Every receipt.<br/><span>One record.</span></h1><p>Export documentation and outstanding balances.</p></div><small>EURO SUITS OPERATIONS</small></section>
-  <section class="login-panel"><div class="login-form-wrap" use:enter><span class="login-symbol"><LockKeyhole size={24}/></span><h1>Export Documentation</h1><p class="muted">Sign in with your assigned ERP account.</p><SignInForm portal="" onauthenticated={signedIn}/>{#if error}<p class="form-error" role="alert">{error}</p>{/if}</div></section>
- </main>
+ <SignInShell title="Export Documentation" description="Sign in with your assigned ERP account."><SignInForm portal="" onauthenticated={signedIn}/>{#if error}<p class="form-error" role="alert">{error}</p>{/if}</SignInShell>
 {:else}
  <div class="export-shell erp-workspace">
   <a class="workspace-skip" href="#export-content">Skip to export workspace</a>

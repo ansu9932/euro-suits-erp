@@ -4,7 +4,7 @@ Internal garment manufacturing ERP for office teams: Finance, Merchandising, Sou
 
 ## Confirmed interface constraints
 
-- Desktop and tablet are the current supported design targets.
+- Desktop is the current design and verification target (user confirmed 26 October 2026). Preserve existing smaller-screen behavior; do not expand phone design scope.
 - Preserve navy/teal identity, navy form headers with white text, dark readable field labels and soft field backgrounds.
 - Keep task forms together with a clear, persistent task heading and save/cancel controls. Use the workspace company implicitly.
 - Reuse shared UI and Anime.js motion helpers, respect reduced motion and clean up animations. Business actions must remain immediate.
@@ -68,3 +68,10 @@ Fabric and trim registration/editing fill the desktop viewport (1024px+), keepin
 ## Material form motion — 24 October 2026
 
 The existing Anime.js helper provides a 200ms content entrance under stationary material dialog heading/actions and a brief validation-error entrance. Changing registration origin highlights the ESF/ETF preview for 280ms; typing and initial preview rendering do not replay this highlight. Reduced motion disables these effects; forced colors disables the preview highlight. Animation styles/listeners are cleaned up on completion, interruption and unmount. Form fields, dimensions, native modal behavior, duplicate-click locks and business actions remain immediate.
+
+
+## Clean desktop workspace and sky entrance — 26 October 2026
+
+Shared workspace presentation uses white navigation/cards, dark navy text, teal selected items/actions, explicit focus outlines and compact readable controls. Sign-in routes share SignInShell while the existing SignInForm continues to own password, verification, OTP, busy and error behavior. The public hero retains its garment model and existing workflow links with simpler typography and uncrowded team labels.
+
+Login and hero share an original local CSS sky background. A decorative cyan/warm pointer light fades in through the existing Anime.js helper, schedules at most one coordinate update per frame, and cannot intercept interaction. Reduced motion, forced colors and coarse pointers disable it; the hero pause control, document visibility and component destruction stop it. No external background requests or additional tracking are introduced. Existing account permissions, record workflows and desktop form contracts are unchanged.

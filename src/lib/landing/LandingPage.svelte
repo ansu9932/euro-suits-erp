@@ -4,12 +4,15 @@
  import {ArrowUpRight,ArrowRight,ArrowDown,Pause,Play,Menu,X,Layers,Check,Scissors,Package,Shirt,Workflow,LockKeyhole} from '@lucide/svelte';
  import '@fontsource/manrope/400.css';import '@fontsource/manrope/500.css';import '@fontsource/manrope/600.css';import '@fontsource/manrope/700.css';import '@fontsource/manrope/800.css';
  import GarmentScene from './GarmentScene.svelte';
+ import SkyBackdrop from '../SkyBackdrop.svelte';
+ import {skyLight} from '../motion';
  import BlazerStory from './BlazerStory.svelte';
  import WorkflowStory from './WorkflowStory.svelte';
  import AIAnnouncement from './AIAnnouncement.svelte';
  import './landing.css';
  import './story.css';
  import './motion.css';
+ import './clean-hero.css';
  let root:HTMLElement,paused=$state(false),menu=$state(false);
  const stages=[
   {name:'Company & sourcing',short:'Source',owner:'FINANCE · SOURCING',heading:'Start with the right foundation.',text:'Register companies, buyers and suppliers. Build a fabric library with ETF / ESF references, specifications and swatch photographs.',items:['Company review & approval','Supplier and material masters','Fabric references & sample photos'],next:'A shared, approved foundation for the teams that follow.',icon:Layers},
@@ -55,19 +58,18 @@
   <button class="es-menu" aria-label={menu?'Close navigation':'Open navigation'} aria-expanded={menu} onclick={()=>menu=!menu}>{#if menu}<X size={22}/>{:else}<Menu size={22}/>{/if}</button>
  </header>
  <main id="main">
-  <section class="es-hero" aria-labelledby="hero-title">
+  <section class="es-hero" aria-labelledby="hero-title" use:skyLight={paused}>
+   <SkyBackdrop/>
    <div class="es-threads" aria-hidden="true"><svg viewBox="0 0 1600 800" preserveAspectRatio="none"><path d="M-100 155C400 30 540 440 1010 180S1490 160 1700 90M-100 240C460 185 450 350 940 270S1400 -30 1700 195M-100 630C260 720 450 590 920 620S1360 300 1700 580M-100 740C450 500 680 880 1110 710S1430 530 1700 690"/></svg></div>
    <div class="es-hero-copy">
-    <div class="es-kicker hero-reveal"><span class="es-dot"></span> PRECISION IN EVERY PROCESS</div>
-    <h1 id="hero-title" class="hero-reveal">Every thread.<br/><span>One connected</span><br/>workflow.</h1>
+    <h1 id="hero-title" class="hero-reveal">Every thread.<br/><span>One connected workflow.</span></h1>
     <p class="es-lead hero-reveal">From the first fabric swatch to the final dispatch. Bring people, production and progress together with Euro Suits ERP.</p>
     <div class="es-actions hero-reveal"><a class="es-btn es-primary" href="/signin">Enter your workspace <ArrowUpRight size={18}/></a><a class="es-btn es-secondary" href="#blazer">Explore the blazer <ArrowDown size={17}/></a></div>
-    <div class="es-micro hero-reveal">DESIGNED FOR GARMENTS. BUILT AROUND PEOPLE.</div>
+    <div class="es-hero-teams hero-reveal" aria-label="Connected teams">{#each orbital as o}<span>{o.label.charAt(0)+o.label.slice(1).toLowerCase()}</span>{/each}</div>
    </div>
    <div class="es-sculpture">
     <GarmentScene {paused}/>
-    {#each orbital as o,i}<div class="es-orb-label" style={`--x:${o.x}%;--y:${o.y}%`}><span class="es-orb-dot"></span><div><span class="es-orb-num">0{i+1}</span><strong>{o.label}</strong><span>{o.sub}</span></div></div>{/each}
-    <div class="es-model-caption">FIG. 01 / THE CONNECTED GARMENT</div>
+    <div class="es-model-caption">From fabric to finished garment</div>
    </div>
    <div class="es-hero-foot"><span>SUITS · TROUSERS · SHIRTS</span><a href="#about">SCROLL TO DISCOVER <ArrowDown size={14}/></a><button class="es-motion" onclick={()=>paused=!paused} aria-pressed={paused}>{#if paused}<Play size={13}/> Enable motion{:else}<Pause size={13}/> Pause motion{/if}</button></div>
   </section>

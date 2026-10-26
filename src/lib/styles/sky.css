@@ -1,0 +1,17 @@
+/* Shared sky surface. All decoration stays behind readable, solid content.
+   Fixed light coordinates avoid page-layout work on pointer movement. */
+@media screen {
+ .erp-sky {position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:linear-gradient(180deg,#b8dff2 0%,#e1eff8 28%,#f8fbfe 65%,#eef5fa 100%)}
+ .erp-sky__clouds {position:absolute;inset:18% -12% -12%;background:
+  radial-gradient(ellipse at 12% 66%,#fff 0 9%,#ffffff00 30%),
+  radial-gradient(ellipse at 32% 86%,#fff 0 12%,#ffffff00 36%),
+  radial-gradient(ellipse at 65% 68%,#fff 0 10%,#ffffff00 32%),
+  radial-gradient(ellipse at 95% 58%,#fff 0 14%,#ffffff00 35%),
+  radial-gradient(ellipse at 80% 100%,#d1e5f2 0 18%,#ffffff00 42%);filter:blur(14px)}
+ .erp-sky__light {position:fixed;top:0;left:0;width:620px;height:620px;margin:-310px;opacity:0;pointer-events:none;background:radial-gradient(circle at 43% 38%,#94e7f199,transparent 47%),radial-gradient(circle at 62% 58%,#ffd8b366,transparent 46%);filter:blur(26px);will-change:transform}
+ body .erp-login.login-layout {position:relative;isolation:isolate;background:transparent}
+ body .erp-login .erp-login__panel {box-shadow:0 18px 55px #24485f12}
+ @media(prefers-reduced-motion:reduce),(forced-colors:active),(pointer:coarse) {.erp-sky__light{display:none}}
+ @media(forced-colors:active) {.erp-sky{display:none}}
+}
+@media print {.erp-sky{display:none}}

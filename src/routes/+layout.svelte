@@ -5,6 +5,8 @@
  import '../interactions.css';
  import '../readability.css';
  import '$lib/styles/enterprise-forms/index.css';
+ import '$lib/styles/clean-workspace.css';
+ import '$lib/styles/sky.css';
  let {children}=$props();
  onMount(()=>{
   const removeActionLocks=installActionLocks();

@@ -141,3 +141,40 @@ export function referenceFeedback(node: HTMLElement, key: unknown) {
   destroy() { stop(); preference.removeEventListener('change', changed); }
  };
 }
+
+// Decorative light only: one frame per pointer update, no layout reads while
+// moving, no loop at rest, and no interception of form or keyboard interaction.
+export function skyLight(node: HTMLElement, paused = false) {
+ const preference = matchMedia('(prefers-reduced-motion: reduce), (forced-colors: active), (pointer: coarse)');
+ const light = node.querySelector<HTMLElement>('[data-sky-light]');
+ let frame = 0, active = false, x = 0, y = 0;
+ let fade: ReturnType<typeof animate> | undefined;
+ const stop = () => {
+  cancelAnimationFrame(frame); frame = 0; active = false;
+  fade?.revert(); fade = undefined;
+  if (light) { light.style.opacity = '0'; light.style.removeProperty('transform'); }
+ };
+ const move = (event: PointerEvent) => {
+  if (!light || paused || preference.matches || event.pointerType === 'touch') return;
+  x = event.clientX; y = event.clientY;
+  if (!active) {
+   active = true; fade?.revert();
+   fade = animate(light, {opacity: [0, .85], duration: 300, ease: 'outCubic'});
+  }
+  if (!frame) frame = requestAnimationFrame(() => {
+   frame = 0; light.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  });
+ };
+ const visibility = () => { if (document.hidden) stop(); };
+ node.addEventListener('pointermove', move, {passive:true});
+ node.addEventListener('pointerleave', stop);
+ preference.addEventListener('change', stop);
+ document.addEventListener('visibilitychange', visibility);
+ return {
+  update(next: boolean) { paused = next; if (paused) stop(); },
+  destroy() {
+   stop(); node.removeEventListener('pointermove', move); node.removeEventListener('pointerleave', stop);
+   preference.removeEventListener('change', stop); document.removeEventListener('visibilitychange', visibility);
+  }
+ };
+}
