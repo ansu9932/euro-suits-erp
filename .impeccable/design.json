@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-26T17:15:51+00:00",
+  "generatedAt": "2026-10-27T11:24:06+00:00",
   "title": "Design System: Euro Suits ERP",
   "extensions": {
     "colorMeta": {
@@ -232,16 +232,16 @@
       "field-text": {
         "role": "neutral",
         "displayName": "Field Text",
-        "canonical": "#1f2937",
+        "canonical": "#111111",
         "tonalRamp": [
-          "oklch(15% 0.0296 256.85)",
-          "oklch(26% 0.0296 256.85)",
-          "oklch(38% 0.0296 256.85)",
-          "oklch(49% 0.0296 256.85)",
-          "oklch(61% 0.0296 256.85)",
-          "oklch(72% 0.0296 256.85)",
-          "oklch(84% 0.0296 256.85)",
-          "oklch(95% 0.0296 256.85)"
+          "oklch(15% 0.0000 0.00)",
+          "oklch(26% 0.0000 0.00)",
+          "oklch(38% 0.0000 0.00)",
+          "oklch(49% 0.0000 0.00)",
+          "oklch(61% 0.0000 0.00)",
+          "oklch(72% 0.0000 0.00)",
+          "oklch(84% 0.0000 0.00)",
+          "oklch(95% 0.0000 0.00)"
         ]
       },
       "badge": {
@@ -483,6 +483,36 @@
           "oklch(84% 0.0653 65.35)",
           "oklch(95% 0.0653 65.35)"
         ]
+      },
+      "field-help": {
+        "role": "neutral",
+        "displayName": "Field Help",
+        "canonical": "#374151",
+        "tonalRamp": [
+          "oklch(15% 0.0306 259.73)",
+          "oklch(26% 0.0306 259.73)",
+          "oklch(38% 0.0306 259.73)",
+          "oklch(49% 0.0306 259.73)",
+          "oklch(61% 0.0306 259.73)",
+          "oklch(72% 0.0306 259.73)",
+          "oklch(84% 0.0306 259.73)",
+          "oklch(95% 0.0306 259.73)"
+        ]
+      },
+      "field-placeholder": {
+        "role": "neutral",
+        "displayName": "Field Placeholder",
+        "canonical": "#4b5563",
+        "tonalRamp": [
+          "oklch(15% 0.0263 256.80)",
+          "oklch(26% 0.0263 256.80)",
+          "oklch(38% 0.0263 256.80)",
+          "oklch(49% 0.0263 256.80)",
+          "oklch(61% 0.0263 256.80)",
+          "oklch(72% 0.0263 256.80)",
+          "oklch(84% 0.0263 256.80)",
+          "oklch(95% 0.0263 256.80)"
+        ]
       }
     },
     "typographyMeta": {
@@ -606,7 +636,7 @@
       "refersTo": "field",
       "description": "A desktop label, native text control and helper with the implemented focus and invalid styles.",
       "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Reference</span><input class=\"ds-field-control\" type=\"text\" placeholder=\"Enter reference\" aria-describedby=\"ds-reference-help\"><small class=\"ds-field-help\" id=\"ds-reference-help\">Use the reference shown on your document.</small></label>",
-      "css": ".ds-field{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;flex-direction:column;gap:6px;max-width:360px}.ds-field-label{font-size:13px;font-weight:600;line-height:1.5;color:#203247}.ds-field-control{min-width:0;min-height:44px;padding:10px 12px;font:400 14px/1.5 \"DM Sans\",\"Segoe UI\",sans-serif;color:#1f2937;background:#f7f9fb;border:1px solid #c3ced9;border-radius:8px;transition:border-color 160ms,box-shadow 160ms,background-color 160ms}.ds-field-control::placeholder{color:#526174;opacity:1}.ds-field-control:hover{border-color:#c3ced9}.ds-field-control:focus,.ds-field-control:focus-visible{outline:none;background:#fff;border-color:#087e78;box-shadow:0 0 0 3px rgb(37 99 235 / 15%)}.ds-field-control[aria-invalid=\"true\"]{border-color:#b42318;background:#fff6f5}.ds-field-control:disabled,.ds-field-control[readonly]{background:#f3f4f6;color:#4b5563}.ds-field-help{font-size:11px;font-weight:400;line-height:1.6;color:#526174}@media(forced-colors:active){.ds-field-control:focus{outline:2px solid Highlight;outline-offset:2px}}@media(prefers-reduced-motion:reduce){.ds-field-control{transition:none}}"
+      "css": ".ds-field{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;flex-direction:column;gap:6px;max-width:360px}.ds-field-label{font-size:13px;font-weight:600;line-height:1.5;color:#111111}.ds-field-control{min-width:0;min-height:44px;padding:10px 12px;font:400 14px/1.5 \"DM Sans\",\"Segoe UI\",sans-serif;color:#111111;background:#f7f9fb;border:1px solid #c3ced9;border-radius:8px;transition:border-color 160ms,box-shadow 160ms,background-color 160ms}.ds-field-control::placeholder{color:#4b5563;opacity:1}.ds-field-control:hover{border-color:#c3ced9}.ds-field-control:focus,.ds-field-control:focus-visible{outline:none;background:#fff;border-color:#087e78;box-shadow:0 0 0 3px rgb(37 99 235 / 15%)}.ds-field-control[aria-invalid=\"true\"]{border-color:#b42318;background:#fff6f5}.ds-field-control[readonly]{background:#f3f4f6;color:#111111}.ds-field-control:disabled{background:#f3f4f6;color:#374151;-webkit-text-fill-color:#374151;opacity:1}.ds-field-help{font-size:11px;font-weight:400;line-height:1.6;color:#374151}@media(forced-colors:active){.ds-field-control:focus{outline:2px solid Highlight;outline-offset:2px}}@media(prefers-reduced-motion:reduce){.ds-field-control{transition:none}}"
     },
     {
       "name": "Selected navigation",
@@ -638,7 +668,7 @@
       "refersTo": "task-header",
       "description": "Illustrates the navy/white header and fixed actions around a scrollable form body; it is not a live dialog.",
       "html": "<section class=\"ds-task\" aria-label=\"Task form presentation\"><header class=\"ds-task-header\"><h2 class=\"ds-task-title\">Company details</h2></header><div class=\"ds-task-body\"><label class=\"ds-task-field\">Company name<input class=\"ds-task-input\" type=\"text\" value=\"Euro Suits\"></label></div><footer class=\"ds-task-footer\"><button class=\"ds-task-cancel\" type=\"button\">Cancel</button><button class=\"ds-task-save\" type=\"button\">Save changes</button></footer></section>",
-      "css": ".ds-task{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;flex-direction:column;max-width:520px;max-height:340px;overflow:hidden;border:1px solid #dce3eb;border-radius:12px;background:#fff;box-shadow:0 16px 56px rgb(15 23 42 / 20%)}.ds-task-header{flex:0 0 auto;padding:12px 16px;background:#142b40;color:#fff;border-bottom:1px solid #34566c}.ds-task-title{margin:0;font-family:Manrope,sans-serif;font-size:18px;font-weight:700;line-height:1.4;color:#fff}.ds-task-body{flex:1 1 auto;min-height:0;overflow:auto;padding:16px}.ds-task-field{display:flex;flex-direction:column;gap:6px;color:#203247;font-size:13px;font-weight:600;line-height:1.5}.ds-task-input{min-width:0;min-height:44px;padding:10px 12px;font:400 14px/1.5 \"DM Sans\",\"Segoe UI\",sans-serif;color:#1f2937;background:#f7f9fb;border:1px solid #c3ced9;border-radius:8px}.ds-task-input:focus,.ds-task-input:focus-visible{outline:none;background:#fff;border-color:#087e78;box-shadow:0 0 0 3px rgb(37 99 235 / 15%)}.ds-task-footer{display:flex;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end;gap:12px;padding:12px 16px;background:#fff;border-top:1px solid #e5e7eb}.ds-task-save,.ds-task-cancel{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;line-height:1.4;cursor:pointer;transition:background-color 160ms,border-color 160ms,color 160ms;border:1px solid #c3ced9;background:#fff;color:#203247}.ds-task-save{background:#08746f;border-color:#08746f;color:#fff}.ds-task-save:hover:not(:disabled){background:#055c58}.ds-task-cancel:hover:not(:disabled){border-color:#c3ced9}.ds-task-save:focus-visible,.ds-task-cancel:focus-visible{outline:3px solid var(--focus-ring,#087d78);outline-offset:3px}.ds-task-save:active:not(:disabled),.ds-task-cancel:active:not(:disabled){transform:translateY(1px)}@media(forced-colors:active){.ds-task-input:focus{outline:2px solid Highlight;outline-offset:2px}}@media(prefers-reduced-motion:reduce){.ds-task-save,.ds-task-cancel{transition:none}.ds-task-save:active:not(:disabled),.ds-task-cancel:active:not(:disabled){transform:none}}"
+      "css": ".ds-task{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;flex-direction:column;max-width:520px;max-height:340px;overflow:hidden;border:1px solid #dce3eb;border-radius:12px;background:#fff;box-shadow:0 16px 56px rgb(15 23 42 / 20%)}.ds-task-header{flex:0 0 auto;padding:12px 16px;background:#142b40;color:#fff;border-bottom:1px solid #34566c}.ds-task-title{margin:0;font-family:Manrope,sans-serif;font-size:18px;font-weight:700;line-height:1.4;color:#fff}.ds-task-body{flex:1 1 auto;min-height:0;overflow:auto;padding:16px}.ds-task-field{display:flex;flex-direction:column;gap:6px;color:#111111;font-size:13px;font-weight:600;line-height:1.5}.ds-task-input{min-width:0;min-height:44px;padding:10px 12px;font:400 14px/1.5 \"DM Sans\",\"Segoe UI\",sans-serif;color:#111111;background:#f7f9fb;border:1px solid #c3ced9;border-radius:8px}.ds-task-input:focus,.ds-task-input:focus-visible{outline:none;background:#fff;border-color:#087e78;box-shadow:0 0 0 3px rgb(37 99 235 / 15%)}.ds-task-footer{display:flex;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end;gap:12px;padding:12px 16px;background:#fff;border-top:1px solid #e5e7eb}.ds-task-save,.ds-task-cancel{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;line-height:1.4;cursor:pointer;transition:background-color 160ms,border-color 160ms,color 160ms;border:1px solid #c3ced9;background:#fff;color:#203247}.ds-task-save{background:#08746f;border-color:#08746f;color:#fff}.ds-task-save:hover:not(:disabled){background:#055c58}.ds-task-cancel:hover:not(:disabled){border-color:#c3ced9}.ds-task-save:focus-visible,.ds-task-cancel:focus-visible{outline:3px solid var(--focus-ring,#087d78);outline-offset:3px}.ds-task-save:active:not(:disabled),.ds-task-cancel:active:not(:disabled){transform:translateY(1px)}@media(forced-colors:active){.ds-task-input:focus{outline:2px solid Highlight;outline-offset:2px}}@media(prefers-reduced-motion:reduce){.ds-task-save,.ds-task-cancel{transition:none}.ds-task-save:active:not(:disabled),.ds-task-cancel:active:not(:disabled){transform:none}}"
     }
   ],
   "narrative": {

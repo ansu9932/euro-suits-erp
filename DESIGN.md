@@ -17,7 +17,9 @@ colors:
   selected-text: "#075b55"
   field-focus: "#087e78"
   focus-ring: "#087d78"
-  field-text: "#1f2937"
+  field-text: "#111111"
+  field-help: "#374151"
+  field-placeholder: "#4b5563"
   badge: "#edf1f5"
   badge-text: "#3b4d61"
   success: "#e6f3eb"
@@ -163,7 +165,7 @@ The entrance has more atmosphere: a solid sign-in card sits over an original CSS
 - Soft sky at the entrance, with solid surfaces around readable content.
 - Visible keyboard focus and finite, preference-aware motion.
 
-This document records the implemented desktop presentation on 26 October 2026. The frontmatter is the token reference; the sidecar adds preview snippets, motion, shadows and metadata. Source authority is `src/lib/styles/clean-workspace.css`, `src/lib/styles/sky.css`, `src/lib/styles/global-forms/`, `src/lib/SignInShell.svelte`, `src/lib/landing/clean-hero.css`, `src/lib/motion.ts`, plus the inherited typography and interaction rules in `src/app.css` and `src/interactions.css`. PRODUCT.md supplies the durable task and access constraints.
+This document records the implemented desktop presentation through 27 October 2026. The frontmatter is the token reference; the sidecar adds preview snippets, motion, shadows and metadata. Source authority is `src/lib/styles/clean-workspace.css`, `src/lib/styles/sky.css`, `src/lib/styles/global-forms/`, `src/lib/SignInShell.svelte`, `src/lib/landing/clean-hero.css`, `src/lib/motion.ts`, plus the inherited typography and interaction rules in `src/app.css` and `src/interactions.css`. PRODUCT.md supplies the durable task and access constraints.
 
 ## Colors
 
@@ -187,7 +189,7 @@ The palette combines restrained navy and teal with white and cool neutral surfac
 - **Workspace Paper** (`workspace`) separates white panels from the surrounding canvas.
 - **Field Paper** (`field`) and **Field Border** (`field-border`) define editable controls.
 - **Panel Border** (`border`) separates the sidebar and workspace cards without a shadow.
-- **Readable Ink** (`text`, `field-text`) and **Supporting Ink** (`muted`) distinguish labels/body text, inherited control text and supporting copy.
+- **Readable Ink** (`text`) and **Supporting Ink** (`muted`) remain the workspace body and supporting-copy colors. **Field Ink** (`field-text`) is near-black for desktop field labels and values, including read-only values. **Field Help** (`field-help`) covers helper and disabled-control text; **Field Placeholder** (`field-placeholder`) stays clearly secondary at full opacity.
 - **Neutral Badge** (`badge`, `badge-text`) is a compact factual label. Existing success, warning, danger and information badge pairs retain their semantic colors and written labels; color does not replace the label.
 
 **The Task Header Rule.** Keep text white on a navy task header, including export task headings. Light navigation does not change this header contract.
@@ -245,7 +247,7 @@ Sign-in deliberately uses a navy primary action. Public hero actions retain thei
 
 ### Inputs / Fields
 
-Top-stacked labels use dark ink. Fields use a soft fill, a fine border, a minimum 44px height and the recorded padding. Focus changes the field to white, applies the teal focus border and retains the inherited focus halo. Read-only/disabled controls retain their existing muted styling. Invalid fields keep their existing error border/background and written error messages. Checkboxes remain native 18px controls within a minimum 44px label target.
+At desktop widths, top-stacked labels and field values use near-black Field Ink in both workspaces and sign-in. Helper text uses Field Help; placeholders use Field Placeholder at full opacity. Button and upload-label colors keep their existing variants. Fields use a soft fill, a fine border, a minimum 44px height and the recorded padding. Focus changes the field to white, applies the teal focus border and retains the inherited focus halo. Read-only values stay near-black on their existing gray background. Disabled controls use Field Help for text and WebKit text fill at full opacity, retaining their existing background. Invalid fields keep their existing error border/background and written error messages. Checkboxes remain native 18px controls within a minimum 44px label target.
 
 ### Navigation
 

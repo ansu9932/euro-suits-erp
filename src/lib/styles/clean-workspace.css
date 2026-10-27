@@ -124,3 +124,15 @@
  /* Export editors keep the established navy task heading. */
  body:has(.erp-workspace) .erp-workspace .ex-task-heading :is(h1,h2,h3) {color:#fff}
 }
+/* Desktop readability: near-black field values and labels, clearly secondary
+   helpers/placeholders. Button labels and navy headings keep their own colors. */
+@media screen and (min-width:1024px) {
+ body:has(.erp-workspace,.erp-login) {--ui-label:#111111;--ui-help:#374151}
+ body:has(.erp-workspace,.erp-login) :is(.erp-workspace,.erp-login,.ux-dialog) label:not(.button,.ex-upload-label) {color:#111111!important}
+ body:has(.erp-workspace,.erp-login) :is(.erp-workspace,.erp-login,.ux-dialog) :is(input:not([type="checkbox"],[type="radio"],[type="button"],[type="submit"],[type="reset"],[type="color"],[type="range"]),select,textarea) {color:#111111!important}
+ body:has(.erp-workspace,.erp-login) :is(.erp-workspace,.erp-login,.ux-dialog) :is(input,textarea)::placeholder {color:#4b5563!important;opacity:1}
+ body:has(.erp-workspace,.erp-login) :is(.erp-workspace,.erp-login,.ux-dialog) :is(input,select,textarea):disabled {color:#374151!important;-webkit-text-fill-color:#374151;opacity:1}
+}
+@media screen and (min-width:1024px) and (forced-colors:active) {
+ body:has(.erp-workspace,.erp-login) :is(.erp-workspace,.erp-login,.ux-dialog) :is(input,select,textarea):disabled {-webkit-text-fill-color:CanvasText;color:CanvasText!important}
+}
