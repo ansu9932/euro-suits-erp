@@ -90,12 +90,20 @@ The final compact Sampling presentation uses system/SF typography and 16px panel
 
 The 13 selected imported requests, SR-1554–SR-1566, remain Draft under Harshitha. Their original source indent is server-owned and immutable; display and draft editing preserve that provenance.
 
+Marketing users with sample_indents access can preview Buyer email attachments on their scoped INTIMATION records even without general document permission. This grants neither upload access nor access to other document categories. Existing company, buyer and team scopes continue to apply.
+
 ## Merchandising material generation — 5 November 2026
 
 Merchandising can generate actual ESF (India) and ETF (Dubai) fabric or trim material records through its Generate ETF / ESF permission. The full desktop viewport dialog keeps its navy heading and actions visible around scrolling content and uses the current workspace company. It supports all permitted specification and sample-detail fields, up to 20 public weight/width measurement rows with explicit units, and up to 30 additional name/value details. Weight units are GSM, g/linear metre or oz/yd²; width units are inch, cm or metre. An optional existing reference can be entered only when registering a new material; its permanent code remains immutable after registration.
 
 Merchants can save and edit their own drafts, then submit to MD or Super Admin. The Material approvals tab and submission details show workflow status, creator, submitter, reviewer comments and history. A reviewer must provide a comment when requesting changes; the merchant sees that comment while correcting the returned draft and can resubmit. Approval requires an independent MD or Super Admin. Supplier selection and private commercial fields remain Sourcing responsibilities, and supplier identities and documents remain private. Only after approval can Sourcing assign an approved supplier, complete the same material and activate it without changing its code. Supplier assignment is allowed once for an unassigned record; existing assigned suppliers remain immutable. Existing registered materials retain Legacy status; pending merchant drafts enter the approval workflow. Company scope, ownership and custom feature restrictions continue to apply.
 
+The ETF/ESF dialog explicitly keeps its title white on the navy heading through the shared workspace cascade. Unset selection fields show Select… placeholders.
+
 ## User access register readability — 5 November 2026
 
 The user-access register reserves room for its action column, stacks action controls and keeps their labels intact. Wide account data scrolls within the table, preventing access actions from overlapping neighbouring cells. Existing permissions and actions are unchanged.
+
+## Desktop sidebar rail — 5 November 2026
+
+The existing topbar control toggles company, operations and developer sidebars between 240px navigation and a 68px icon rail, retaining the localStorage preference. Rail width and main-content margin/width transition together over 300ms; labels fade and slide, and the logo settles at 32px. Icons retain accessible names, titles and complete 44px targets without clipping. Reduced motion disables transitions. Roles, permissions and navigation destinations remain unchanged.
