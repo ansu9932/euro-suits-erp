@@ -84,7 +84,7 @@ Desktop sample-request and intimation forms use the available viewport, with a p
 
 Sampling follow-up: INTIMATION is a dedicated Manufacturing sidebar section. Sample-indent creation contains Trims, EST and Files upload areas; Mail attachment remains in INTIMATION. Selected files visibly wait for form save. Preview opens in a native in-page modal: PDF pages render on a local PDF.js canvas, images render locally, and email/text or bounded DOCX/XLSX text previews remain inert. Object URLs, PDF tasks and requests are cleaned up when the viewer closes. Super Admin sampling document checks use its existing administrator authority; ordinary document restrictions remain effective.
 
-Pending intimations display the mail subject, saved size/colour details, creator and attachment preview actions. Pasted mail opens as inert text in a large native dialog from the pending queue or request details. Request lists show the latest submitter, falling back to creator before submission; request details and planning show creator and latest submitter separately.
+Pending intimations use semantic request sections: each shows buyer/style, request reference and creator, an amber Pending status with its workflow stage, and a detail grid for sample type, required date and size/colour/quantity. A separate buyer-mail row shows the subject and Read mail action; the footer groups attachment previews with the permitted Generate sample indent or View request action. Pasted mail opens as inert text in a large native dialog from the pending queue or request details. Request lists show the latest submitter, falling back to creator before submission; request details and planning show creator and latest submitter separately.
 
 ## Merchandising material generation — 5 November 2026
 
