@@ -9,3 +9,6 @@ build/
 .dev.vars.*
 *.log
 .DS_Store
+
+# Generated from the pinned PDF.js package during development/build.
+static/pdf-preview/
