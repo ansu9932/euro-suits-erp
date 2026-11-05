@@ -26,7 +26,7 @@
  async function save(action:string){await run(async()=>{
  const payload=()=>({company_id:Number(form.company_id),buyer_id:Number(form.buyer_id),profile:form.profile,variants:form.variants,bom:form.bom,version:form.version,action:intake?'intimation':'save'});
  if(!form.id){const result=await api('/sample-requests',payload());const saved=await api('/sample-requests/'+result.id);form={...saved.record,files:saved.files};}
- for(const group of Object.keys(queued)) {for(const file of [...queued[group]]){await uploadTo('/sample-requests/'+form.id+'/files?category='+encodeURIComponent(group),file);queued[group]=queued[group].filter((f:File)=>f!==file)}}
+ for(const group of Object.keys(queued)) {for(const file of [...queued[group]]){const uploaded=await uploadTo('/sample-requests/'+form.id+'/files?category='+encodeURIComponent(group),file);form.files=[...(form.files||[]),{id:uploaded.id,name:file.name,category:group}];queued[group]=queued[group].filter((f:File)=>f!==file)}}
  await api('/sample-requests/'+form.id,{...payload(),version:form.version,action:intake?'save':action})
  const rid=form.id;form=null;await load();if(!intake)detail=await api('/sample-requests/'+rid);notice=intake?'Intimation submitted. It stays pending until MD approval generates the indents.':action==='submit'?'Sent to MD for approval.':'Draft and files saved.';intake=false;
  })}
