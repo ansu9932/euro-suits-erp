@@ -13,7 +13,7 @@
     --hig-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",sans-serif;
     --hig-space-1:4px; --hig-space-2:8px; --hig-space-3:12px;
     --hig-space-4:16px; --hig-space-5:20px; --hig-space-6:24px;
-    --hig-text:#111827; --hig-secondary:#526170;
+    --hig-text:#111827; --hig-secondary:#3f4b5b;
     --hig-surface:#fff; --hig-canvas:#f6f8fa; --hig-field:#f8fafc;
     --hig-border:#e1e6ec; --hig-control-border:#cbd5df;
     --hig-primary:#0a7a6b; --hig-primary-hover:#086356;
@@ -41,12 +41,12 @@
   body:has(.erp-workspace) :is(.form-dialog,.company-modal,.material-modal,.sample-dialog,.merchant-material-dialog,.mail-reader) {font-family:var(--hig-font)!important}
   body:has(.erp-workspace) .erp-workspace h1 {font-size:clamp(24px,1.9vw,32px);letter-spacing:-.015em;line-height:1.25;font-weight:600}
   body:has(.erp-workspace) .erp-workspace :is(h2,h3,h4) {letter-spacing:0!important;font-weight:600!important}
-  /* HIERARCHY. Earlier readability layers made ordinary prose, metadata and
-     actions as heavy as titles. Keep dark ink; distinguish roles by weight.
+  /* HIERARCHY. Dark ink and medium/semibold data weights follow the owner's request
+     for stronger desktop text. Keep labels distinct from supporting metadata.
      Uppercase data headers and bold reference values remain intentional HIG. */
-  body:has(.erp-workspace) .erp-workspace :is(p,li,dd,dt),body:has(.erp-login,.es-site) :is(p,li,dd,dt) {font-weight:400!important}
-  body:has(.erp-workspace) .erp-workspace :is(small,.muted,.material-helper,.bank-help,.sample-form-help,.help-text),body:has(.erp-login) :is(small,.muted,.help-text) {font-weight:400!important;letter-spacing:0}
-  body:has(.erp-workspace) .erp-workspace :is(button,.button,.ex-button,.erp-btn) {font-weight:500!important;letter-spacing:0}
+  body:has(.erp-workspace) .erp-workspace :is(p,li,dd,dt),body:has(.erp-login,.es-site) :is(p,li,dd,dt) {font-weight:500!important}
+  body:has(.erp-workspace) .erp-workspace :is(small,.muted,.material-helper,.bank-help,.sample-form-help,.help-text),body:has(.erp-login) :is(small,.muted,.help-text) {font-weight:500!important;letter-spacing:0}
+  body:has(.erp-workspace) .erp-workspace :is(button,.button,.ex-button,.erp-btn) {font-weight:600!important;letter-spacing:0}
   body:has(.erp-workspace) .erp-workspace :is(strong,b) {font-weight:600}
   body:has(.erp-workspace) .erp-workspace :is(.eyebrow,.nav-group>p,.dev-caption) {font-weight:500!important;letter-spacing:.02em}
   body:has(.erp-workspace) .erp-workspace :is(.metric>strong,.indent-number,.request-number) {font-weight:600;font-variant-numeric:tabular-nums}
@@ -72,7 +72,7 @@
   body:has(.erp-workspace,.erp-login) :is(input:not([type=checkbox],[type=radio],[type=hidden],[type=color],[type=range],[type=button],[type=submit],[type=reset]),select,textarea) {
     min-height:44px;border-radius:var(--hig-radius-control)!important;
     border-color:var(--hig-control-border);background-color:var(--hig-field)!important;
-    color:#111111!important;font-size:13px!important;font-weight:400!important;line-height:1.45;
+    color:#111111!important;font-size:13px!important;font-weight:600!important;line-height:1.45;
   }
   body:has(.erp-workspace,.erp-login) :is(input,textarea)::placeholder {color:#596675!important;opacity:1}
   body:has(.erp-workspace,.erp-login) :is(input,select,textarea):is([readonly],:disabled) {
@@ -106,7 +106,7 @@
      compact cells do not reduce button/checkbox hit targets inside them. */
   body:has(.erp-workspace) .erp-workspace table {font-variant-numeric:tabular-nums}
   body:has(.erp-workspace) .erp-workspace th {background:#f8fafb;color:#526170;font-size:11px!important;font-weight:600!important;letter-spacing:.04em;text-transform:uppercase;padding:10px 12px}
-  body:has(.erp-workspace) .erp-workspace td {font-size:13px!important;font-weight:400!important;line-height:1.45;padding:10px 12px;border-color:#edf0f3}
+  body:has(.erp-workspace) .erp-workspace td {font-size:13px!important;font-weight:500!important;line-height:1.45;padding:10px 12px;border-color:#edf0f3}
   body:has(.erp-workspace) .erp-workspace td small {color:#596675;font-size:12px}
   body:has(.erp-workspace) .erp-workspace :is(.badge,.status-chip,.garment-status,.request-status,.request-approval,.rc-status) {border-radius:var(--hig-radius-small);font-size:11px;font-weight:600;line-height:1.4}
   body:has(.erp-workspace) .erp-workspace :is(.badge.green,.status-chip.approved,.rc-status.cleared) {color:#126247;background:#edf9f2}

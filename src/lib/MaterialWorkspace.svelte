@@ -3,14 +3,14 @@
  import {workspaceMotion, enter, referenceFeedback} from "./motion";
  import '../materials.css';
  import DevelopmentMasters from './DevelopmentMasters.svelte';
- import {onMount} from 'svelte';
+ import {onMount,untrack} from 'svelte';
  import JsBarcode from 'jsbarcode';
  import {api,uploadTo,day} from './api';
  import {convertMeasurement} from './materialMeasurements';
  import type {Row} from './types';
- let {companyID=0}:{companyID?:number}=$props();
+ let {companyID=0,initialTab='Fabric library'}:{companyID?:number;initialTab?:string}=$props();
  let data:Row=$state({samples:[],options:[],suppliers:[],companies:[],fields:[],option_kinds:[]});
- let tab=$state('Fabric library'),search=$state(''),filter:Row=$state({}),selected:Row|null=$state(null),form:Row|null=$state(null),option:Row|null=$state(null),rating:Row|null=$state(null);
+ let tab=$state(untrack(()=>initialTab)),search=$state(''),filter:Row=$state({}),selected:Row|null=$state(null),form:Row|null=$state(null),option:Row|null=$state(null),rating:Row|null=$state(null);
  let busy=$state(false),error=$state(''),notice=$state(''),printSample:Row|null=$state(null),copies=$state(1),photoFiles=$state<HTMLInputElement>(null!);
  let optionTarget:{row:Row,key:string,numeric:boolean}|null=$state(null);
  const selectKind=(key:string)=>key==='currency'?'currency':'unit';
