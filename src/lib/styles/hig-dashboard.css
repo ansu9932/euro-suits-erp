@@ -1,0 +1,133 @@
+/* EURO SUITS · SHARED DESKTOP HIG PRESENTATION
+ * Tailwind reference equivalents expressed as standard CSS for the existing
+ * Svelte application. This layer owns appearance, not field order, column
+ * meaning, permissions, modal dimensions, scroll ownership or business state.
+ * Print/PDF layouts and the existing phone presentation remain independent.
+ */
+@media screen and (min-width:1024px) {
+  :root {
+    --hig-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",sans-serif;
+    --hig-space-1:4px; --hig-space-2:8px; --hig-space-3:12px;
+    --hig-space-4:16px; --hig-space-5:20px; --hig-space-6:24px;
+    --hig-text:#111827; --hig-secondary:#526170;
+    --hig-surface:#fff; --hig-canvas:#f6f8fa; --hig-field:#f8fafc;
+    --hig-border:#e1e6ec; --hig-control-border:#cbd5df;
+    --hig-primary:#0a7a6b; --hig-primary-hover:#086356;
+    --hig-primary-soft:#eff9f5; --hig-navy:#142b40;
+    --hig-radius-panel:16px; --hig-radius-control:12px; --hig-radius-small:8px;
+    --hig-shadow:0 1px 3px rgb(15 23 42 / 5%);
+    --hig-shadow-hover:0 4px 12px rgb(15 23 42 / 8%);
+  }
+
+  /* TOKENS. Bridge the existing form architecture without replacing its grids. */
+  body:has(.erp-workspace,.erp-login) {
+    --ui-label:#111111; --ui-help:var(--hig-secondary);
+    --ui-field:var(--hig-field); --ui-border:var(--hig-control-border);
+    --ui-primary:var(--hig-primary); --ui-primary-hover:var(--hig-primary-hover);
+    --ui-focus:var(--hig-primary); --ui-header:var(--hig-navy);
+    --ui-radius:var(--hig-radius-control); --ui-card-space:var(--hig-space-4);
+    --ui-form-row-gap:var(--hig-space-3); --ui-form-column-gap:var(--hig-space-4);
+    --ui-section-gap:var(--hig-space-4); --ui-card-shadow:var(--hig-shadow);
+  }
+  body :is(.erp-workspace,.erp-login,.es-site) {font-family:var(--hig-font)!important}
+  body:has(.erp-workspace,.erp-login,.es-site) :is(h1,h2,h3,h4,h5,h6,button,input,select,textarea,table,.brand strong,.dev-brand strong,.es-brand,.es-btn) {
+    font-family:var(--hig-font)!important;
+  }
+  body .erp-workspace {--primary:var(--hig-primary);--primary-dark:var(--hig-primary-hover);--workspace-bg:var(--hig-canvas);--border:var(--hig-border);--surface:#fff;--text:var(--hig-text);--muted:var(--hig-secondary)}
+  body:has(.erp-workspace) :is(.form-dialog,.company-modal,.material-modal,.sample-dialog,.merchant-material-dialog,.mail-reader) {font-family:var(--hig-font)!important}
+  body .erp-workspace h1 {font-size:clamp(24px,1.9vw,32px);letter-spacing:-.025em;line-height:1.25}
+  body .erp-workspace :is(h2,h3,h4) {letter-spacing:-.015em}
+
+  /* PANELS = rounded-2xl + bg-white + subtle border/shadow. Explicit classes
+     avoid turning every field, table cell, artwork or calendar day into a card. */
+  body .erp-workspace :is(.panel,.company-metrics,.metric,.company-section,.detail-card,.dev-section,.material-section,.record-section,.ex-section,.samples,.sampling-register,.intimation-row,.line-card,.queue,.piece) {
+    border-radius:var(--hig-radius-panel)!important;
+    border-color:var(--hig-border);background-color:var(--hig-surface);
+    box-shadow:var(--hig-shadow);
+  }
+  body .erp-workspace :is(.intimation-row,.line-card):hover {box-shadow:var(--hig-shadow-hover)}
+  body:has(.erp-workspace,.erp-login) :is(dialog,[role=dialog],.sample-dialog,.company-modal,.material-modal,.order-drawer) {border-radius:var(--hig-radius-panel)!important;background-color:#fff;border-color:var(--hig-border)}
+  body .erp-workspace :is(.form-grid,.company-form-grid,.enquiry-grid,.ex-grid,.request-section-grid) {
+    gap:var(--hig-space-3) var(--hig-space-4);align-items:start;align-content:start;
+  }
+  /* Existing 12-column INTIMATION rows, grouped garment tables, matrix grids,
+     master/detail splits and intentional wide fields keep their own columns. */
+
+  /* CONTROLS = rounded-xl, readable top labels, soft neutral surfaces. Native
+     checkboxes, radios, file selectors, prefixes and validation remain native. */
+  body:has(.erp-workspace,.erp-login) :is(label,legend,.ex-caption) {color:#111111!important;font-size:13px!important;font-weight:600!important}
+  body:has(.erp-workspace,.erp-login) :is(input:not([type=checkbox],[type=radio],[type=hidden],[type=color],[type=range],[type=button],[type=submit],[type=reset]),select,textarea) {
+    min-height:44px;border-radius:var(--hig-radius-control)!important;
+    border-color:var(--hig-control-border);background-color:var(--hig-field)!important;
+    color:#111111!important;font-size:13px;font-weight:500;line-height:1.45;
+  }
+  body:has(.erp-workspace,.erp-login) :is(input,textarea)::placeholder {color:#596675!important;opacity:1}
+  body:has(.erp-workspace,.erp-login) :is(input,select,textarea):is([readonly],:disabled) {
+    background-color:#eef2f6!important;color:#374151!important;-webkit-text-fill-color:#374151;opacity:1;
+  }
+  body:has(.erp-workspace,.erp-login) :is(input,select,textarea):focus-visible {
+    outline:2px solid var(--hig-primary)!important;outline-offset:2px;border-color:var(--hig-primary)!important;
+    box-shadow:0 0 0 3px rgb(10 122 107 / 12%);
+  }
+  body:has(.erp-workspace,.erp-login) :is(input,select,textarea):is([aria-invalid=true],:user-invalid) {border-color:#b42334!important}
+  body:has(.erp-workspace,.erp-login) :is(input[type=checkbox],input[type=radio]) {accent-color:var(--hig-primary)}
+  body:has(.erp-workspace,.erp-login) label:has(>input:is([type=checkbox],[type=radio])) {min-height:44px}
+  body:has(.erp-workspace,.erp-login) :is(.required,.ex-required,.material-required,.field-title b) {display:inline!important;color:#a12632!important}
+  body .erp-workspace :is(.muted,.material-helper,.bank-help,.sample-form-help,.help-text) {color:var(--hig-secondary);font-size:12px;line-height:1.5}
+
+  /* ACTIONS. Strong primary, restrained secondary; status/danger semantics
+     are kept distinct. Only targets already styled as actions are included. */
+  body:has(.erp-workspace,.erp-login) :is(.button,.ex-button,.erp-btn,.view-indent,.request-open) {min-height:44px;border-radius:var(--hig-radius-control)!important;font-weight:600;line-height:1.4}
+  body:has(.erp-workspace,.erp-login) :is(.button.primary,.ex-button.primary,button.primary,.erp-btn--primary) {
+    background:var(--hig-primary)!important;border-color:var(--hig-primary)!important;color:#fff!important;box-shadow:var(--hig-shadow);
+  }
+  body:has(.erp-workspace,.erp-login) :is(.button.primary,.ex-button.primary,button.primary,.erp-btn--primary):hover:not(:disabled) {background:var(--hig-primary-hover)!important;border-color:var(--hig-primary-hover)!important}
+  body:has(.erp-workspace,.erp-login) :is(.button.secondary,.ex-button.secondary,.erp-btn--secondary) {background:#fff;color:#203247;border-color:var(--hig-control-border)}
+  body .erp-workspace :is(.view-indent,.request-open,.attachment) {color:#08685e;background:#f0f9f6;border-color:#d1e7df;border-radius:var(--hig-radius-small)!important}
+  body .erp-workspace :is(.view-indent,.request-open,.attachment):hover:not(:disabled) {background:#e0f3ec}
+  body:has(.erp-workspace,.erp-login) :is(.button.danger,.ex-button.danger,button.primary.danger) {background:#b42334!important;border-color:#b42334!important;color:#fff!important}
+  body:has(.erp-workspace,.erp-login) :is(button,.button,.ex-button):disabled {opacity:1!important;box-shadow:none;background:#e9edf1!important;color:#526170!important;border-color:#d7dee6!important;cursor:default}
+  body:has(.erp-workspace,.erp-login) :is(button,a.button):focus-visible {outline:2px solid var(--hig-primary);outline-offset:3px}
+
+  /* DATA DENSITY. Keep table semantics, sticky columns and all export values;
+     compact cells do not reduce button/checkbox hit targets inside them. */
+  body .erp-workspace table {font-variant-numeric:tabular-nums}
+  body .erp-workspace th {background:#f8fafb;color:#526170;font-size:11px!important;font-weight:600!important;letter-spacing:.04em;text-transform:uppercase;padding:10px 12px}
+  body .erp-workspace td {font-size:13px!important;line-height:1.45;padding:10px 12px;border-color:#edf0f3}
+  body .erp-workspace td small {color:#596675;font-size:12px}
+  body .erp-workspace :is(.badge,.status-chip,.garment-status,.request-status,.request-approval,.rc-status) {border-radius:var(--hig-radius-small);font-size:11px;font-weight:600;line-height:1.4}
+  body .erp-workspace :is(.badge.green,.status-chip.approved,.rc-status.cleared) {color:#126247;background:#edf9f2}
+  body .erp-workspace :is(.badge.amber,.status-chip.pending,.request-approval) {color:#8c4b09;background:#fffae9}
+  body .erp-workspace :is(.badge.red,.status-chip.changes-requested) {color:#9b3543;background:#fff0f2}
+
+  /* NAVY TASK HEADERS. This last, narrowly scoped bridge prevents a shared
+     heading/button rule from making modal labels disappear on dark surfaces. */
+  body:has(.erp-workspace) :is(.sample-dialog>header,.dialog-header,.company-modal>header,.material-modal header,.merchant-material-dialog header,.mail-reader header,dialog>header,[role=dialog]>header,.drawer-header,.ex-task-heading) {
+    background:var(--hig-navy)!important;color:#fff!important;
+  }
+  body:has(.erp-workspace) :is(.sample-dialog>header,.dialog-header,.company-modal>header,.material-modal header,.merchant-material-dialog header,.mail-reader header,dialog>header,[role=dialog]>header,.drawer-header,.ex-task-heading) :is(h1,h2,h3,p,strong,span,small) {color:#fff!important}
+  body:has(.erp-workspace) :is(.sample-dialog>header,.dialog-header,.company-modal>header,.material-modal header,.merchant-material-dialog header,.mail-reader header,dialog>header,[role=dialog]>header,.drawer-header) button:not(.primary):not(:disabled) {background:#ffffff12!important;color:#fff!important;border-color:#ffffff30!important}
+  body:has(.erp-workspace) :is(.sample-dialog>header,.dialog-header,.company-modal>header,.material-modal header,.merchant-material-dialog header,.mail-reader header,dialog>header,[role=dialog]>header,.drawer-header) button:focus-visible {outline-color:#fff!important}
+  body:has(.erp-workspace) :is(.sample-overlay,.company-overlay) {backdrop-filter:blur(4px)}
+  body:has(.erp-workspace) dialog::backdrop {background:#0f172a55;backdrop-filter:blur(4px)}
+
+  /* ACCESS AND PUBLIC ENTRY. Keep the existing sky, garment illustrations,
+     animation controls and authentication flow; share type, surfaces/actions. */
+  body .erp-login .erp-login__panel {border-radius:16px;border-color:var(--hig-border);background:#fffffffa;box-shadow:0 8px 28px rgb(15 23 42 / 7%)}
+  body .erp-login .erp-login__brand strong {font-family:var(--hig-font)}
+  body .es-site {--ink:#142b40;--accent:#0a7a6b}
+  body .es-site :is(.es-btn,.es-nav-login,.es-portal-links a) {border-radius:12px;min-height:44px}
+  body .es-site :is(.es-primary,.es-nav-login) {background:#0a7a6b;color:#fff;border-color:#0a7a6b}
+  body .es-site :is(.es-primary,.es-nav-login):hover {background:#086356}
+  body .es-site .es-nav {backdrop-filter:blur(16px);background:#ffffffed}
+  body .es-site .es-department-grid {gap:16px;border:0}
+  body .es-site .es-department-grid article {background:#fff;border:1px solid #e1e6ec;border-radius:16px;box-shadow:var(--hig-shadow)}
+}
+@media screen and (min-width:1024px) and (prefers-contrast:more) {
+  body:has(.erp-workspace,.erp-login) {--hig-border:#7b8793;--hig-control-border:#65717d;--hig-secondary:#344251}
+  body .erp-workspace :is(th,td small) {color:#344251}
+}
+@media screen and (min-width:1024px) and (forced-colors:active) {
+  body:has(.erp-workspace,.erp-login) :is(input,select,textarea,button,.button) {forced-color-adjust:auto;-webkit-text-fill-color:CanvasText}
+  body .erp-workspace :is(.panel,.metric,.company-section) {box-shadow:none;border:1px solid CanvasText}
+}

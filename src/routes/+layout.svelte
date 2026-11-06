@@ -7,6 +7,7 @@
  import '$lib/styles/enterprise-forms/index.css';
  import '$lib/styles/clean-workspace.css';
  import '$lib/styles/sky.css';
+ import '$lib/styles/hig-dashboard.css';
  let {children}=$props();
  onMount(()=>{
   const removeActionLocks=installActionLocks();
