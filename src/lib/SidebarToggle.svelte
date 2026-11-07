@@ -15,8 +15,34 @@
 </script>
 <button type="button" class="sidebar-toggle" class:sidebar-toggle--bottom={placement==='sidebar'} class:is-collapsed={hidden} onclick={toggle} aria-label={hidden?'Show sidebar':'Hide sidebar'} aria-expanded={!hidden} title={hidden?'Show sidebar':'Hide sidebar'}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg><span>{hidden?'Show menu':'Hide menu'}</span></button>
 <style>
- .sidebar-toggle--bottom{width:100%;min-height:44px;justify-content:center;border:0!important;background:transparent!important;color:#334155!important;padding:10px!important}.sidebar-toggle--bottom:hover{background:#e9eef2!important}.sidebar-toggle--bottom span{display:none}.sidebar-toggle--bottom svg{width:20px;height:20px;transition:transform 300ms ease-in-out}.sidebar-toggle--bottom.is-collapsed svg{transform:rotate(180deg)}
  .sidebar-toggle{display:inline-flex;align-items:center;gap:7px;flex-shrink:0;border:1px solid #c6d2da;border-radius:6px;background:#f1f6fa;color:#172d3c;padding:8px 10px;font-size:12px;font-weight:700;cursor:pointer}.sidebar-toggle:focus-visible{outline:3px solid #087f7c;outline-offset:2px}
+ /* Keep a full hit area around the smaller visual button. */
+ .sidebar-toggle.sidebar-toggle--bottom {
+  position:relative;
+  width:44px;
+  min-width:44px;
+  height:44px;
+  align-self:flex-start;
+  justify-content:center;
+  margin:auto 0 4px 16px;
+  padding:0;
+  border:0;
+  background:transparent;
+ }
+ .sidebar-toggle--bottom::before {
+  content:'';
+  position:absolute;
+  inset:6px;
+  border:1px solid #d2dfe7;
+  border-radius:8px;
+  background:#f6f9fb;
+ }
+ .sidebar-toggle--bottom:hover::before {background:#e9eef2}
+ .sidebar-toggle--bottom:focus-visible {outline-offset:-2px}
+ .sidebar-toggle--bottom span {display:none}
+ .sidebar-toggle--bottom svg {position:relative;width:16px;height:16px;transition:transform 300ms ease-in-out}
+ .sidebar-toggle--bottom.is-collapsed {align-self:center;margin-inline-start:0}
+ .sidebar-toggle--bottom.is-collapsed svg {transform:rotate(180deg)}
  /* Desktop rail stays navigable while labels fade and slide; no business action waits for motion. */
  @media(min-width:1024px){
  :global(body .erp-workspace :is(.sidebar,.company-sidebar,.dev-sidebar)){width:var(--erp-sidebar-expanded-width,240px)!important;overflow-x:hidden;transition:width 300ms ease-in-out,padding 300ms ease-in-out}
@@ -46,6 +72,6 @@
  @media(max-width:1023px){:global(body.sidebar-collapsed :is(.sidebar,.company-sidebar,.dev-sidebar)){display:none!important}:global(body.sidebar-collapsed :is(.main-shell,.company-main,.dev-main)){margin-left:0!important;width:100%!important;flex:1}}
  @media(prefers-reduced-motion:reduce){:global(body .erp-workspace :is(.sidebar,.company-sidebar,.dev-sidebar,.main-shell,.company-main,.dev-main,.brand>div,.dev-brand>div,.sidebar-label,.brand img,.dev-brand img)){transition:none!important}}
  @media(prefers-reduced-motion:reduce){.sidebar-toggle--bottom svg{transition:none}}
- @media(max-width:1023px){.sidebar-toggle--bottom{display:none}}
+ @media(max-width:1023px){.sidebar-toggle.sidebar-toggle--bottom{display:none}}
  @media(max-width:700px){.sidebar-toggle span{display:none}}
 </style>
