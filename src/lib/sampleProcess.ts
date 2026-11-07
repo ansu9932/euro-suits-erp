@@ -7,14 +7,22 @@ export const processViews:Record<string,string>={
  dispatch:'Final handover & AWB',all:'Sample report',issues:'Rework & rejection report'
 };
 export const processSteps=[
- ['fabric','Fabric','fabric_update_date'],['trims','Trims','trims_update_date'],
- ['pattern','Sent to CAD','cad_sent_at'],['pattern','Pattern','pattern_actual'],['marker','Marker','marker_actual'],
- ['cutting','Cut start','cut_started'],['cutting','Cut done','cut_actual'],
- ['allocation','Allocate','allocation_actual'],['sampling','Load','load_actual'],
- ['sampling','Sew','sewing_actual'],['finishing','Finish','finishing_actual'],
- ['audit','Audit','audit_actual'],['merchant','Merchant H/O','merchant_actual'],
- ['dispatch','Final H/O','handover_actual']
-];
+ ['fabric','Fabric','fabric_update_date',['fabric']],
+ ['trims','Trims','trims_update_date',['trims']],
+ ['pattern','Sent to CAD','cad_sent_at',['send_cad']],
+ ['pattern','Pattern','pattern_actual',['pattern','file_review']],
+ ['marker','Marker','marker_actual',['marker']],
+ ['cutting','Cut start','cut_started',['cut_start']],
+ ['cutting','Cut done','cut_actual',['cut']],
+ ['allocation','Allocation','allocation_actual',['allocate','plan']],
+ ['sampling','Load','load_actual',['load']],
+ ['sampling','Sew','sewing_actual',['sew_start','sew']],
+ ['finishing','Finish','finishing_actual',['finish_start','finish']],
+ ['audit','Audit','audit_actual',['audit','audit_start']],
+ ['merchant','Merchant H/O','merchant_actual',['merchant_handover','plan']],
+ ['dispatch','Final H/O','handover_actual',['handover','buyer_feedback']]
+] as const;
+export type ProcessStep=(typeof processSteps)[number];
 export const processLabel=(key:string)=>processViews[key]?.replace(' follow-up','')||key.replaceAll('_',' ').replace(/^./,s=>s.toUpperCase());
 export const actionLabel=(key:string)=>({fabric:'Fabric availability',trims:'Trims availability',plan:'Plan / tailor / DC',send_cad:'Sent to CAD',pattern:'Pattern completed',marker:'Marker completed',cut_start:'Cutting started',cut:'Cutting completed',allocate:'Tailor allocation',load:'Loaded to tailor',sew_start:'Sewing started',sew:'Sewing completed',finish_start:'Finishing started',finish:'Finishing completed',audit_start:'Audit started',audit:'Signed audit',merchant_handover:'Merchant handover',handover:'Final handover',file_review:'File review',buyer_feedback:'Buyer feedback',exception:'Stage issue',resolve:'Issue resolution'} as Record<string,string>)[key]||processLabel(key);
 export const processTone=(row:any)=>row.production?.process_exception||['Rework','Rejected'].includes(row.status)||['Changes requested','Rejected'].includes(row.latest_update?.decision)?'issue':row.latest_update?.decision==='Pending'?'pending':row.status==='Handed over'?'complete':['Ready','Pattern ready','Marker ready','Cut'].includes(row.status)?'waiting':'active';
