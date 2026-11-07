@@ -9,7 +9,27 @@
  let pending=$derived(data?.updates.find((u:any)=>u.decision==='Pending'));
  $effect(()=>{const id=piece.id,v=piece.version;untrack(()=>load(id));return()=>{sequence++}});
  async function load(id=piece.id){const seq=++sequence;try{const d=await api('/sample-indents/'+id+'/process');if(seq===sequence){data=d;error=''}}catch(e){if(seq===sequence)error=(e as Error).message}}
- function choose(key:string){action=key;note='';result=key==='file_review'?'Clear':key==='exception'?'Rework':key==='fabric'||key==='trims'?'In stock':'';expected=piece.production[key+'_expected_date']||'';values={...piece.production};stage=key==='resolve'?piece.production.process_exception?.stage||'':data?.stages[0]||'';if(key==='audit'){action='';onaudit()}}
+ function choose(key:string){
+  action=key;note='';
+  const material=key==='fabric'||key==='trims';
+  result=key==='file_review'?'Clear':key==='exception'?'Rework':material?piece.production[key+'_availability']||(piece.production[key+'_update_date']?'In stock':''):'';
+  expected=material?(data?.material_expected?.[key]??piece.production[key+'_expected_date']??''):'';
+  values={...piece.production};
+  stage=key==='resolve'?piece.production.process_exception?.stage||'':data?.stages[0]||'';
+  if(key==='audit'){action='';onaudit()}
+ }
+ function milestone(key:string,field:string){
+  const actual=piece.production[field];
+  if(actual)return stamp(actual);
+  if(key==='fabric'||key==='trims'){
+   const availability=piece.production[key+'_availability'];
+   if(availability){
+    const date=data?.material_expected?.[key]??piece.production[key+'_expected_date'];
+    return availability+(date?' · Expected '+stamp(date):'');
+   }
+  }
+  return 'Not recorded';
+ }
  async function send(review=''){if(busy)return;busy=true;error='';notice='';try{
   const payload:any=review?{action:'review_process',update_id:pending.id,decision:review,note:reviewNote}:{action,note,result,stage,expected_date:expected,destination};
   if(action==='plan'&&!review)payload.production=Object.fromEntries(planFields.map(([key])=>[key,String(values[key]||'')]));
@@ -20,7 +40,7 @@
 </script>
 <section class="sp-process" aria-label={'Process for indent '+piece.id}>
  <div class="sp-process__heading"><div><h4>Department follow-up</h4><p>Responsible merchant: <strong>{merchant||'Not assigned — MD / Super Admin must assign one'}</strong></p></div><span class="sp-status" class:sp-status--issue={!!piece.production.process_exception||['Rework','Rejected'].includes(piece.status)}>{piece.production.process_exception?piece.production.process_exception.result:sampleStatusLabel(piece.status)}</span></div>
- <ol class="sp-timeline" aria-label="Saved milestones">{#each processSteps as [key,label,field]}<li class:sp-timeline__done={!!piece.production[field]}><strong>{label}</strong><span>{piece.production[field]?stamp(piece.production[field]):'Not recorded'}</span></li>{/each}</ol>
+ <ol class="sp-timeline" aria-label="Saved milestones">{#each processSteps as [key,label,field]}<li class:sp-timeline__done={!!piece.production[field]}><strong>{label}</strong><span>{milestone(key,field)}</span></li>{/each}</ol>
  {#if error}<p class="form-error" role="alert">{error} <button class="text-button" onclick={()=>load()}>Refresh</button></p>{/if}{#if notice}<p class="sp-notice" role="status">{notice}</p>{/if}
  {#if piece.production.process_exception}<div class="sp-issue"><strong>{piece.production.process_exception.result} · {processLabel(piece.production.process_exception.stage)}</strong><p>{piece.production.process_exception.comment}</p><span>{piece.production.process_exception.by} · {stamp(piece.production.process_exception.at)}</span></div>{/if}
  {#if data}
@@ -29,8 +49,10 @@
    <SampleProcessChanges changes={pending.changes}/>
    {#if data.can_review}<label>Review comment <span>(required for correction or rejection)</span><textarea bind:value={reviewNote} maxlength="2000" rows="2"></textarea></label><div class="sp-actions"><button class="button primary" disabled={busy} onclick={()=>send('Approved')}>Accept update</button><button class="button secondary" disabled={busy||!reviewNote.trim()} onclick={()=>send('Changes requested')}>Request correction</button><button class="button danger" disabled={busy||!reviewNote.trim()} onclick={()=>send('Rejected')}>Reject update</button></div>{:else}<p>Only the assigned merchant can accept or return this update. No progress has been applied.</p>{/if}
   </section>{:else if data.actions.length}<div class="sp-action-picker"><label>Update this sample<select value={action} disabled={busy} onchange={e=>choose(e.currentTarget.value)}><option value="">Choose a department action</option>{#each data.actions as item}<option value={item.key}>{item.label}</option>{/each}</select></label><p>{data.can_review?'Your update is recorded directly as the assigned merchant.':'Your department report will be sent to the assigned merchant for approval.'}</p></div>{:else}<p class="sp-meta">No department action is available for your permissions at this stage.</p>{/if}
+  {#if !pending&&data.can_review&&piece.status==='Ready'&&!piece.production.cad_sent_at&&!piece.production.process_exception&&!data.actions.some((item:any)=>item.key==='send_cad')}<p class="sp-meta">Record fabric and trims availability to enable Send to CAD.</p>{/if}
   {#if action&&!pending}<form class="sp-editor" use:enter onsubmit={e=>{e.preventDefault();send()}}><h4>{data.actions.find((a:any)=>a.key===action)?.label}</h4>
-   {#if action==='fabric'||action==='trims'}<div class="sp-form-grid"><label>Availability<select bind:value={result}><option>In stock</option><option>To order</option><option>Ordered</option></select></label><label>Expected arrival date<input type="date" bind:value={expected} required={result==='Ordered'}/></label></div><p>This records availability. It does not create a purchase order or change inventory balances.</p>
+   {#if action==='fabric'||action==='trims'}<div class="sp-form-grid"><label>Availability<select bind:value={result} required><option value="">Choose availability</option><option value="In stock">In house / in stock</option><option>To order</option><option>Ordered</option></select></label><label>Expected arrival date<input type="date" bind:value={expected} required={result==='Ordered'}/></label></div><p>This records availability. It does not create a purchase order or change inventory balances.</p>
+   {:else if action==='send_cad'}<p>Send this indent to Pattern follow-up for CAD to pick up.</p>
    {:else if action==='plan'}<div class="sp-form-grid">{#each planFields as [key,label,type]}<label>{label}<input type={type==='date'?'date':'text'} bind:value={values[key]} maxlength="2000"/></label>{/each}</div>
    {:else if action==='file_review'}<label>Sample file<select bind:value={result}><option>Clear</option><option>Missing</option></select></label>
    {:else if action==='exception'||action==='resolve'}<div class="sp-form-grid"><label>Department / stage<select bind:value={stage} disabled={action==='resolve'} required>{#each data.stages as key}<option value={key}>{processLabel(key)}</option>{/each}</select></label>{#if action==='exception'}<label>Result<select bind:value={result}><option>Rework</option><option>Rejected</option></select></label>{/if}</div>
@@ -38,7 +60,7 @@
    {:else if action==='handover'}<div class="sp-form-grid"><label>AWB / shipment or delivery reference<input bind:value={values.awb} maxlength="2000" required/></label><label>Contact<input bind:value={values.dispatch_contact} maxlength="2000"/></label><label>To — customer name and address<textarea bind:value={values.dispatch_to} maxlength="2000" required></textarea></label><label>From — sender name and address<textarea bind:value={values.dispatch_from} maxlength="2000" required></textarea></label></div>
    {:else if action==='buyer_feedback'}<label>Buyer result<select bind:value={result} required><option value="">Choose result</option><option>Pass</option><option>Fail</option><option>Comments</option></select></label>{/if}
    <label>Update comment{#if ['exception','resolve','buyer_feedback'].includes(action)||action==='file_review'&&result==='Missing'||['fabric','trims'].includes(action)&&result!=='In stock'} <b class="sp-required">*</b>{/if}<textarea bind:value={note} rows="2" maxlength="2000" required={['exception','resolve','buyer_feedback'].includes(action)||action==='file_review'&&result==='Missing'||['fabric','trims'].includes(action)&&result!=='In stock'}></textarea></label>
-   <div class="sp-actions"><button class="button secondary" type="button" disabled={busy} onclick={()=>action=''}>Cancel</button><button class="button primary" disabled={busy}>{busy?'Saving…':data.can_review?'Record update':'Submit for merchant approval'}</button></div>
+   <div class="sp-actions"><button class="button secondary" type="button" disabled={busy} onclick={()=>action=''}>Cancel</button><button class="button primary" disabled={busy}>{busy?'Saving…':action==='send_cad'?'Send to CAD':data.can_review?'Record update':'Submit for merchant approval'}</button></div>
   </form>{/if}
   <details class="sp-history"><summary>Update & review history ({data.updates.length}{data.updates.length===1000?'+':''})</summary>{#each data.updates as update}<article><div class="sp-history__title"><strong>{actionLabel(update.action)}</strong><span class:sp-history__problem={['Changes requested','Rejected'].includes(update.decision)}>{update.decision}</span></div><p>Submitted: <b>{update.submitted_by}</b> · {stamp(update.submitted_at)}</p>{#if update.comment}<p class="sp-comment">{update.comment}</p>{/if}{#if update.reviewed_by}<p>Reviewed: <b>{update.reviewed_by}</b> · {stamp(update.reviewed_at)}</p>{/if}{#if update.review_comment}<p class="sp-comment"><b>Review:</b> {update.review_comment}</p>{/if}<details><summary>Reported changes</summary><SampleProcessChanges changes={update.changes}/></details></article>{:else}<p>New department reports and reviews will appear here. Earlier saved milestones and request history remain available.</p>{/each}</details>
  {/if}

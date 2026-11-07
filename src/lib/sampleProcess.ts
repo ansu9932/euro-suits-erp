@@ -8,7 +8,7 @@ export const processViews:Record<string,string>={
 };
 export const processSteps=[
  ['fabric','Fabric','fabric_update_date'],['trims','Trims','trims_update_date'],
- ['pattern','Pattern','pattern_actual'],['marker','Marker','marker_actual'],
+ ['pattern','Sent to CAD','cad_sent_at'],['pattern','Pattern','pattern_actual'],['marker','Marker','marker_actual'],
  ['cutting','Cut start','cut_started'],['cutting','Cut done','cut_actual'],
  ['allocation','Allocate','allocation_actual'],['sampling','Load','load_actual'],
  ['sampling','Sew','sewing_actual'],['finishing','Finish','finishing_actual'],
@@ -16,7 +16,7 @@ export const processSteps=[
  ['dispatch','Final H/O','handover_actual']
 ];
 export const processLabel=(key:string)=>processViews[key]?.replace(' follow-up','')||key.replaceAll('_',' ').replace(/^./,s=>s.toUpperCase());
-export const actionLabel=(key:string)=>({fabric:'Fabric availability',trims:'Trims availability',plan:'Plan / tailor / DC',pattern:'Pattern completed',marker:'Marker completed',cut_start:'Cutting started',cut:'Cutting completed',allocate:'Tailor allocation',load:'Loaded to tailor',sew_start:'Sewing started',sew:'Sewing completed',finish_start:'Finishing started',finish:'Finishing completed',audit_start:'Audit started',audit:'Signed audit',merchant_handover:'Merchant handover',handover:'Final handover',file_review:'File review',buyer_feedback:'Buyer feedback',exception:'Stage issue',resolve:'Issue resolution'} as Record<string,string>)[key]||processLabel(key);
+export const actionLabel=(key:string)=>({fabric:'Fabric availability',trims:'Trims availability',plan:'Plan / tailor / DC',send_cad:'Sent to CAD',pattern:'Pattern completed',marker:'Marker completed',cut_start:'Cutting started',cut:'Cutting completed',allocate:'Tailor allocation',load:'Loaded to tailor',sew_start:'Sewing started',sew:'Sewing completed',finish_start:'Finishing started',finish:'Finishing completed',audit_start:'Audit started',audit:'Signed audit',merchant_handover:'Merchant handover',handover:'Final handover',file_review:'File review',buyer_feedback:'Buyer feedback',exception:'Stage issue',resolve:'Issue resolution'} as Record<string,string>)[key]||processLabel(key);
 export const processTone=(row:any)=>row.production?.process_exception||['Rework','Rejected'].includes(row.status)||['Changes requested','Rejected'].includes(row.latest_update?.decision)?'issue':row.latest_update?.decision==='Pending'?'pending':row.status==='Handed over'?'complete':['Ready','Pattern ready','Marker ready','Cut'].includes(row.status)?'waiting':'active';
 export const stamp=(value:unknown)=>{if(!value)return 'Not recorded';const s=String(value);if(/^\d{4}-\d{2}-\d{2}$/.test(s))return new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});const d=new Date(s);return Number.isNaN(d.getTime())?s:d.toLocaleString('en-GB',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})+' IST'};
 export const planFields=[['sample_maker','Sample tailor / maker'],['pattern_by','Pattern by'],['cut_by','Cut by'],['pattern_plan_date','Pattern plan','date'],['cutting_plan_date','Cutting plan','date'],['allocation_plan_date','Allocation plan','date'],['sewing_plan_date','Sample completion plan','date'],['finishing_plan_date','Finishing plan','date'],['audit_plan_date','Audit plan','date'],['handover_plan_date','Final handover plan','date'],['handover_dc','Handover DC'],['enclosures','Enclosures']];
