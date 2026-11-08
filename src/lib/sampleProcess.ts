@@ -10,7 +10,7 @@ export const processSteps=[
  ['fabric','Fabric','fabric_update_date',['fabric']],
  ['trims','Trims','trims_update_date',['trims']],
  ['pattern','Sent to CAD','cad_sent_at',['send_cad']],
- ['pattern','Pattern','pattern_actual',['pattern','file_review']],
+ ['pattern','Pattern','pattern_actual',['pattern','file_review','plan']],
  ['marker','Marker','marker_actual',['marker']],
  ['cutting','Cut start','cut_started',['cut_start']],
  ['cutting','Cut done','cut_actual',['cut']],
