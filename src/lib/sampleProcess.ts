@@ -30,3 +30,7 @@ export const stamp=(value:unknown)=>{if(!value)return 'Not recorded';const s=Str
 export const planFields=[['sample_maker','Sample tailor / maker'],['pattern_by','Pattern by'],['cut_by','Cut by'],['pattern_plan_date','Pattern plan','date'],['cutting_plan_date','Cutting plan','date'],['allocation_plan_date','Allocation plan','date'],['sewing_plan_date','Sample completion plan','date'],['finishing_plan_date','Finishing plan','date'],['audit_plan_date','Audit plan','date'],['handover_plan_date','Final handover plan','date'],['handover_dc','Handover DC'],['enclosures','Enclosures']];
 
 export const sampleStatusLabel=(status:string)=>({Ready:'Indent issued','Pattern ready':'Pattern complete','Marker ready':'Waiting for cutting',Cutting:'Cutting in progress',Cut:'Cut done · awaiting allocation',Allocated:'Tailor allocated',Loaded:'Loaded to sample tailor',Sewing:'Sample in progress',Sewn:'Sewing complete',Finishing:'Finishing in progress','Awaiting audit':'Waiting for audit',Audit:'Audit in progress',Approved:'Audit passed','With merchant':'With Merchandising',Showroom:'With showroom','Handed over':'Final handover complete',Rework:'QA rework',Rejected:'QA rejected'} as Record<string,string>)[status]||status;
+
+export function indentReference(indent:{id:number;indent_number?:string|null}):string {
+ return indent.indent_number || '#'+indent.id;
+}

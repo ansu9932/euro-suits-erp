@@ -4,7 +4,7 @@
  import SampleProcessChanges from './SampleProcessChanges.svelte';
  import {untrack} from 'svelte';
  import {api} from './api';
- import {processSteps,processLabel,actionLabel,stamp,planFields,sampleStatusLabel,type ProcessStep} from './sampleProcess';
+ import {indentReference,processSteps,processLabel,actionLabel,stamp,planFields,sampleStatusLabel,type ProcessStep} from './sampleProcess';
  let {piece,merchant='',onchange,onaudit}:{piece:any;merchant?:string;onchange:()=>Promise<void>;onaudit:()=>void}=$props();
  let data:any=$state(null),busy=$state(false),error=$state(''),notice=$state(''),action=$state(''),note=$state(''),reviewNote=$state(''),result=$state(''),stage=$state(''),expected=$state(''),destination=$state('Merchant'),values:any=$state({}),sequence=0;
  let selectedStep=$state<ProcessStep|null>(null);
@@ -114,7 +114,7 @@
   </details>
  {/if}
   {#if selectedStep}
-   <SampleStageDialog title={selectedStep[1]+' · Indent #'+piece.id} close={closeEditor} {busy}>
+   <SampleStageDialog title={selectedStep[1]+' · Indent '+indentReference(piece)} close={closeEditor} {busy}>
     <p class="stage-status"><strong>Saved status:</strong> {milestone(selectedStep[0],selectedStep[2])}</p>
     {#if stageActions.length>1||(!action&&stageActions.length===1)}
      <label>Stage action<select value={action} disabled={busy} onchange={e=>choose(e.currentTarget.value)}>
