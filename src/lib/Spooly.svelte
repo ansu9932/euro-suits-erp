@@ -46,7 +46,7 @@
   const schedulePosition=()=>{if(!positionFrame)positionFrame=requestAnimationFrame(position)};
   const barObserver=new ResizeObserver(schedulePosition);
   const suspend=()=>{
-   const nextBar=document.querySelector('.company-actionbar, .ex-task-footer');
+   const nextBar=document.querySelector('.sample-dialog footer, .company-actionbar, .ex-task-footer');
    if(nextBar!==actionbar){
     barObserver.disconnect();
     actionbar=nextBar;
