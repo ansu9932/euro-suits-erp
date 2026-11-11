@@ -9,7 +9,7 @@
  let mascot=$state<HTMLElement|null>(null);
  let helpOpen=$state(false),compactHelp=$state(false),helpBottom=$state(20);
  function bodyPortal(node:HTMLElement){document.body.append(node);return{destroy(){node.remove()}};}
- function closeHelp(){helpOpen=false;tick().then(()=>{const control=document.getElementById('spooly-compact-help')||mascot?.shadowRoot?.querySelector<HTMLButtonElement>('#character');control?.focus({preventScroll:true})});}
+ function closeHelp(){helpOpen=false;tick().then(()=>{const control=document.querySelector<HTMLButtonElement>('[data-inline-spooly]')||document.getElementById('spooly-compact-help')||mascot?.shadowRoot?.querySelector<HTMLButtonElement>('#character');control?.focus({preventScroll:true})});}
  const module=$derived(resolveMascotContext(page,role,portal));
 
  // The visual element receives no ERP records or API credentials.
@@ -58,8 +58,9 @@
    const dialog=Array.from(document.querySelectorAll(
     'dialog[open],[aria-modal="true"],.drawer-backdrop,.company-modal-backdrop,.sample-overlay'
    )).some(node=>node.getClientRects().length>0);
-   compactHelp=!!editing||dialog;
-   element.toggleAttribute('suspended',compactHelp);
+   const inlineHelp=!!document.querySelector('[data-inline-spooly]');
+   compactHelp=!inlineHelp&&(!!editing||dialog);
+   element.toggleAttribute('suspended',compactHelp||inlineHelp);
   };
   // Observe only the ERP DOM, never the mascot's isolated shadow tree.
   const observer=new MutationObserver(suspend);
