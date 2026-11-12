@@ -36,7 +36,7 @@
    const blob=await response.blob();
    if(company!==scope)return;
    const disposition=response.headers.get('content-disposition')??'';
-   const filename=disposition.match(/(?:^|;)\s*filename="(SMR_\d{8}_\d{6}_IST\.xlsx)"(?:;|$)/i)?.[1]??'sample-master-register.xlsx';
+   const filename=disposition.match(/(?:^|;)\s*filename="(SMR \d{2}-\d{2}-\d{2} - \d{1,2}\.\d{2}(?:AM|PM)\.xlsx|SMR_\d{8}_\d{6}_IST\.xlsx)"(?:;|$)/i)?.[1]??'sample-master-register.xlsx';
    const url=URL.createObjectURL(blob);
    const link=document.createElement('a');
    link.href=url;link.download=filename;link.click();
