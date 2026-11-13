@@ -1,11 +1,11 @@
 <script lang="ts">
- import {Check,ChevronRight,Clock3,RefreshCw} from '@lucide/svelte';
+ import {Check,ChevronRight,Clock3,RefreshCw,Search} from '@lucide/svelte';
  import {tick,untrack} from 'svelte';
  import {api} from './api';
  import SampleProcessPanel from './SampleProcessPanel.svelte';
  import {indentReference,processSteps,processViews,processLabel,processTone,stamp,actionLabel,sampleStatusLabel,type ProcessStep} from './sampleProcess';
 
- let {company,view='all',revision=0,onopen}:{company:string;view?:string;revision?:number;onopen:(id:number,indent:number)=>void}=$props();
+ let {company,view='all',revision=0,onopen,progressLayout=false}:{company:string;view?:string;revision?:number;onopen:(id:number,indent:number)=>void;progressLayout?:boolean}=$props();
  let data:any=$state(null),error=$state(''),busy=$state(false),search=$state(''),query=$state(''),page=$state(1),filter=$state('all'),notice=$state('');
  let editor:{row:any;step:string}|null=$state(null);
  let sequence=0,loadedCompany='';
@@ -39,11 +39,14 @@
   notice='';editor={row,step:step[2]};
  }
  async function closeStage(){
+  if(!editor)return;
+  const trigger=opener;
+  opener=null;
   editor=null;
   await tick();
-  if(opener?.isConnected)opener.focus({preventScroll:true});
+  if(editor)return;
+  if(trigger?.isConnected&&!trigger.disabled)trigger.focus({preventScroll:true});
   else searchInput?.focus({preventScroll:true});
-  opener=null;
  }
  async function updated(){
   notice='Stage update saved. Approval status appears beside the indent.';
@@ -56,16 +59,32 @@
  function stageState(row:any,step:ProcessStep){
   if(row.production.process_exception?.stage===step[0])return 'issue';
   if(row.latest_update?.decision==='Pending'&&step[3].some(key=>key===row.latest_update.action))return 'pending';
+  if(progressLayout&&step[2]==='audit_actual'&&['Rework','Rejected'].includes(row.production.audit_result))return 'issue';
   if(row.production[step[2]])return 'complete';
   return row.process_stage===step[0]?'active':'waiting';
  }
  function stageText(row:any,step:ProcessStep){
   const production=row.production,actual=production[step[2]];
-  if(stageState(row,step)==='pending')return 'Awaiting approval';
+  const tone=stageState(row,step);
+  if(tone==='pending')return 'Awaiting approval';
+  if(progressLayout&&tone==='issue')return production.process_exception?.result||production.audit_result;
   if(actual)return stamp(actual);
+  if(progressLayout&&tone==='active'){
+   const started=step[2].replace(/_actual$/,'_started');
+   if(started!==step[2]&&production[started])return 'In progress · '+stamp(production[started]);
+  }
   if(step[0]==='fabric'||step[0]==='trims')return production[step[0]+'_availability']||'Not recorded';
-  if(stageState(row,step)==='issue')return production.process_exception.result;
+  if(tone==='issue')return production.process_exception.result;
   return 'Not recorded';
+ }
+ function badgeTone(row:any){
+  const tone=processTone(row);
+  if(!progressLayout||tone==='issue'||tone==='pending')return tone;
+  const chart=String(row.production.register_source?.process_status||'').trim().toUpperCase();
+  if(chart==='COMPLETED')return 'complete';
+  if(chart==='PENDING')return 'pending';
+  if(chart.startsWith('UNDER ')||chart.startsWith('UNDR '))return 'active';
+  return tone;
  }
  function statusText(row:any){
   const issue=row.production.process_exception;
@@ -80,17 +99,21 @@
  }
 </script>
 
-<section class="sp-board" aria-label={view==='all'?'Indent progress':processViews[view]||'Sample process'} aria-busy={busy}>
+<section class="sp-board" class:sp-board--progress={progressLayout} aria-label={view==='all'?'Indent progress':processViews[view]||'Sample process'} aria-busy={busy}>
  <header class="sp-board__heading">
   <div><h3>{view==='all'?'Indent progress':processViews[view]||'Sample process'}</h3><p>Choose a stage to update it. Every submission and review keeps its user, date and time.</p></div>
   <button class="button secondary sp-refresh" type="button" disabled={busy} onclick={()=>load()}><RefreshCw size={16} aria-hidden="true"/>{busy?'Refreshing…':'Refresh'}</button>
  </header>
  <form class="sp-filters" onsubmit={event=>{event.preventDefault();apply()}}>
-  <label class="sp-search">Search indent, buyer or style<input bind:this={searchInput} bind:value={search} maxlength="120" placeholder="Indent, old Excel number or style"/></label>
-  {#if view==='all'}<label>Show<select bind:value={filter} onchange={()=>{page=1}}><option value="all">All indents</option>{#each Object.entries(processViews).filter(([key])=>key!=='all') as [key,label]}<option value={key}>{label}</option>{/each}<option value="closed">Completed / rejected</option></select></label>{/if}
+  <label class="sp-search">
+   <span class:sp-visually-hidden={progressLayout}>Search indent, buyer or style</span>
+   {#if progressLayout}<Search size={18} aria-hidden="true"/>{/if}
+   <input bind:this={searchInput} bind:value={search} maxlength="120" placeholder={progressLayout?'Search indent, buyer or style…':'Indent, old Excel number or style'}/>
+  </label>
+  {#if view==='all'}<label class="sp-filter-view">Show<select bind:value={filter} onchange={()=>{page=1}}><option value="all">All indents</option>{#each Object.entries(processViews).filter(([key])=>key!=='all') as [key,label]}<option value={key}>{label}</option>{/each}<option value="closed">Completed / rejected</option></select></label>{/if}
   <button class="button primary" disabled={busy}>Search</button>
  </form>
- <div class="sp-legend" aria-label="Recorded stage colours"><span class="sp-key sp-key--complete">Recorded</span><span class="sp-key sp-key--active">Current stage</span><span class="sp-key sp-key--pending">Awaiting approval</span><span class="sp-key sp-key--issue">Rework / rejected</span></div>
+ <div class="sp-legend" aria-label="Recorded stage colours"><span class="sp-key sp-key--complete">Recorded</span><span class="sp-key sp-key--active">Current stage</span><span class="sp-key sp-key--pending">Awaiting approval</span><span class="sp-key sp-key--issue">Rework / rejected</span>{#if progressLayout}<span class="sp-key sp-key--unrecorded">Not recorded</span>{/if}</div>
  {#if error}<p class="form-error" role="alert">{error} <button class="text-button" type="button" onclick={()=>load()}>Retry</button></p>{/if}
  {#if notice}<p class="sp-notice" role="status">{notice}</p>{/if}
  {#if !data&&!error}<p class="sp-empty" role="status">Loading indent progress…</p>{:else if data}
@@ -100,13 +123,15 @@
      <div class="sp-indent__heading">
       <div class="sp-indent__identity"><strong>{indentReference(row)}</strong><span>{row.buyer} · {row.profile.buyer_style||'Style not recorded'}</span>{#if row.profile.legacy_indent_number}<small>Old indent {row.profile.legacy_indent_number}</small>{/if}</div>
       <div class="sp-indent__details"><b>{row.size||'Size not recorded'} · {row.colour||'Colour not recorded'} · {quantity(row)}</b><span>Merchant · {row.merchant_id?row.merchant:'Not assigned'}</span>{#if row.profile.buyer_required_date}<span>Required · {stamp(row.profile.buyer_required_date)}</span>{/if}</div>
-      <div class="sp-indent__status"><span class={'sp-chip sp-chip--'+processTone(row)}>{statusText(row)}</span>{#if row.production.register_source}<small>Chart status · recorded steps below</small>{:else}<small>Next · {processLabel(row.process_stage)}</small>{/if}{#if Number(row.late_days)>0}<small class="sp-issue-text">{row.late_days} late day{row.late_days===1?'':'s'}</small>{/if}</div>
+      <div class="sp-indent__status"><span class={'sp-chip sp-chip--'+badgeTone(row)}>{statusText(row)}</span>{#if row.production.register_source}<small>{progressLayout?'Chart status':'Chart status · recorded steps below'}</small>{:else if row.process_stage!=='closed'}<small>Next · {processLabel(row.process_stage)}</small>{/if}{#if Number(row.late_days)>0}<small class="sp-issue-text">{row.late_days} late day{row.late_days===1?'':'s'}</small>{/if}</div>
       <button class="button secondary sp-details" type="button" disabled={busy} onclick={()=>onopen(row.request_id,row.id)}>{row.latest_update?.decision==='Pending'&&row.can_review?'Review update':'Details'}<ChevronRight size={15} aria-hidden="true"/></button>
      </div>
      <ol class="sp-stages" aria-label={'Stages for '+indentReference(row)}>
       {#each processSteps as step (step[2])}
        {@const tone=stageState(row,step)}
-       <li><button class={'sp-stage sp-stage--'+tone} type="button" disabled={busy} aria-haspopup="dialog" aria-label={step[1]+' for '+indentReference(row)+': '+stageText(row,step)} title={stageText(row,step)} onclick={event=>openStage(row,step,event)}><span class="sp-stage__label">{#if tone==='complete'}<Check size={13} aria-hidden="true"/>{:else if tone==='pending'}<Clock3 size={13} aria-hidden="true"/>{/if}{step[1]}</span><span class="sp-stage__value">{stageText(row,step)}</span></button></li>
+       {@const saved=stageText(row,step)}
+       {@const display=progressLayout&&tone==='active'&&saved==='Not recorded'?'Current stage':saved}
+       <li><button class={'sp-stage sp-stage--'+tone} type="button" disabled={busy} aria-haspopup="dialog" aria-label={step[1]+' for '+indentReference(row)+': '+saved} title={saved} onclick={event=>openStage(row,step,event)}><span class="sp-stage__label">{#if tone==='complete'}<Check size={13} aria-hidden="true"/>{:else if tone==='pending'}<Clock3 size={13} aria-hidden="true"/>{/if}{step[1]}</span><span class="sp-stage__value">{display}</span></button></li>
       {/each}
      </ol>
      {#if row.latest_update||row.production.process_exception||Number(row.issue_count)>0||row.production.awb}
@@ -181,7 +206,124 @@
  .sp-pagination>div{display:flex;gap:8px}
  .sp-board :is(button,input,select):focus-visible{outline:2px solid #08796f;outline-offset:2px}
  .sp-board ::selection{background:#c6e8df;color:#102b33}
+
+ .sp-board--progress {
+  --progress-muted: #405469;
+  --progress-border: #d9e3eb;
+  border: 0;
+  background: transparent;
+ }
+ .sp-board--progress .sp-board__heading {
+  align-items: start;
+  padding: 0 0 16px;
+  border: 0;
+ }
+ .sp-board--progress .sp-board__heading h3 {font-size: 24px !important; line-height: 1.25;}
+ .sp-board--progress .sp-board__heading p {font-size: 13px;}
+ .sp-board--progress .sp-filters {
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid var(--progress-border);
+  border-radius: 12px;
+  background: #fff;
+ }
+ .sp-board--progress .sp-search {
+  position: relative;
+  min-width: 160px;
+ }
+ .sp-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+ }
+ .sp-board--progress .sp-search :global(svg) {
+  position: absolute;
+  inset: 50% auto auto 12px;
+  transform: translateY(-50%);
+  color: var(--progress-muted);
+  pointer-events: none;
+ }
+ .sp-board--progress .sp-search input {
+  border-color: transparent;
+  background: transparent;
+  padding-left: 38px;
+ }
+ .sp-board--progress .sp-filter-view {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding-left: 12px;
+  border-left: 1px solid var(--progress-border);
+ }
+ .sp-board--progress .sp-filter-view select {width: min(180px, 21vw); background: #f5f8fa;}
+ .sp-board--progress .sp-filters .button {min-height: 44px; padding-inline: 20px;}
+ .sp-board--progress .sp-legend {padding: 12px 2px; border: 0;}
+ .sp-key--unrecorded::before {background: #fff;}
+ .sp-board--progress .sp-list {display: grid; gap: 16px; max-height: none; overflow: visible;}
+ .sp-board--progress .sp-indent {
+  padding: 0;
+  border: 1px solid var(--progress-border);
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+ }
+ .sp-board--progress .sp-indent__heading {
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1.15fr) auto;
+  padding: 14px 16px;
+  margin: 0;
+  background: #f5f8fa;
+  border-bottom: 1px solid var(--progress-border);
+ }
+ .sp-board--progress .sp-indent__identity strong {font-size: 17px; overflow-wrap: anywhere;}
+ .sp-board--progress .sp-indent__status {justify-self: end; text-align: right;}
+ .sp-board--progress .sp-chip {border-radius: 999px; padding: 4px 10px;}
+ .sp-board--progress .sp-stages {gap: 8px; padding: 14px 16px;}
+ .sp-board--progress .sp-stage {
+  --stage-fill: #fff;
+  --stage-ink: #344a60;
+  --stage-border: #cbd7e2;
+  min-height: 54px;
+  padding: 7px 9px;
+  background: var(--stage-fill);
+  color: var(--stage-ink);
+  border-color: var(--stage-border);
+ }
+ .sp-board--progress .sp-stage__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .025em;
+ }
+ .sp-board--progress .sp-stage__value {
+  color: inherit;
+  white-space: normal;
+  overflow-wrap: anywhere;
+ }
+ .sp-board--progress .sp-stage--complete {--stage-fill: #e2f5e9; --stage-ink: #145239; --stage-border: #8cc5a4;}
+ .sp-board--progress .sp-stage--active {--stage-fill: #e4efff; --stage-ink: #173f79; --stage-border: #7ca6da;}
+ .sp-board--progress .sp-stage--pending {--stage-fill: #fff1cd; --stage-ink: #69450d; --stage-border: #d6b46b;}
+ .sp-board--progress .sp-stage--issue {--stage-fill: #fde6e9; --stage-ink: #85263b; --stage-border: #d995a1;}
+ .sp-board--progress .sp-stage:not(:disabled):hover {border-color: var(--stage-ink);}
+ .sp-board--progress .sp-indent__updates {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--progress-border);
+  background: #fbfcfd;
+ }
+ .sp-board--progress .sp-pagination {padding-inline: 0; margin-top: 12px;}
+ .sp-board--progress :is(.sp-notice,.form-error) {margin-inline: 0;}
  @media(min-width:1024px) and (max-width:1240px){.sp-board__heading,.sp-filters,.sp-indent,.sp-pagination{padding-inline:14px}.sp-indent__heading{grid-template-columns:minmax(140px,1.2fr) minmax(140px,1.2fr) minmax(110px,1fr) auto}.sp-stage{padding-inline:6px}.sp-stage__label{font-size:11px}}
  @media(max-width:850px){.sp-stages{grid-template-columns:repeat(4,minmax(0,1fr))}.sp-indent__heading{grid-template-columns:1fr 1fr}.sp-filters{flex-wrap:wrap}.sp-search{flex-basis:100%}}
+ @media(max-width:850px) {
+  .sp-board--progress .sp-indent__heading {grid-template-columns: minmax(0,1fr) minmax(0,1fr);}
+  .sp-board--progress .sp-indent__status {justify-self: start; text-align: left;}
+  .sp-board--progress .sp-details {justify-self: end;}
+  .sp-board--progress .sp-filter-view {flex: 1; border: 0;}
+  .sp-board--progress .sp-filter-view select {width: 100%;}
+ }
  @media(prefers-contrast:more){.sp-board :is(small,.sp-stage__value){color:#1d3348}.sp-stage,.sp-chip{border-color:currentColor}}
 </style>
