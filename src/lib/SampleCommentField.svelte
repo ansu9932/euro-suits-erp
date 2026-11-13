@@ -3,12 +3,12 @@
  import {onMount,tick} from 'svelte';
  import {csrf} from './api';
 
- let {value=$bindable(''),dictating=$bindable(false),label,hint='',required=false,disabled=false,indentId,action,stage='',updateId}:{
+ let {value=$bindable(),dictating=$bindable(false),label,hint='',required=false,disabled=false,indentId,action,stage='',updateId,requestId,companyId,buyerId,maxLength=2000}:{
   value?:string;dictating?:boolean;label:string;hint?:string;required?:boolean;disabled?:boolean;
-  indentId:number;action:string;stage?:string;updateId?:number;
+  indentId?:number;action:string;stage?:string;updateId?:number;
+  requestId?:number;companyId?:number;buyerId?:number;maxLength?:number;
  }=$props();
  const id=$props.id();
- const maxLength=2000;
  const utf8=new TextEncoder();
  const maxAudioBytes=3*1024*1024;
  const recordingLimitMs=30_000;
@@ -29,23 +29,40 @@
  let cancelButton=$state<HTMLButtonElement>();
  let active:Recording|undefined;
 
- function endpoint(){
-  const params=new URLSearchParams({indent_id:String(indentId),action});
-  if(stage)params.set('stage',stage);
-  if(updateId)params.set('update_id',String(updateId));
+ const endpoint=$derived.by(()=>{
+  const params=new URLSearchParams({action});
+  if(action==='special_remark'){
+   if(!companyId||!buyerId)return '';
+   params.set('company_id',String(companyId));
+   params.set('buyer_id',String(buyerId));
+   if(requestId)params.set('request_id',String(requestId));
+  }else{
+   if(!indentId)return '';
+   params.set('indent_id',String(indentId));
+   if(stage)params.set('stage',stage);
+   if(updateId)params.set('update_id',String(updateId));
+  }
   return '/api/sample-dictation?'+params.toString();
- }
+ });
 
  onMount(()=>{
-  const probe=new AbortController();
   const endRecording=()=>{if(active)finish('Dictation cancelled.')};
   window.addEventListener('pagehide',endRecording);
-  fetch(endpoint(),{credentials:'same-origin',cache:'no-store',signal:probe.signal})
+  return ()=>window.removeEventListener('pagehide',endRecording);
+ });
+
+ $effect(()=>{
+  const url=endpoint;
+  enabled=false;
+  message='';
+  failed=false;
+  if(!url)return;
+  const probe=new AbortController();
+  fetch(url,{credentials:'same-origin',cache:'no-store',signal:probe.signal})
    .then(response=>response.ok?response.json():null)
    .then(data=>{if(!probe.signal.aborted)enabled=data?.enabled===true})
    .catch(()=>{});
   return ()=>{
-   window.removeEventListener('pagehide',endRecording);
    probe.abort();
    reset();
   };
@@ -81,7 +98,7 @@
  }
 
  async function start(){
-  if(!enabled||disabled||active)return;
+  if(!enabled||!endpoint||disabled||active)return;
   if(utf8.encode(value).length>=maxLength){
    finish('The comment is full. Shorten it to add dictation.',true);
    return;
@@ -91,7 +108,7 @@
    return;
   }
   const recording:Recording={request:new AbortController()};
-  const url=endpoint();
+  const url=endpoint;
   active=recording;
   dictating=true;
   phase='starting';
@@ -204,7 +221,7 @@
     finish('The comment is full. Shorten it to add dictation.',true);
     return;
    }
-   value+=separator+inserted;
+   value=(value??'')+separator+inserted;
    finish(inserted===transcript?'Text added. Review it before saving.':'Text added up to the comment limit. Review it before saving.');
   }catch{
    if(active===recording)finish('Could not transcribe the recording. Try again or type your comment.',true);

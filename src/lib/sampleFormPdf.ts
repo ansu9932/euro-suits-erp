@@ -17,7 +17,7 @@ export function sampleFormDocument(kind:SampleFormKind,detail:any,piece:any,mate
  const name=kind==='indent'?'Sample Indent Form':'Sample Audit Form',code=kind==='indent'?'SMIND099':'AU099';
  const ref=(id:any)=>id?material(id)||'':'';
  const value=(v:any)=>({text:text(v),fontSize:8,lineHeight:1.1,margin:[0,3,0,1]});
- const field=(label:string,v:any='',span=1)=>({stack:[{text:label.toUpperCase(),bold:true,fontSize:6.8,color:'#374151'},value(v)],colSpan:span,margin:[4,3,4,3]});
+ const field=(label:string,v:any='',span=1,bold=false)=>({stack:[{text:label.toUpperCase(),bold:true,fontSize:6.8,color:'#374151'},{...value(v),bold}],colSpan:span,margin:[4,3,4,3]});
  const layout={hLineWidth:()=>.5,vLineWidth:()=>.5,hLineColor:()=>border,vLineColor:()=>border,paddingLeft:()=>0,paddingRight:()=>0,paddingTop:()=>0,paddingBottom:()=>0};
  const table=(rows:any[],columns:number,headerRows=0)=>({table:{widths:Array(columns).fill('*'),headerRows,dontBreakRows:false,body:rows},layout,margin:[0,0,0,7]});
  const grid=(items:[string,any][],columns:number)=>{const rows:any[]=[];for(let i=0;i<items.length;i+=columns){const row=items.slice(i,i+columns).map(([l,v])=>field(l,v));while(row.length<columns)row.push(field(''));rows.push(row)}return table(rows,columns)};
@@ -37,6 +37,7 @@ export function sampleFormDocument(kind:SampleFormKind,detail:any,piece:any,mate
  ],3));
  content.push(table([band('Sizes, colours and registered indent',6),['Col','Size','Indent No','Col','Size','Indent No'].map(l=>({...field(l),fillColor:'#f3f4f6'})),[value(piece.colour),value(piece.size),value(indentReference(piece)),value(''),value(''),value('')],...Array.from({length:2},()=>Array.from({length:6},()=>({text:' ',margin:[4,3]}))),[field('MTR/DC NO',issues.map((i:any)=>[i.metres===null||i.metres===undefined?'':Math.abs(Number(i.metres))+' m',i.code,'SDC-'+String(i.id).padStart(7,'0')].filter(Boolean).join(' · ')).join('\n'),6),{},{},{},{},{}]],6,2));
  content.push(grid([['Sample 2 Copy',[p.copy_sample_id,p.copy_purpose].filter(Boolean).join(' · ')],['CAD Ref',p.cad_reference],['Spec Ref / Dt / Signed',[p.spec_reference,formDate(p.spec_date),p.spec_signed].filter(Boolean).join(' · ')],['Spl Remarks',p.special_remarks]],4));
+ content.push(table([[field('Special remark',p.email_message,1,true)]],1));
  content.push(table([band('BOM & Process Checklist',2),[field('BOM Details',bom()),field('Finishing Remarks',p.finishing_remarks)],[field('Pocketing',bom('Pocketing')),field('Value Additions',bom('Value additions'))],[field('Fusing',bom('Fusing')),field('Embroidery',p.embroidery)],[field('Sewing Trims',bom('Sewing trims')),field('Washing',p.washing)]],2));
  content.push(table([band('Tracking & Handover',3),[field('Pattern By',s.pattern_by),field('Cut By',s.cut_by),field('Smpl Maker',s.sample_maker)],[field('Pattern Ready Dt',formDate(s.pattern_actual)),field('Allocated Dt',formDate(s.allocation_actual)),field('Sew Ho Date',formDate(s.sewing_actual))]],3));
  content.push(table([band('Enclosed',4),[field('Pattern - Cut',text(s.enclosures).includes('pattern')?s.enclosures:''),field('Counter Smpl',text(s.enclosures).toLowerCase().includes('counter')?s.enclosures:''),field('Hand Over Date',formDate(s.merchant_actual)),field('Hand Over DC',s.handover_dc)]],4));
