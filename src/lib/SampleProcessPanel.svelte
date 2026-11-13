@@ -2,6 +2,7 @@
  import {ChevronRight} from '@lucide/svelte';
  import SampleStageDialog from './SampleStageDialog.svelte';
  import SampleProcessChanges from './SampleProcessChanges.svelte';
+ import SampleCommentField from './SampleCommentField.svelte';
  import {untrack} from 'svelte';
  import {api} from './api';
  import {indentReference,processSteps,processLabel,actionLabel,stamp,planFields,sampleStatusLabel,type ProcessStep} from './sampleProcess';
@@ -9,6 +10,7 @@
  let data:any=$state(null),busy=$state(false),error=$state(''),notice=$state(''),action=$state(''),note=$state(''),reviewNote=$state(''),result=$state(''),stage=$state(''),expected=$state(''),destination=$state('Merchant'),values:any=$state({}),sequence=0;
  let selectedStep=$state<ProcessStep|null>(null);
  let editorError=$state('');
+ let updateDictating=$state(false),reviewDictating=$state(false);
  let pending=$derived(data?.updates.find((u:any)=>u.decision==='Pending'));
  let approvalTarget=$derived(data?.approval_target||'assigned merchant');
  let pendingTarget=$derived(pending?.approval_target||'assigned merchant');
@@ -24,6 +26,7 @@
   );
  });
  let activeAction=$derived(stageActions.find(item=>item.key===action));
+ let commentRequired=$derived(['exception','resolve','buyer_feedback'].includes(action)||action==='file_review'&&result==='Missing'||['fabric','trims'].includes(action)&&result!=='In stock');
  let editorFields=$derived(
   selectedStep?.[2]==='allocation_actual'?planFields.filter(([key])=>key==='sample_maker'||key==='allocation_plan_date'):
   selectedStep?.[2]==='merchant_actual'?planFields.filter(([key])=>key==='handover_dc'):planFields
@@ -62,7 +65,7 @@
   }
   return 'Not recorded';
  }
- async function send(review=''){if(busy||(!review&&(!activeAction||pending)))return;busy=true;error='';editorError='';notice='';try{
+ async function send(review=''){if(busy||(review?reviewDictating:updateDictating||!activeAction||pending))return;busy=true;error='';editorError='';notice='';try{
   const payload:any=review?{action:'review_process',update_id:pending.id,decision:review,note:reviewNote}:{action,note,result,stage,expected_date:result==='In stock'?'':expected,destination};
   if(action==='plan'&&!review)payload.production=Object.fromEntries(editorFields.map(([key])=>[key,String(values[key]||'')]));
   if(action==='handover'&&!review)payload.dispatch=Object.fromEntries(['awb','dispatch_to','dispatch_from','dispatch_contact'].map(key=>[key,values[key]||'']));
@@ -88,7 +91,12 @@
   {#if data.late_days!=null}<p class="sp-lateness">{data.late_days} late day{data.late_days===1?'':'s'}{piece.production.handover_actual?' at final handover.':' as of today (IST).'}</p>{/if}
   {#if pending}<section class="sp-pending"><h4>Awaiting approval · {actionLabel(pending.action)}</h4><p><strong>{pending.submitted_by}</strong> · {stamp(pending.submitted_at)}</p>{#if pending.comment}<p class="sp-comment">{pending.comment}</p>{/if}
    <SampleProcessChanges changes={pending.changes}/>
-   {#if data.can_review}<label>Review comment <span>(required for correction or rejection)</span><textarea bind:value={reviewNote} maxlength="2000" rows="2"></textarea></label><div class="sp-actions"><button class="button primary" disabled={busy} onclick={()=>send('Approved')}>Accept update</button><button class="button secondary" disabled={busy||!reviewNote.trim()} onclick={()=>send('Changes requested')}>Request correction</button><button class="button danger" disabled={busy||!reviewNote.trim()} onclick={()=>send('Rejected')}>Reject update</button></div>{:else}<p>Waiting for approval by {pendingTarget}.</p>{/if}
+   {#if data.can_review}
+    {#key pending.id}
+     <SampleCommentField label="Review comment" hint="(required for correction or rejection)" bind:value={reviewNote} bind:dictating={reviewDictating} disabled={busy} indentId={piece.id} action="review_process" updateId={pending.id}/>
+    {/key}
+    <div class="sp-actions"><button class="button primary" disabled={busy||reviewDictating} onclick={()=>send('Approved')}>Accept update</button><button class="button secondary" disabled={busy||reviewDictating||!reviewNote.trim()} onclick={()=>send('Changes requested')}>Request correction</button><button class="button danger" disabled={busy||reviewDictating||!reviewNote.trim()} onclick={()=>send('Rejected')}>Reject update</button></div>
+   {:else}<p>Waiting for approval by {pendingTarget}.</p>{/if}
   </section>{/if}
   <details class="sp-history" open={data.updates.length>0}>
    <summary><ChevronRight size={16} aria-hidden="true"/>Update &amp; review history <span>({data.updates.length}{data.updates.length===1000?'+':''})</span></summary>
@@ -149,8 +157,10 @@
    {:else if action==='merchant_handover'}{#if piece.production.handover_dc}<p>Handover DC: <strong>{piece.production.handover_dc}</strong></p>{/if}<label>Handover destination<select bind:value={destination}><option>Merchant</option><option>Showroom</option></select></label>
    {:else if action==='handover'}<div class="sp-form-grid"><label>AWB / shipment or delivery reference<input bind:value={values.awb} maxlength="2000" required/></label><label>Contact<input bind:value={values.dispatch_contact} maxlength="2000"/></label><label>To — customer name and address<textarea bind:value={values.dispatch_to} maxlength="2000" required></textarea></label><label>From — sender name and address<textarea bind:value={values.dispatch_from} maxlength="2000" required></textarea></label></div>
    {:else if action==='buyer_feedback'}<label>Buyer result<select bind:value={result} required><option value="">Choose result</option><option>Pass</option><option>Fail</option><option>Comments</option></select></label>{/if}
-   <label>Update comment{#if ['exception','resolve','buyer_feedback'].includes(action)||action==='file_review'&&result==='Missing'||['fabric','trims'].includes(action)&&result!=='In stock'} <b class="sp-required">*</b>{/if}<textarea bind:value={note} rows="2" maxlength="2000" required={['exception','resolve','buyer_feedback'].includes(action)||action==='file_review'&&result==='Missing'||['fabric','trims'].includes(action)&&result!=='In stock'}></textarea></label>
-   <div class="sp-actions"><button class="button secondary" type="button" disabled={busy} onclick={closeEditor}>Cancel</button><button class="button primary" disabled={busy}>{busy?'Saving…':data.can_record_directly?(action==='send_cad'?'Send to CAD':'Record update'):'Submit for approval'}</button></div>
+   {#key action+':'+stage}
+    <SampleCommentField label="Update comment" bind:value={note} bind:dictating={updateDictating} required={commentRequired} disabled={busy} indentId={piece.id} {action} stage={['exception','resolve'].includes(action)?stage:''}/>
+   {/key}
+   <div class="sp-actions"><button class="button secondary" type="button" disabled={busy} onclick={closeEditor}>Cancel</button><button class="button primary" disabled={busy||updateDictating}>{busy?'Saving…':data.can_record_directly?(action==='send_cad'?'Send to CAD':'Record update'):'Submit for approval'}</button></div>
      </form>
     {/if}
    </SampleStageDialog>
@@ -165,7 +175,7 @@
  .sp-timeline strong,.sp-timeline span{display:block;font-size:12px;font-weight:750}
  .sp-timeline span{margin-top:4px;color:#324154;font-size:11px;font-weight:650}
  .sp-timeline__done button{background:#e8f5ec;border-color:#b8d9c7;color:#145037}
- .sp-timeline__done span{color:#254d3c}.sp-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}.sp-process label{display:block;font-size:13px;font-weight:700;color:#172536}.sp-process input,.sp-process select,.sp-process textarea{display:block;width:100%;min-width:0;min-height:44px;margin-top:6px;padding:8px 10px;border:1px solid #cbd5df;border-radius:12px;background:#f8fafc;color:#111;font:inherit}.sp-process textarea{resize:vertical}.sp-process label>span{font-weight:500;font-size:11px}.sp-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px 16px;margin-bottom:12px}.stage-status{margin-top:0!important;color:#23384b}.sp-editor,.sp-pending{padding:16px;margin-top:12px;border:1px solid #dce3e9;border-radius:12px;background:#fafbfc}.sp-pending{background:#fffaf0;border-color:#e9d6af}.sp-issue{padding:12px;border:1px solid #ecc7ce;border-radius:12px;color:#961f30;background:#fff2f4;margin:12px 0}.sp-comment{white-space:pre-wrap;overflow-wrap:anywhere}.sp-required{color:#a12435}.sp-notice{color:#075e54}.sp-lateness{color:#3f4b5b}
+ .sp-timeline__done span{color:#254d3c}.sp-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}.sp-process label{display:block;font-size:13px;font-weight:700;color:#172536}.sp-process input,.sp-process select,.sp-process textarea{display:block;width:100%;min-width:0;min-height:44px;margin-top:6px;padding:8px 10px;border:1px solid #cbd5df;border-radius:12px;background:#f8fafc;color:#111;font:inherit}.sp-process textarea{resize:vertical}.sp-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px 16px;margin-bottom:12px}.stage-status{margin-top:0!important;color:#23384b}.sp-editor,.sp-pending{padding:16px;margin-top:12px;border:1px solid #dce3e9;border-radius:12px;background:#fafbfc}.sp-pending{background:#fffaf0;border-color:#e9d6af}.sp-issue{padding:12px;border:1px solid #ecc7ce;border-radius:12px;color:#961f30;background:#fff2f4;margin:12px 0}.sp-comment{white-space:pre-wrap;overflow-wrap:anywhere}.sp-notice{color:#075e54}.sp-lateness{color:#3f4b5b}
  .sp-history{margin-top:16px;border-top:1px solid #dce3e9;padding-top:8px}
  .sp-history summary{display:flex;align-items:center;gap:6px;min-height:44px;cursor:pointer;list-style:none;color:#26384a;font-weight:700}
  .sp-history summary::-webkit-details-marker{display:none}

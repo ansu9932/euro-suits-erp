@@ -25,7 +25,13 @@
  const areas:Record<string,string>={Companies:'companies',Reminders:'reminders',Registers:'fields',Users:'users',Operations:'operations'};
  let page=$derived(({companies:'Companies',reminders:'Reminders',fields:'Registers',users:'Users'} as Record<string,string>)[area]||'Companies');
  const can=(feature:string)=>!!user?.setup_grants?.includes(feature);
- async function navigate(name:string){if(back())await goto('/'+user?.portal+'/'+areas[name]);}
+ async function navigate(name:string){
+  if(!back())return;
+  const path='/'+user?.portal+'/'+areas[name];
+  // The Operations document permits the microphone for sample comments.
+  if(name==='Operations'){window.location.assign(path);return;}
+  await goto(path);
+ }
  import {Building2,ShieldCheck,FileText,Landmark,Plane,Clock,Plus,ArrowLeft,ArrowRight,Check,LogOut,Download,Upload,Search,Settings,Mail,LockKeyhole,RefreshCw,X,ClipboardCheck} from '@lucide/svelte';
  import {api,uploadTo,day} from '$lib/api';
  import type {Row} from '$lib/types';
