@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {PageLoader, SpinnerLoader} from '$lib/components/loaders';
  import OperationsAccountMenu from './OperationsAccountMenu.svelte';
  import SignInShell from '$lib/SignInShell.svelte';
  import Spooly from './Spooly.svelte';
@@ -75,7 +75,7 @@
 </script>
 
 <svelte:head><title>Euro Suits · {data?page:'Sign in'}</title><meta name="description" content="Euro Suits manufacturing operations workspace"/></svelte:head>
-{#if loading}<div class="loading-screen" aria-busy="true"><img src="/logo.png" alt="Euro Suits"/><SpinnerLoader label="Opening your workspace" size={25}/><SkeletonLoader variant="card" rows={3} label="Loading workspace cards"/></div>
+{#if loading}<PageLoader enhanced label="Opening your workspace…"/>
 {:else if blockedUser||noAccess}<main class="login-panel"><section class="panel company-section"><h1>{blockedUser?'Renewal action required':'No features assigned'}</h1><p>{blockedUser?'Your dashboard is locked because a document is at least 30 days overdue. Contact Finance to renew it and MD or Super Admin for approval.':'Admin must assign permissions to this account.'}</p>{#each blockedUser?.renewal_blocks||[] as b}<p><strong>{b.legal_name}</strong> · {b.label} · {b.expires_on}</p>{/each}<button class="button primary" onclick={()=>window.location.reload()}>Check access again</button><button class="button secondary" onclick={logout}>Sign out</button></section></main>
 {:else if !data}
  <SignInShell title={portal?portal.charAt(0).toUpperCase()+portal.slice(1)+' sign in':'Welcome back'} description="Sign in to your operations workspace."><SignInForm {portal} initialUsername={username} onauthenticated={signedIn}/>{#if error}<p class="form-error" role="alert">{error}</p>{/if}{#if local}<div class="local-note"><span class="demo-dot"></span>Local testing environment<small>Use the credentials in LOCAL-ACCESS.txt.</small></div>{/if}<p class="login-help">Need access? Contact your company administrator.</p></SignInShell>

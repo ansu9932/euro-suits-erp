@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {PageLoader, SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import SignInShell from '$lib/SignInShell.svelte';
  import Spooly from './Spooly.svelte';
  import PerformanceWorkspace from "./PerformanceWorkspace.svelte";
@@ -41,7 +41,7 @@
  function exportReport(){if(!data)return;const blob=new Blob([JSON.stringify({generated_at:new Date().toISOString(),health:data.health,worker_last_success:data.worker_last_success,issues:data.issues,flow_alerts:data.flow_alerts,reminder_delivery:data.reminders},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='euro-suits-issue-report.json';a.click();URL.revokeObjectURL(url);}
 </script>
 <svelte:head><title>Euro Suits · Developer</title></svelte:head>
-{#if !ready}<main class="login-panel" aria-busy="true"><SpinnerLoader label="Opening developer workspace"/><SkeletonLoader variant="card" rows={3} label="Loading developer workspace"/></main>
+{#if !ready}<PageLoader enhanced label="Opening developer workspace…"/>
 {:else if !user}
  <SignInShell title="Developer sign in" description="Enter your password, then verify with the code sent to your email.">{#if notice}<p role="status">{notice}</p>{/if}<SignInForm portal="developer" initialUsername="developer" onauthenticated={signedIn}/>{#if error}<p class="form-error" role="alert">{error}</p>{/if}</SignInShell>
 {:else}

@@ -2,6 +2,7 @@
 
 These Svelte 5 components adapt the owner's supplied arc, shimmer and layered button reference to the ERP's existing standard CSS and navy/teal tokens. They do not add React, Tailwind, external fonts or demonstration/code-drawer controls.
 
+- `PageLoader`: initial workspace loading with a centered 680px maximum group, 56px crest, 22px spinner, three compact placeholders and slim progress bar. Props: `isLoading`, `enhanced`, `label`. Its viewport CSS is independent of register skeletons and legacy loading/login containers.
 - `SpinnerLoader`: inline fetch/status feedback. Props: `size`, `label`; use an empty label inside an already named status.
 - `SkeletonLoader`: `variant="table|card|list|detail"`, `rows`, `columns`, `label`, `compact`. Place inside a table cell, never directly inside `tbody`. Keep loaded data visible when refreshing.
 - `ButtonLoader`: native button with `type`, `label`, `loadingLabel`, `loading`, `disabled` and normal button attributes. Its two grid layers reserve the same width. Use for new forms; existing native buttons receive the shared request-driven spinner without replacing their Svelte nodes.

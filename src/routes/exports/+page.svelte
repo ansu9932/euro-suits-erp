@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {PageLoader} from '$lib/components/loaders';
  import SignInShell from '$lib/SignInShell.svelte';
  import {onMount} from 'svelte';
  import {ArrowLeft, LockKeyhole, LogOut} from '@lucide/svelte';
@@ -38,7 +39,7 @@
 
 <svelte:head><title>Export Documentation · Euro Suits ERP</title><meta name="robots" content="noindex"/></svelte:head>
 {#if !ready}
- <main class="loading-screen"><img src="/logo.png" alt="Euro Suits"/><p>Opening Export Documentation…</p></main>
+ <PageLoader enhanced label="Opening Export Documentation…"/>
 {:else if !user}
  <SignInShell title="Export Documentation" description="Sign in with your assigned ERP account."><SignInForm portal="" onauthenticated={signedIn}/>{#if error}<p class="form-error" role="alert">{error}</p>{/if}</SignInShell>
 {:else}

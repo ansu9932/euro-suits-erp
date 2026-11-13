@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {PageLoader, SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import SignInShell from '$lib/SignInShell.svelte';
  import {companyPortDefaultGroup,setCompanyPortDefault,changeCompanyPort} from './companyPorts';
  import Spooly from './Spooly.svelte';
@@ -84,7 +84,7 @@
 </script>
 
 <svelte:head><title>Euro Suits · Company Setup</title></svelte:head>
-{#if !ready}<main class="loading-screen" aria-busy="true"><img src="/logo.png" alt="Euro Suits"/><SpinnerLoader label="Opening Company Setup"/><SkeletonLoader variant="table" rows={5} columns={5} label="Loading companies"/></main>
+{#if !ready}<PageLoader enhanced label="Opening Company Setup…"/>
 {:else if !user}
 <SignInShell title={portal?portalNames[portal]+' sign in':'Welcome back'} description={portal?'Use your individual '+portalNames[portal]+' account.':'Sign in to your Euro Suits workspace.'}><SignInForm {portal} initialUsername={username} onauthenticated={signedIn}/>{#if error}<p class="form-error" role="alert">{error}</p>{/if}<div class="role-shortcuts"><span>Role login pages</span>{#each [['finance','Finance Head'],['md','MD'],['admin','Super Admin']] as account}<button onclick={()=>goto('/'+(account[0]==='admin'?'admin':account[0]))}>{account[1]}</button>{/each}</div>{#if local}<p class="login-help">Local test credentials are in the private LOCAL-ACCESS.txt file.</p>{/if}</SignInShell>
 {:else}
