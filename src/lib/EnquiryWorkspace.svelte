@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import {onMount,tick} from 'svelte';
  import {Plus,ArrowLeft,Download,FileText,Search,RefreshCw,Trash2} from '@lucide/svelte';
  import {api,uploadTo,dateISO} from './api';
@@ -8,9 +9,9 @@
  import type {Row} from './types';
  let {companies,company,dirty=$bindable(false)}:{companies:Row[];company:string;dirty?:boolean}=$props();
  let data:Row|null=$state(null),detail:Row|null=$state(null),form:Row=$state({}),mode=$state(''),busy=$state(false),error=$state(''),notice=$state(''),search=$state(''),status=$state('All'),review=$state(''),category=$state('Buyer email'),proofOrder=$state(''),preview:Row|null=$state(null),past:Row|null=$state(null);
- let root:HTMLElement; let registerReturn='enquiry-new',formReturn='';
+ let root:HTMLElement;let detailLoading=$state(false); let registerReturn='enquiry-new',formReturn='';
  async function focusView(id:string){await tick();(root?.querySelector('#'+id) as HTMLElement|null)?.focus()}
- async function back(){detail=null;past=null;error='';notice='';await focusView(registerReturn)}
+ async function back(){if(busy||detailLoading)return;detail=null;past=null;error='';notice='';await focusView(registerReturn)}
  const ref=(id:number)=>'EQ-'+String(id).padStart(6,'0');
  const booking=(id:number)=>'BK-'+String(id).padStart(6,'0');
  const qty=(rows:Row[])=>rows.reduce((s,r)=>s+Number(r.quantity||0),0);
@@ -30,7 +31,7 @@
  onMount(()=>{run(load)});
  function options(key:string){const cid=Number(form.company_id||detail?.record.company_id||currentCompany());return [...new Set([...(data?.defaults?.[key]||[]),...(data?.options||[]).filter((o:Row)=>o.company_id===cid&&o.kind===key).map((o:Row)=>o.label)])] as string[]}
  async function addOption(key:string,label:string){await api('/enquiry-options',{company_id:Number(form.company_id||detail?.record.company_id),kind:key,label});await load()}
- async function open(id:number){registerReturn='enquiry-open-'+id;await run(async()=>{detail=await api('/enquiries/'+id);review='';past=null;notice='';mode='';dirty=false;category=data?.can_create?'Buyer email':'Supplier quotation';await focusView('enquiry-detail-title')})}
+ async function open(id:number){if(busy)return;registerReturn='enquiry-open-'+id;detailLoading=true;try{await run(async()=>{detail=await api('/enquiries/'+id);review='';past=null;notice='';mode='';dirty=false;category=data?.can_create?'Buyer email':'Supplier quotation'})}finally{detailLoading=false}if(detail)await focusView('enquiry-detail-title')}
  function fresh(){if(!company&&companies.length>1){error='Select a workspace company before creating an enquiry.';return}error='';notice='';form={company_id:currentCompany(),buyer_id:'',material_id:'',development_id:'',profile:{sale_type:'Export',enquiry_type:'Booking enquiry',garment_currency:'USD',fabric_status:'To be purchased'},colours:[{colour:'',buyer_colour_code:'',quantity:1}]};mode='new';dirty=true;formReturn='enquiry-new';focusView('enquiry-form-title')}
  function edit(kind:string){formReturn='enquiry-edit-'+kind;form=structuredClone($state.snapshot(detail!.record));form.costing={components:[],currency:form.profile.garment_currency||'USD',...form.costing};form.fabric={unit:'MTR',currency:'USD',purchase_type:'Import',response_date:dateISO(),...form.fabric};form.note='';if(kind==='order'){const used=detail!.orders.filter((o:Row)=>o.approval!=='Rejected').reduce((s:number,o:Row)=>s+o.quantity,0);form.po='';form.quantity=qty(form.colours)-used;form.due_date=form.profile.garment_delivery_date;form.product=['Suits','Trousers','Shirts','General'].includes(form.profile.product)?form.profile.product:'General'}mode=kind;dirty=true;preview=null;error='';notice='';focusView('enquiry-form-title')}
  function closeForm(){if(busy)return;if(dirty&&!window.confirm('Discard the unsaved changes?'))return;mode='';dirty=false;error='';preview=null;focusView(formReturn)}
@@ -50,7 +51,7 @@
 </script>
 <svelte:window onbeforeunload={beforeUnload}/>
 <section class="enquiries" bind:this={root}>
- {#if mode}
+ {#if detailLoading}<SkeletonLoader variant="detail" label="Opening enquiry details"/>{:else if mode}
  <form class="enquiry-editor" oninput={()=>preview=null} onsubmit={save} use:enter={mode}>
   <header class="enquiry-heading"><div><h2 id="enquiry-form-title" tabindex="-1">{title}</h2>{#if form.id}<p>{ref(form.id)} · {form.buyer_name}</p>{/if}</div><button type="button" class="button secondary" disabled={busy} onclick={closeForm}>Close</button></header>
   <div class="editor-body">
@@ -111,8 +112,8 @@
  {:else}
  <header class="register-heading"><div><h2>Enquiry register</h2><p>Buyer request → fabric response → costing → MD review → booking.</p></div><div class="actions"><button class="button secondary" disabled={busy} onclick={()=>run(load)}><RefreshCw size={16}/>Refresh</button>{#if data?.can_create}<button class="button primary" disabled={busy} id="enquiry-new" onclick={fresh}><Plus size={17}/>New enquiry</button>{/if}</div></header>
  {#if error}<p class="form-error" role="alert">{error}</p>{/if}
- <div class="register-tools"><label class="search"><Search size={18}/><input aria-label="Search enquiries" placeholder="Search enquiry, booking, buyer or style" bind:value={search}/></label><label>Status<select bind:value={status}>{#each ['All','Draft','Fabric requested','Costing','Submitted','Changes requested','Approved','Booked'] as item}<option>{item}</option>{/each}</select></label><span class="result-count">{records.length} enquiries{#if data?.records?.length>=data?.record_limit} · latest {data?.record_limit}{/if}</span></div>
- <div class="table-scroll"><table><thead><tr><th>Enquiry / booking</th><th>Buyer & brand</th><th>Style / product</th><th>Raised by</th><th class="numeric">Quantity</th><th>Delivery</th><th>Status</th></tr></thead><tbody>{#each records as record}<tr><td><button id={'enquiry-open-'+record.id} class="text-button reference-link" aria-label={'Open '+ref(record.id)} disabled={busy} onclick={()=>open(record.id)}>{ref(record.id)}</button>{#if record.booking_number}<small>{booking(record.booking_number)}</small>{/if}</td><td>{record.buyer_name}<small>{record.profile.brand}</small></td><td>{record.profile.buyer_style||'New style'}<small>{record.profile.product} · {record.profile.sale_type}</small></td><td>{record.merchant}</td><td class="numeric">{num(qty(record.colours),0)}</td><td>{dates(record.profile.garment_delivery_date)}</td><td><span class="status" class:approved={['Approved','Booked'].includes(record.status)}>{record.status}</span></td></tr>{:else}<tr><td colspan="7"><div class="empty-enquiries"><FileText size={28}/><h3>{busy?'Loading enquiries…':search||status!=='All'?'No matching enquiries':'No enquiries yet'}</h3><p>{search||status!=='All'?'Change the search or status filter.':data?.can_create?'Create an enquiry to begin the fabric and costing review.':'Enquiries assigned to your company and buyers will appear here.'}</p></div></td></tr>{/each}</tbody></table></div>
+ <div class="register-tools"><label class="search"><Search size={18}/><input aria-label="Search enquiries" placeholder="Search enquiry, booking, buyer or style" bind:value={search}/></label><label>Status<select bind:value={status}>{#each ['All','Draft','Fabric requested','Costing','Submitted','Changes requested','Approved','Booked'] as item}<option>{item}</option>{/each}</select></label><span class="result-count">{#if busy&&data}<SpinnerLoader size={16} label="Refreshing enquiries"/>{/if}{records.length} enquiries{#if data?.records?.length>=data?.record_limit} · latest {data?.record_limit}{/if}</span></div>
+ {#if !data&&!error}<SkeletonLoader variant="table" columns={7} rows={5} label="Loading enquiry register"/>{:else}<div class="table-scroll"><table><thead><tr><th>Enquiry / booking</th><th>Buyer & brand</th><th>Style / product</th><th>Raised by</th><th class="numeric">Quantity</th><th>Delivery</th><th>Status</th></tr></thead><tbody>{#each records as record}<tr><td><button id={'enquiry-open-'+record.id} class="text-button reference-link" aria-label={'Open '+ref(record.id)} disabled={busy} onclick={()=>open(record.id)}>{ref(record.id)}</button>{#if record.booking_number}<small>{booking(record.booking_number)}</small>{/if}</td><td>{record.buyer_name}<small>{record.profile.brand}</small></td><td>{record.profile.buyer_style||'New style'}<small>{record.profile.product} · {record.profile.sale_type}</small></td><td>{record.merchant}</td><td class="numeric">{num(qty(record.colours),0)}</td><td>{dates(record.profile.garment_delivery_date)}</td><td><span class="status" class:approved={['Approved','Booked'].includes(record.status)}>{record.status}</span></td></tr>{:else}<tr><td colspan="7"><div class="empty-enquiries"><FileText size={28}/><h3>{busy?'Loading enquiries…':search||status!=='All'?'No matching enquiries':'No enquiries yet'}</h3><p>{search||status!=='All'?'Change the search or status filter.':data?.can_create?'Create an enquiry to begin the fabric and costing review.':'Enquiries assigned to your company and buyers will appear here.'}</p></div></td></tr>{/each}</tbody></table></div>{/if}
  {/if}
 </section>
 <style>

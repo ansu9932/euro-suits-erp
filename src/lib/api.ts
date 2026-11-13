@@ -1,5 +1,6 @@
 import {reportClientIssue} from './diagnostics';
 import {trackAction} from './actionLock';
+import {minimumWindow} from './loadingWindow';
 export let csrf='';
 export function setCSRF(token:string){csrf=token;}
 const pending=new Map<string,Promise<any>>();
@@ -19,7 +20,7 @@ function actionID(identity:string){
 function once<T>(key:string,work:()=>Promise<T>):Promise<T>{
  const existing=pending.get(key);
  if(existing)return trackAction(existing);
- const request=work().finally(()=>{if(pending.get(key)===request)pending.delete(key)});
+ const request=minimumWindow(work).finally(()=>{if(pending.get(key)===request)pending.delete(key)});
  pending.set(key,request);
  return trackAction(request);
 }

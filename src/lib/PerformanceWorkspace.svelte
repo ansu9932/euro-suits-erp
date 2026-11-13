@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import {onMount} from 'svelte';
  import {api} from './api';
  import type {Row} from './types';
@@ -17,7 +18,7 @@
  onMount(()=>{void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh()},15000);return()=>clearInterval(timer)});
  function download(){if(!data)return;const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='euro-suits-performance.json';a.click();URL.revokeObjectURL(url)}
 </script>
-<div class="perf-toolbar"><p>Live API measurements · last 60 seconds</p><div><button class="button secondary" disabled={busy} onclick={refresh}>{busy?'Refreshing…':'Refresh metrics'}</button><button class="button secondary" disabled={!data} onclick={download}>Download snapshot</button></div></div>
+<div class="perf-toolbar"><p>Live API measurements · last 60 seconds{#if busy&&data}<SpinnerLoader label="Refreshing metrics" size={16}/>{/if}</p><div><button class="button secondary" disabled={busy} onclick={refresh}>Refresh metrics</button><button class="button secondary" disabled={!data} onclick={download}>Download snapshot</button></div></div>
 {#if error}<p class="form-error" role="alert">{error} Last successful readings remain below.</p>{/if}
 {#if data}
  <div class="perf-cards">
@@ -33,7 +34,7 @@
   <section class="panel"><h2>Office traffic limits</h2><dl><div><dt>Requests per user / minute</dt><dd>{num(data.limits.requests_per_user_per_minute)}</dd></div><div><dt>Shared-IP logins / 15 minutes</dt><dd>{num(data.limits.office_logins_per_15_minutes)}</dd></div><div><dt>Shared-IP OTP checks / 15 minutes</dt><dd>{num(data.limits.office_otp_checks_per_15_minutes)}</dd></div><div><dt>Parallel password checks</dt><dd>{data.limits.parallel_password_checks}</dd></div></dl><p>Account-level password and OTP protections still apply. Limits are managed in the server configuration.</p></section>
  </div>
  <p class="perf-footnote">Updated {new Date(data.observed_at).toLocaleString()} · Refreshes every 15 seconds while visible. Counters reset when the API restarts. Daily backup setup is currently paused.</p>
-{:else if !error}<p role="status">Loading performance readings…</p>{/if}
+{:else if !error}<SkeletonLoader variant="card" rows={4} label="Loading performance readings"/>{/if}
 <style>
  .perf-toolbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px}.perf-toolbar>div{display:flex;gap:8px}.perf-toolbar p{margin:0;color:#334c62}.perf-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px}.perf-cards article{padding:22px;background:#fff;border:1px solid #d6e1e8;border-top:3px solid #168782;border-radius:12px;display:flex;flex-direction:column;gap:10px}.perf-cards span{font-weight:700;color:#334c62}.perf-cards strong{font-size:clamp(22px,2.2vw,30px);color:#122b40}.perf-cards small{color:#536679;font-weight:500}.perf-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.perf-columns section{padding:24px}.perf-columns h2{margin:0 0 20px;font-size:19px;color:#122b40}dl{margin:0}dl>div{display:flex;justify-content:space-between;gap:20px;padding:11px 0;border-bottom:1px solid #e4ebef}dt{color:#344e63;font-size:14px}dd{margin:0;font-size:14px;font-weight:750;color:#172d40;text-align:right}.perf-columns p,.perf-footnote{font-size:13px;line-height:1.6;color:#55697b;margin:18px 0 0}.attention{background:#fff4e5!important}.attention dd{color:#8d460a}.perf-footnote{margin-top:24px}@media(max-width:1000px){.perf-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.perf-columns{grid-template-columns:1fr}.perf-toolbar{align-items:flex-start;flex-direction:column}.perf-cards{gap:10px}.perf-cards article{padding:16px}dl>div{gap:10px}}
 </style>

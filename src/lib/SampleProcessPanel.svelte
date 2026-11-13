@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
  import {ChevronRight} from '@lucide/svelte';
  import SampleStageDialog from './SampleStageDialog.svelte';
  import SampleProcessChanges from './SampleProcessChanges.svelte';
@@ -7,7 +8,7 @@
  import {api} from './api';
  import {indentReference,processSteps,processLabel,actionLabel,stamp,planFields,sampleStatusLabel,type ProcessStep} from './sampleProcess';
  let {piece,merchant='',onchange,onaudit,editorOnly=false,initialStep='',onclose}:{piece:any;merchant?:string;onchange:()=>Promise<void>;onaudit:()=>void;editorOnly?:boolean;initialStep?:string;onclose?:()=>void}=$props();
- let data:any=$state(null),busy=$state(false),error=$state(''),notice=$state(''),action=$state(''),note=$state(''),reviewNote=$state(''),result=$state(''),stage=$state(''),expected=$state(''),destination=$state('Merchant'),values:any=$state({}),sequence=0;
+ let data:any=$state(null),busy=$state(false),loading=$state(true),error=$state(''),notice=$state(''),action=$state(''),note=$state(''),reviewNote=$state(''),result=$state(''),stage=$state(''),expected=$state(''),destination=$state('Merchant'),values:any=$state({}),sequence=0;
  let selectedStep=$state<ProcessStep|null>(null);
  let editorError=$state('');
  let updateDictating=$state(false),reviewDictating=$state(false);
@@ -32,7 +33,7 @@
   selectedStep?.[2]==='merchant_actual'?planFields.filter(([key])=>key==='handover_dc'):planFields
  );
  $effect(()=>{const id=piece.id,v=piece.version,step=initialStep;untrack(()=>{if(editorOnly&&!selectedStep&&step)selectedStep=processSteps.find(item=>item[2]===step)??null;load(id)});return()=>{sequence++}});
- async function load(id=piece.id){const seq=++sequence;try{const d=await api('/sample-indents/'+id+'/process');if(seq===sequence){data=d;error='';if(editorOnly&&selectedStep&&!action)openStage(selectedStep)}}catch(e){if(seq===sequence)error=(e as Error).message}}
+ async function load(id=piece.id){const seq=++sequence;loading=true;try{const d=await api('/sample-indents/'+id+'/process');if(seq===sequence){data=d;error='';if(editorOnly&&selectedStep&&!action)openStage(selectedStep)}}catch(e){if(seq===sequence)error=(e as Error).message}finally{if(seq===sequence)loading=false}}
  function choose(key:string){
   if(key==='audit'){closeEditor();onaudit();return}
   action=key;note='';editorError='';
@@ -65,7 +66,7 @@
   }
   return 'Not recorded';
  }
- async function send(review=''){if(busy||(review?reviewDictating:updateDictating||!activeAction||pending))return;busy=true;error='';editorError='';notice='';try{
+ async function send(review=''){if(busy||loading||(review?reviewDictating:updateDictating||!activeAction||pending))return;busy=true;error='';editorError='';notice='';try{
   const payload:any=review?{action:'review_process',update_id:pending.id,decision:review,note:reviewNote}:{action,note,result,stage,expected_date:result==='In stock'?'':expected,destination};
   if(action==='plan'&&!review)payload.production=Object.fromEntries(editorFields.map(([key])=>[key,String(values[key]||'')]));
   if(action==='handover'&&!review)payload.dispatch=Object.fromEntries(['awb','dispatch_to','dispatch_from','dispatch_contact'].map(key=>[key,values[key]||'']));
@@ -73,18 +74,21 @@
  }catch(e){if(selectedStep||action)editorError=(e as Error).message;else error=(e as Error).message}finally{busy=false}}
 
 </script>
-<section class="sp-process" aria-label={'Process for indent '+piece.id}>
+<section class="sp-process" aria-label={'Process for indent '+piece.id} aria-busy={loading||busy}>
 {#if !editorOnly}
  <div class="sp-process__heading"><div><h4>Department follow-up</h4><p>Responsible merchant: <strong>{merchant||'Not assigned — MD / Super Admin must assign one'}</strong></p></div><span class="sp-status" class:sp-status--issue={!!piece.production.process_exception||['Rework','Rejected'].includes(piece.status)}>{piece.production.process_exception?piece.production.process_exception.result:sampleStatusLabel(piece.status)}</span></div>
+ {#if loading&&!data&&!error}<SkeletonLoader variant="list" rows={2} label="Loading department follow-up…"/>{:else}
+ {#if loading&&data}<div class="sp-loading"><SpinnerLoader size={16} label=""/><span role="status">Updating department follow-up…</span></div>{/if}
  <ol class="sp-timeline" aria-label="Saved milestones">
   {#each processSteps as step (step[2])}
    <li class:sp-timeline__done={!!piece.production[step[2]]}>
-    <button type="button" aria-haspopup="dialog" aria-label={step[1]+': '+milestone(step[0],step[2])} disabled={busy||(!data&&!error)} onclick={()=>openStage(step)}>
+    <button type="button" aria-haspopup="dialog" aria-label={step[1]+': '+milestone(step[0],step[2])} disabled={busy||loading||(!data&&!error)} onclick={()=>openStage(step)}>
      <strong>{step[1]}</strong><span>{milestone(step[0],step[2])}</span>
     </button>
    </li>
   {/each}
  </ol>
+ {/if}
  {#if error}<p class="form-error" role="alert">{error} <button class="text-button" onclick={()=>load()}>Refresh</button></p>{/if}{#if notice}<p class="sp-notice" role="status">{notice}</p>{/if}
  {#if piece.production.process_exception}<div class="sp-issue"><strong>{piece.production.process_exception.result} · {processLabel(piece.production.process_exception.stage)}</strong><p>{piece.production.process_exception.comment}</p><span>{piece.production.process_exception.by} · {stamp(piece.production.process_exception.at)}</span></div>{/if}
  {#if data}
@@ -136,7 +140,7 @@
     {#if pending}
      <p>An update is awaiting approval by {pendingTarget}. {editorOnly?'Open this indent’s Details to review the update.':'See the review below the stage cards.'}</p>
     {:else if !activeAction}
-     {#if !data}<p role="status">{error||'Loading available stage actions…'}</p>
+     {#if !data}{#if error}<p role="status">{error}</p>{:else}<SkeletonLoader variant="detail" rows={2} columns={2} label="Loading available stage actions…"/>{/if}
      {:else if selectedStep?.[2]==='cad_sent_at'&&data.can_send_cad&&piece.status==='Ready'&&!piece.production.cad_sent_at&&!piece.production.process_exception}
       <p>Record fabric and trims availability before sending this indent to CAD.</p>
      {:else if !stageActions.length}
@@ -162,7 +166,7 @@
         <SampleCommentField label="Update comment" placeholder={action==='pattern'?'Add pattern completion remarks or measurements…':''} bind:value={note} bind:dictating={updateDictating} required={commentRequired} disabled={busy} indentId={piece.id} {action} stage={['exception','resolve'].includes(action)?stage:''}/>
        {/key}
       </div>
-      <div class="sp-actions sp-editor__actions"><button class="button secondary" type="button" disabled={busy} onclick={closeEditor}>Cancel</button><button class="button primary" disabled={busy||updateDictating}>{busy?'Saving…':data.can_record_directly?(action==='send_cad'?'Send to CAD':'Record update'):'Submit for approval'}</button></div>
+      <div class="sp-actions sp-editor__actions"><button class="button secondary" type="button" disabled={busy} onclick={closeEditor}>Cancel</button><button class="button primary" disabled={busy||loading||updateDictating}>{busy?'Saving…':data.can_record_directly?(action==='send_cad'?'Send to CAD':'Record update'):'Submit for approval'}</button></div>
      </form>
     {/if}
    </SampleStageDialog>
@@ -170,6 +174,7 @@
 
 </section>
 <style>
+ .sp-loading{display:flex;align-items:center;gap:8px;padding-block:8px;color:#3f4b5b;font-size:12px}
  .sp-process{color:#172638;font-weight:600}.sp-process__heading{display:flex;justify-content:space-between;align-items:start;gap:12px}.sp-process h4{font-size:15px;margin:0 0 4px}.sp-process p{margin:4px 0 8px;font-size:13px}.sp-status{border:1px solid #d0dedb;background:#f0f7f5;color:#075e54;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700}.sp-status--issue{color:#a12435;background:#fff0f2;border-color:#ecc7ce}.sp-timeline{list-style:none;display:flex;gap:8px;margin:12px 0;padding:0 0 8px;overflow-x:auto}.sp-timeline li{display:flex;flex:0 0 120px}
  .sp-timeline button{width:100%;min-height:66px;padding:9px;background:#fff;border:1px solid #ced8e3;border-radius:8px;color:#162638;text-align:left;font:inherit;cursor:pointer}
  .sp-timeline button:hover{border-color:#08746f;background:#f0faf8}

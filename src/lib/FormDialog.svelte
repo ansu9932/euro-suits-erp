@@ -1,7 +1,9 @@
 <script lang="ts">
  import {enter} from "./motion";
  import {onMount} from 'svelte';
- import {X,LoaderCircle} from '@lucide/svelte';
+ import {X} from '@lucide/svelte';
+ import {ButtonLoader} from './components/loaders';
+ import {withAction} from './loading';
  import type {FormSpec,Row} from './types';
  let {spec,onclose}:{spec:FormSpec;onclose:()=>void}=$props();
  let dialog:HTMLDialogElement;let values:Row=$state({});let error=$state('');let busy=$state(false);
@@ -11,7 +13,7 @@
  function fieldOptions(f:FormSpec['fields'][number]){return f.key==='permissions'&&spec.permissionsByRole?(spec.permissionsByRole[values.role]||[]).map(v=>({value:v,label:permissionNames[v]||v})):f.options||[];}
  function toggle(key:string,v:string|number,checked:boolean){const list=values[key]||[];values[key]=checked?[...list,v]:list.filter((x:unknown)=>x!==v);}
  function roleChanged(){if(spec.permissionsByRole)values.permissions=[...(spec.permissionsByRole[values.role]||[])];}
- async function submit(e:SubmitEvent){e.preventDefault();if(busy)return;error='';for(const f of spec.fields){if(f.type==='multiselect'&&visible(f.key)&&f.required!==false&&!values[f.key]?.length){error='Select at least one '+f.label.toLowerCase()+'.';return;}}busy=true;try{await spec.submit(values);onclose();}catch(e){error=(e as Error).message;}finally{busy=false;}}
+ async function submit(e:SubmitEvent){e.preventDefault();if(busy)return;error='';for(const f of spec.fields){if(f.type==='multiselect'&&visible(f.key)&&f.required!==false&&!values[f.key]?.length){error='Select at least one '+f.label.toLowerCase()+'.';return;}}busy=true;try{await withAction(()=>spec.submit(values));onclose();}catch(e){error=(e as Error).message;}finally{busy=false;}}
 </script>
 <dialog bind:this={dialog} class="form-dialog ux-dialog" oncancel={(e)=>{if(busy)e.preventDefault();else onclose();}}>
  <div class="dialog-header"><div><h2>{spec.title}</h2></div><button type="button" class="icon-button" aria-label="Close form" onclick={onclose} disabled={busy}><X size={20}/></button></div>
@@ -33,6 +35,6 @@
   </div>
   {#if error}<p class="form-error" role="alert">{error}</p>{/if}
   </div>
-  <footer class="dialog-footer"><button type="button" class="button secondary" onclick={onclose} disabled={busy}>Cancel</button><button class="button primary" disabled={busy}>{#if busy}<LoaderCircle size={16} class="spin"/>{/if}{busy?'Saving…':spec.submitLabel||'Save record'}</button></footer>
+  <footer class="dialog-footer"><button type="button" class="button secondary" onclick={onclose} disabled={busy}>Cancel</button><ButtonLoader type="submit" class="button primary" loading={busy} label={spec.submitLabel||'Save record'} loadingLabel="Saving…"/></footer>
  </form>
 </dialog>

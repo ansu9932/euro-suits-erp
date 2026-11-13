@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {SpinnerLoader} from './components/loaders';
  import {onDestroy,tick} from 'svelte';
  import {Send,ArrowUpRight,RotateCcw} from '@lucide/svelte';
  import {api} from './api';
@@ -31,7 +32,7 @@
  <div class="spooly-chat__transcript" bind:this={transcript} role="log" aria-label="Spooly conversation" aria-live="polite" aria-relevant="additions text" tabindex="0">
   {#if !exchanges.length&&!pendingQuestion}<div class="spooly-chat__welcome"><h3>Ask a question. Get a short answer.</h3><p>Ask about your ERP workflow or a general topic. You can ask follow-up questions too.</p><div class="spooly-chat__suggestions"><button type="button" onclick={()=>suggest('What is the difference between a sea port and an ICD?')}>Sea port vs ICD</button><button type="button" onclick={()=>suggest('How do I save a draft?')}>Saving a draft</button></div></div>{/if}
   {#each exchanges as exchange}<div class="spooly-chat__exchange" use:enter><div class="spooly-chat__question"><strong>You</strong><p>{exchange.question}</p></div><div class="spooly-chat__answer"><strong>Spooly{exchange.reply.kind==='answer'?' · AI answer':''}</strong><p>{exchange.reply.answer}</p>{#each exchange.reply.guides||[] as guide}<button type="button" class="spooly-chat__guide" onclick={()=>onGuide(guide)}>Guide: {guide.title}<ArrowUpRight size={14}/></button>{/each}</div></div>{/each}
-  {#if pendingQuestion}<div class="spooly-chat__question"><strong>You</strong><p>{pendingQuestion}</p></div><p class="spooly-chat__status" role="status">Spooly is thinking…</p>{/if}
+  {#if pendingQuestion}<div class="spooly-chat__question"><strong>You</strong><p>{pendingQuestion}</p></div><p class="spooly-chat__status" role="status"><SpinnerLoader size={16} label=""/> Spooly is thinking…</p>{/if}
  </div>
  {#if error}<p class="spooly-chat__error" role="alert">{error} Your question is still below.</p>{/if}
  {#if !data.chat_available}<p class="spooly-chat__error" role="status">Chat is unavailable. You can still use the Guides tab.</p>{/if}

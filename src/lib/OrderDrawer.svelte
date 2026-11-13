@@ -1,12 +1,14 @@
 <script lang="ts">
  import {onMount} from 'svelte';import {X,ArrowRight,Check,Plus,Paperclip,Upload,Download,CalendarDays,Layers,ShieldCheck} from '@lucide/svelte';
  import Badge from './Badge.svelte';import {api,upload,fmt,day} from './api';import type {Row,Dataset,FormSpec,Field} from './types';
+ import {SkeletonLoader} from './components/loaders';
  let {order,data,onclose,onform,onmutate}:{order:Row;data:Dataset;onclose:()=>void;onform:(s:FormSpec)=>void;onmutate:()=>Promise<void>}=$props();
  let dialog:HTMLDialogElement;let details:Row=$state({});let error=$state('');let busy=$state(false);let tab=$state('Overview');let uploadInput=$state<HTMLInputElement>(null!);
+ let loading=$state(true);
  const can=(g:string)=>data.user.grants.includes(g);
  const options=(list:Row[],label='name')=>list.map(r=>({value:r.id,label:r[label]}));
  onMount(()=>{dialog.showModal();return()=>dialog.close();});
- $effect(()=>{const id=order.id;const version=order.version;let valid=true;api(`/orders/${id}`).then(d=>{if(valid)details=d;}).catch(e=>{if(valid)error=e.message;});return()=>{valid=false;};});
+ $effect(()=>{const id=order.id;const version=order.version;let valid=true;loading=true;error='';api(`/orders/${id}`).then(d=>{if(valid)details=d;}).catch(e=>{if(valid)error=e.message;}).finally(()=>{if(valid)loading=false});return()=>{valid=false;};});
  async function act(action:string,values:Row={}){await api(`/orders/${order.id}`,{action,version:order.version,...values});await onmutate();}
  function form(title:string,action:string,fields:Field[],submitLabel='Save record'){onform({title,description:order.po+' · '+order.style,fields,submitLabel,submit:v=>act(action,v)});}
  async function direct(action:string,values:Row={}){if(busy)return;error='';busy=true;try{await act(action,values);}catch(e){error=(e as Error).message;}finally{busy=false;}}
@@ -30,6 +32,7 @@
  <div class="drawer-tabs" role="tablist" aria-label="Order sections">{#each ['Overview','Production','Development','Materials','Documents'] as t}<button role="tab" aria-selected={tab===t} class:active={tab===t} onclick={()=>tab=t}>{t}</button>{/each}</div>
  <div class="drawer-body">
  {#if error}<p class="form-error" role="alert">{error}</p>{/if}
+ {#if loading}<SkeletonLoader variant="detail" rows={6} columns={2} label="Loading order details…"/>{:else}
  <div class="workflow-path">{#each data.stages as stage,i}<span class:current={order.stage===stage} class:complete={i<data.stages.indexOf(order.stage)}>{stage==='Development'?'CAD':stage}</span>{/each}</div><div class="workflow-hint"><ArrowRight size={16}/><p>{workflowHint}</p></div>
  {#if tab==='Overview'}
   <div class="detail-grid"><div><span>Order quantity</span><strong>{fmt(order.quantity)} <small>pcs</small></strong></div><div><span>Ex-factory date</span><strong>{day(order.due_date)}</strong></div><div><span>Company</span><p>{order.company}</p></div><div><span>Buyer team</span><p>{order.team}</p></div><div><span>Sewing allocation</span><p>{order.line||'Not allocated'}</p></div><div><span>Finishing unit</span><p>{order.finishing_unit||'Pending approval'}{order.sub_line?' / '+order.sub_line:''}</p></div></div>
@@ -55,7 +58,7 @@
   <p class="muted">PO files, tech packs and CAD revisions. Maximum 20 MB per file.</p>
   {#each details.documents||[] as doc}<a class="document-row" href={'/api/documents/'+doc.id}><Paperclip size={18}/><div><strong>{doc.name}</strong><small>{fmt(doc.size/1024)} KB · {day(doc.created_at)}</small></div><Download size={16}/></a>{:else}<div class="empty"><Paperclip size={30}/><p>No documents attached to this order.</p></div>{/each}
  {/if}
- </div>
+ {/if}</div>
  <footer class="drawer-footer">
  {#if order.approval==='Pending'&&can('approve')}<button class="button secondary danger" disabled={busy} onclick={()=>direct('reject')}>Reject</button><button class="button primary" disabled={busy} onclick={()=>direct('approve')}><Check size={16}/> Approve PO</button>
  {:else}<div class="footer-secondary">{#if can('plan')&&data.stages.indexOf(order.stage)<=4}<button class="button secondary" onclick={allocate}>Allocate line</button>{/if}{#if ['Cutting','Sewing','Finishing','Packing'].includes(order.stage)&&can(stageGrant[order.stage])&&order.approval==='Approved'}<button class="button secondary" onclick={output}><Plus size={16}/> Record output</button>{/if}</div>{#if order.stage!=='Dispatched'&&can(stageGrant[order.stage])&&order.approval==='Approved'}<button class="button primary" disabled={busy} onclick={advance}>{order.stage==='Warehouse'?'Record invoice':order.stage==='Invoiced'?'Dispatch':order.stage==='Planning'?'Send to CAD':'Move to '+data.stages[data.stages.indexOf(order.stage)+1]}<ArrowRight size={16}/></button>{/if}{/if}

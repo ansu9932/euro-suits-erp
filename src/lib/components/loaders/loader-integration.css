@@ -1,0 +1,15 @@
+/* Request-driven overlays preserve each existing button's measured width and
+ * Svelte-owned children. Never apply this layer to local-only draft controls. */
+button[data-request-loading]:not([data-loader-owned]),
+a[data-request-loading]:not([data-loader-owned]) {
+ color:transparent!important;text-shadow:none!important;opacity:1!important;cursor:wait!important;
+}
+:is(button,a)[data-request-loading]:not([data-loader-owned])>:not(.erp-action-loader){opacity:0!important}
+[data-request-loading]>.erp-action-loader {
+ position:absolute!important;inset:0!important;display:flex!important;align-items:center!important;justify-content:center!important;
+ gap:0!important;margin:0!important;padding:0!important;color:var(--action-loader-ink,#0a7a6b)!important;
+ pointer-events:none!important;opacity:1!important;
+}
+.erp-action-loader *{color:inherit!important}
+@media (forced-colors:active){[data-request-loading]>.erp-action-loader{color:ButtonText!important}}
+@media print{.erp-action-loader{display:none!important}}

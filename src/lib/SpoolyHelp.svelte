@@ -1,6 +1,7 @@
 <script lang="ts">
+ import {SkeletonLoader,SpinnerLoader} from './components/loaders';
  import {onDestroy,onMount,tick} from 'svelte';
- import {X,ArrowLeft,ArrowUpRight,Search,Languages,MessageCircle,LoaderCircle} from '@lucide/svelte';
+ import {X,ArrowLeft,ArrowUpRight,Search,Languages,MessageCircle} from '@lucide/svelte';
  import {api} from './api';
  import SpoolyChat from './SpoolyChat.svelte';
  import {enter} from './motion';
@@ -41,7 +42,7 @@
  </header>
  {#if data}<nav class="spooly-help-tabs" aria-label="Spooly mode"><button type="button" class:active={mode==='guides'} aria-pressed={mode==='guides'} onclick={()=>mode='guides'}>Guides</button><button type="button" class:active={mode==='chat'} aria-pressed={mode==='chat'} onclick={()=>mode='chat'}>Chat</button></nav>{/if}
  <div class="spooly-help-content" class:spooly-help-content--chat={mode==='chat'}>
-  {#if loading}<p class="spooly-feedback" role="status">Finding your permitted guides…</p>
+  {#if loading}<SkeletonLoader variant="list" rows={4} label="Finding your permitted guides…"/>
   {:else if !data}
    <p class="spooly-error" role="alert">{error||'Help could not load.'}</p><button type="button" class="spooly-primary" onclick={load}>Retry help</button>
   {:else}
@@ -56,7 +57,7 @@
     {#if data.ai_available}
      <div class="spooly-explain-controls">
       <label><span><Languages size={15}/>Explain in</span><select bind:value={language} disabled={busy} onchange={()=>{reply=null;error=''}}><option value="en">English</option><option value="hi">हिन्दी</option><option value="kn">ಕನ್ನಡ</option><option value="bn">বাংলা</option></select></label>
-      <button type="button" class="spooly-primary" disabled={busy} onclick={explain}>{#if busy}<LoaderCircle size={16}/>Explaining…{:else}Explain with AI{/if}</button>
+      <button type="button" class="spooly-primary" disabled={busy} onclick={explain}>{#if busy}<SpinnerLoader size={16} label=""/>Explaining…{:else}Explain with AI{/if}</button>
      </div>
     {:else}<p class="spooly-feedback">AI is not connected yet. These ERP guides are ready to use.</p>{/if}
     {#if error}<p class="spooly-error" role="alert">{error}</p>{/if}

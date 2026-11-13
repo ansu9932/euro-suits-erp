@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import {onMount} from 'svelte';
  import {api} from './api';
  import type {Row} from './types';
@@ -12,7 +13,8 @@
  async function run(body:Row){if(busy)return;busy=true;error='';notice='';try{await api('/developer/whatsapp',{...body,password});password='';edit=null;recipient=null;await load();notice=body.action==='test'?'Test queued. Refresh delivery history after about one minute.':body.action==='submit'?'Submitted to Meta. Sync status to check approval.':'Changes saved.'}catch(e){error=(e as Error).message}finally{busy=false}}
  async function refresh(){if(busy)return;busy=true;try{await load()}catch(e){error=(e as Error).message}finally{busy=false}}
 </script>
-<section class="wa-page">
+<section class="wa-page" aria-busy={busy}>
+ {#if busy&&data}<SpinnerLoader label="Updating WhatsApp workspace" size={16}/>{/if}
  <header class="wa-heading"><div><p class="eyebrow">EURO SUITS · NOTIFICATIONS</p><h1>WhatsApp control centre</h1><p>Work alerts, daily reminders and delivery checks.</p></div><button class="button secondary" disabled={busy} onclick={refresh}>Refresh</button></header>
  {#if error}<p class="form-error" role="alert">{error}</p>{/if}{#if notice}<p class="company-notice" role="status">{notice}</p>{/if}
  {#if data}
@@ -36,7 +38,7 @@
  <form class="wa-card" onsubmit={e=>{e.preventDefault();run({action:'test',phone:testPhone,consent_confirmed:consent})}}><h2>Send a connection test</h2><label>Recipient WhatsApp number<input bind:value={testPhone} required placeholder="+91…"/></label><label class="wa-check"><input type="checkbox" bind:checked={consent}/>This recipient requested the test</label><p>Uses the approved connection-test template. No company records are included. Limited to three tests per developer per hour.</p><button class="button primary" disabled={busy||!password||!consent||!data.configured}>Send test message</button></form></div>
  <section class="wa-card"><h2>Meta connection</h2><p>Webhook: <code>{data.webhook_url}</code></p><p>Phone ID: {data.phone_id||'Not configured'} · Business account: {data.business_account_id||'Not configured'}</p><p>Access tokens, app secret and verification token stay on the server. They are never displayed in this page.</p></section>
  {/if}
- {:else}<p role="status">Loading WhatsApp workspace…</p>{/if}
+ {:else if !error}<SkeletonLoader variant="card" rows={4} label="Loading WhatsApp workspace"/>{/if}
 </section>
 <style>
  .wa-page{color:#172b3e}.wa-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:24px}.wa-heading h1{font-size:28px;margin:5px 0}.wa-heading p{margin:5px 0}.wa-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.wa-stats article,.wa-card,.wa-editor,.wa-confirm{background:white;border:1px solid #d4e0e6;border-radius:12px;padding:22px;margin-bottom:20px}.wa-stats small{display:block;margin-bottom:10px}.wa-stats strong{font-size:19px}.wa-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 20px}.wa-tabs button{padding:12px 18px;border:1px solid #b4c6d2;border-radius:8px;background:#edf4f8;color:#172b3e;font-weight:700}.wa-tabs .active{background:#172b3e;color:white}.wa-confirm{display:flex;gap:24px;align-items:center}.wa-confirm label{flex:1}.wa-confirm p{flex:1;font-size:13px}.wa-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.wa-card header{display:flex;justify-content:space-between;align-items:center;gap:12px}.wa-card h2,.wa-editor h2{font-size:18px;margin:0 0 12px}.wa-card header span{font-size:11px;background:#fff2d8;padding:6px 8px;border-radius:6px;font-weight:800}.wa-card header span.approved{background:#daf0e5;color:#186041}.wa-meta{font-size:12px;overflow-wrap:anywhere}.wa-chat{background:#e7f4ed;border:1px solid #bfdaca;border-radius:4px 14px 14px;padding:18px;line-height:1.65;font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}.wa-chat strong{font-size:11px;letter-spacing:2px;color:#276a52}.wa-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.wa-page label{display:grid;gap:8px;font-weight:700;margin-bottom:16px}.wa-page input:not([type=checkbox]),.wa-page textarea{width:100%;padding:12px;background:#edf4fa;border:1px solid #b6cbd9;border-radius:7px;font:inherit;color:#142331}.wa-page .wa-check{display:flex;align-items:center;gap:10px}.wa-editor{border:2px solid #47788e}.wa-page table{width:100%;background:white}.wa-page td{overflow-wrap:anywhere}.wa-page code{overflow-wrap:anywhere}.wa-page p{line-height:1.6}@media(max-width:950px){.wa-stats,.wa-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.wa-confirm{display:block}}@media(max-width:600px){.wa-grid,.wa-stats{grid-template-columns:1fr}.wa-heading{align-items:flex-start}.wa-card{padding:16px}}

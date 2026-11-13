@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {minimumWindow} from './loadingWindow';
  import {Check,LoaderCircle,Mic,Sparkles,Square} from '@lucide/svelte';
  import {onMount,tick} from 'svelte';
  import {csrf} from './api';
@@ -68,8 +69,7 @@
   completed=false;
   if(!url)return;
   const probe=new AbortController();
-  fetch(url,{credentials:'same-origin',cache:'no-store',signal:probe.signal})
-   .then(response=>response.ok?response.json():null)
+  minimumWindow(async()=>{const response=await fetch(url,{credentials:'same-origin',cache:'no-store',signal:probe.signal});return response.ok?response.json():null})
    .then(data=>{if(!probe.signal.aborted)enabled=data?.enabled===true})
    .catch(()=>{});
   return ()=>{
@@ -211,11 +211,11 @@
    if(active===recording)finish('Transcription timed out. Try again or type your comment.',true);
   },32_000);
   try{
-   const response=await fetch(url,{
+   const response=await minimumWindow(()=>fetch(url,{
     method:'POST',credentials:'same-origin',cache:'no-store',signal:recording.request.signal,
     headers:{'Content-Type':clip.type,'X-CSRF-Token':csrf,'Idempotency-Key':crypto.randomUUID()},
     body:clip,
-   });
+   }));
    if(active!==recording)return;
    if(response.status===401){
     finish('Your session expired. Sign in to use dictation.',true);

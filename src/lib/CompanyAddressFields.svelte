@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {SpinnerLoader} from '$lib/components/loaders';
  import {onDestroy} from 'svelte';
  import {enter} from './motion';
  import {indianPIN,lookupPostalAddress,postalSuggestions,type AddressPatch,type PostalLocation} from './postalAddress';
@@ -73,7 +74,7 @@
   <div class="postal-help address-wide" id={uid+'-postal-help'}>
    <p role="status" aria-live="polite" aria-atomic="true">
     {#if !india}Enter the postal code, city and state manually for this country.
-    {:else if status==='loading'}Finding city and state… You can keep typing.
+    {:else if status==='loading'}<SpinnerLoader size={16} label=""/> Finding city and state… You can keep typing.
     {:else if status==='error'}PIN lookup is unavailable. Enter the city and state yourself, or retry.
     {:else if status==='empty'}No match for this PIN. Enter the city and state yourself.
     {:else if status==='found'&&suggestions.cities.length>1}This PIN covers several areas. Choose a city suggestion or type your own. You can also edit the state.

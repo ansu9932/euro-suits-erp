@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
  import {Check,ChevronRight,Clock3,RefreshCw,Search} from '@lucide/svelte';
  import {tick,untrack} from 'svelte';
  import {api} from './api';
@@ -116,7 +117,8 @@
  <div class="sp-legend" aria-label="Recorded stage colours"><span class="sp-key sp-key--complete">Recorded</span><span class="sp-key sp-key--active">Current stage</span><span class="sp-key sp-key--pending">Awaiting approval</span><span class="sp-key sp-key--issue">Rework / rejected</span>{#if progressLayout}<span class="sp-key sp-key--unrecorded">Not recorded</span>{/if}</div>
  {#if error}<p class="form-error" role="alert">{error} <button class="text-button" type="button" onclick={()=>load()}>Retry</button></p>{/if}
  {#if notice}<p class="sp-notice" role="status">{notice}</p>{/if}
- {#if !data&&!error}<p class="sp-empty" role="status">Loading indent progress…</p>{:else if data}
+ {#if busy&&data}<SpinnerLoader label="Updating indent progress…"/>{/if}
+ {#if !data&&!error}<SkeletonLoader variant="list" rows={3} columns={5} label="Loading indent progress…"/>{:else if data}
   <div class="sp-list">
    {#each data.rows as row (row.id)}
     <article class="sp-indent" aria-label={'Progress for '+indentReference(row)}>

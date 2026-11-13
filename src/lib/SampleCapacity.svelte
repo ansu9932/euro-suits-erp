@@ -1,14 +1,15 @@
 <script lang="ts">
+ import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
  import {api} from './api';
  import {untrack} from 'svelte';
  import {enter} from './motion';
  let {company,onupdated}:{company:string;onupdated:()=>void}=$props();
  let data:any=$state(null),form:any=$state(null),holidays=$state(''),busy=$state(false),error=$state(''),notice=$state('');
  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
- let generation=0;
+ let generation=0,loading=$state(true);
  const lineName=(value:string)=>value==='General'?'Non-production (legacy)':value;
- async function load(){const n=++generation;try{const value=await api('/sample-capacities');if(n===generation)data=value}catch(e){if(n===generation)error=(e as Error).message}}
- $effect(()=>{company;untrack(()=>{form=null;notice='';error='';load()})});
+ async function load(){const n=++generation;loading=true;try{const value=await api('/sample-capacities');if(n===generation)data=value}catch(e){if(n===generation)error=(e as Error).message}finally{if(n===generation)loading=false}}
+ $effect(()=>{company;untrack(()=>{form=null;data=null;notice='';error='';load()})});
  function edit(record:any=null){error='';notice='';form=record?structuredClone($state.snapshot(record)):{company_id:Number(company),resource:'Line 1',capacity_mode:'Default',effective_date:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}),end_date:'',tailors:2,pieces_per_tailor:2,weekly_off:[0]};holidays=(record?.holidays||[]).join('\n')}
  async function save(e:SubmitEvent){e.preventDefault();if(busy)return;const scope=company;busy=true;error='';try{await api('/sample-capacities',{...form,holidays:holidays.split(/[\n,]/).map(s=>s.trim()).filter(Boolean)});if(company!==scope)return;form=null;await load();onupdated();notice='Capacity saved. Reserved plans keep their dates; new plans use these capacity rules.'}catch(e){if(company===scope)error=(e as Error).message}finally{busy=false}}
 </script>
@@ -31,7 +32,8 @@
   <p class="capacity-help">{form.capacity_mode==='On demand'?'The default automatically resumes after the To date. Overlapping on-demand ranges are not allowed.':'The default starts on the From date. Leave To date blank to continue until a newer default starts.'} Zero tailors pauses the line. Reserved work cannot be overbooked by reducing capacity.</p>
   <footer><button type="button" class="button secondary" disabled={busy} onclick={()=>form=null}>Cancel</button><button class="button primary" disabled={busy}>{busy?'Saving…':'Save capacity'}</button></footer>
  </form>{/if}
- <div class="capacity-scroll"><table><thead><tr><th>Sample line</th><th>Type</th><th>From → To</th><th>Tailors × pieces</th><th>Daily capacity</th><th>Weekly off</th><th>Holidays</th><th>Action</th></tr></thead><tbody>{#each (data?.records||[]).filter((r:any)=>String(r.company_id)===company) as r}<tr><td><strong>{lineName(r.resource)}</strong></td><td>{r.capacity_mode}</td><td>{r.effective_date}<small>to {r.end_date||'Ongoing'}</small></td><td>{r.tailors} × {r.pieces_per_tailor}</td><td><strong>{r.tailors*r.pieces_per_tailor} pcs</strong></td><td>{r.weekly_off.map((n:number)=>days[n]).join(', ')||'None'}</td><td>{r.holidays.join(', ')||'None'}</td><td>{#if data.can_edit}<button class="button secondary" disabled={busy} onclick={()=>edit(r)}>Edit</button>{/if}</td></tr>{:else}<tr><td colspan="8">No capacity configured. Super Admin can add the actual sample tailors and daily output for each line.</td></tr>{/each}</tbody></table></div>
+ {#if loading&&data}<SpinnerLoader label="Updating capacity…"/>{/if}
+ <div class="capacity-scroll" aria-busy={loading}><table><thead><tr><th>Sample line</th><th>Type</th><th>From → To</th><th>Tailors × pieces</th><th>Daily capacity</th><th>Weekly off</th><th>Holidays</th><th>Action</th></tr></thead><tbody>{#each (data?.records||[]).filter((r:any)=>String(r.company_id)===company) as r}<tr><td><strong>{lineName(r.resource)}</strong></td><td>{r.capacity_mode}</td><td>{r.effective_date}<small>to {r.end_date||'Ongoing'}</small></td><td>{r.tailors} × {r.pieces_per_tailor}</td><td><strong>{r.tailors*r.pieces_per_tailor} pcs</strong></td><td>{r.weekly_off.map((n:number)=>days[n]).join(', ')||'None'}</td><td>{r.holidays.join(', ')||'None'}</td><td>{#if data.can_edit}<button class="button secondary" disabled={busy} onclick={()=>edit(r)}>Edit</button>{/if}</td></tr>{:else}<tr><td colspan="8">{#if loading&&!data}<SkeletonLoader variant="table" rows={3} columns={7} label="Loading sample capacity…"/>{:else}No capacity configured. Super Admin can add the actual sample tailors and daily output for each line.{/if}</td></tr>{/each}</tbody></table></div>
 </section>
 <style>
  /* Scoped to sampling; the established global form and navigation styles remain. */

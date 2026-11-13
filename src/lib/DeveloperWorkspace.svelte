@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import SignInShell from '$lib/SignInShell.svelte';
  import Spooly from './Spooly.svelte';
  import PerformanceWorkspace from "./PerformanceWorkspace.svelte";
@@ -40,14 +41,14 @@
  function exportReport(){if(!data)return;const blob=new Blob([JSON.stringify({generated_at:new Date().toISOString(),health:data.health,worker_last_success:data.worker_last_success,issues:data.issues,flow_alerts:data.flow_alerts,reminder_delivery:data.reminders},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='euro-suits-issue-report.json';a.click();URL.revokeObjectURL(url);}
 </script>
 <svelte:head><title>Euro Suits · Developer</title></svelte:head>
-{#if !ready}<main class="login-panel"><p role="status">Opening developer workspace…</p></main>
+{#if !ready}<main class="login-panel" aria-busy="true"><SpinnerLoader label="Opening developer workspace"/><SkeletonLoader variant="card" rows={3} label="Loading developer workspace"/></main>
 {:else if !user}
  <SignInShell title="Developer sign in" description="Enter your password, then verify with the code sent to your email.">{#if notice}<p role="status">{notice}</p>{/if}<SignInForm portal="developer" initialUsername="developer" onauthenticated={signedIn}/>{#if error}<p class="form-error" role="alert">{error}</p>{/if}</SignInShell>
 {:else}
  <div class="dev-shell erp-workspace"><a class="workspace-skip" href="#workspace-content">Skip to workspace</a><aside class="dev-sidebar"><div class="dev-brand"><img src="/logo.png" alt="Euro Suits logo"/><div><strong>EURO SUITS</strong><small>DEVELOPER</small></div></div><p class="dev-caption">OWNER WORKSPACE</p><nav aria-label="Developer navigation">{#each tabs as t}<button aria-label={t} title={t} class:active={tab===t} aria-current={tab===t?'page':undefined} onclick={()=>{tab=t;search='';error=''}}>{#if t==='Overview'||t==='Performance'}<Activity size={18}/>{:else if t==='Accounts'||t==='Access & new users'}<Users size={18}/>{:else if t==='Issues'}<ShieldCheck size={18}/>{:else}<Mail size={18}/>{/if}<span class="sidebar-label">{t}</span></button>{/each}</nav><div class="dev-owner"><strong>{user.name}</strong><small>Email verification enabled</small><button onclick={logout}><LogOut size={16}/><span class="sidebar-label">Sign out</span></button></div></aside>
- <div class="dev-main"><header class="dev-topbar"><span><SidebarToggle/>Developer / <strong>{tab}</strong></span><button class="button secondary" disabled={busy} onclick={refresh}><RefreshCw size={16}/>Refresh</button></header><main id="workspace-content" class="dev-content" tabindex="-1" use:workspaceMotion={tab}>
+ <div class="dev-main"><header class="dev-topbar"><span><SidebarToggle/>Developer / <strong>{tab}</strong></span><button class="button secondary" disabled={busy} onclick={refresh}><RefreshCw size={16}/>Refresh</button></header><main id="workspace-content" class="dev-content" aria-busy={busy} tabindex="-1" use:workspaceMotion={tab}>
  {#if notice}<p class="company-notice" role="status">{notice}</p>{/if}{#if error&&!form}<p class="form-error" role="alert">{error}</p>{/if}
- {#if !data}<p role="status">Loading workspace…</p>
+ {#if !data}{#if !error}<SkeletonLoader variant="card" rows={4} label="Loading developer workspace"/>{/if}
  {:else if tab==='Access & new users'}<SetupUsers currentUser={user}/>
  {:else}
  <div class="company-page-heading" use:enter={tab}><div><p class="eyebrow">SYSTEM ADMINISTRATION</p><h1>{tab}</h1><p>{tab==='Overview'?'Account security, application health and items needing attention.':tab==='Performance'?'Response times, database pressure and background processing.':tab==='Accounts'?'Manage account details and sign-in security. Employees cannot edit their own accounts.':tab==='Issues'?'Captured errors and suspicious activity signals. Review, investigate and record the fix.':'Company email delivery and renewal notification recipients.'}</p></div>{#if tab==='Issues'}<button class="button secondary" onclick={exportReport}><Download size={16}/>Export report</button>{/if}</div>

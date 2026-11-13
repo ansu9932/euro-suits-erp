@@ -1,6 +1,7 @@
 <script lang="ts">
  import {onMount} from 'svelte';
  import LoginFields from './LoginFields.svelte';
+ import {ButtonLoader} from './components/loaders';
  import {api} from './api';
  import type {Row} from './types';
  let {portal,initialUsername='',onauthenticated}:{portal:string;initialUsername?:string;onauthenticated:(result:Row)=>void|Promise<void>}=$props();
@@ -23,6 +24,6 @@
   <LoginFields bind:username bind:password bind:botToken bind:verificationReady resetKey={attempts}/>
  {/if}
  {#if error}<p class="form-error" role="alert">{error}</p>{/if}
- <button class="button primary" disabled={busy||(!pending&&!verificationReady)}>{busy?'Please wait…':pending?'Verify & sign in':'Sign in'}</button>
+ <ButtonLoader type="submit" class="button primary" loading={busy} disabled={!pending&&!verificationReady} label={pending?'Verify & sign in':'Sign in'} loadingLabel="Signing in…"/>
  {#if pending}<button type="button" class="button secondary" disabled={busy||resendSeconds>0} onclick={()=>{if(busy||resendSeconds>0)return;pending=false;code='';error=''}}>{resendSeconds>0?'Request another code in '+resendSeconds+'s':'Use password again / request a new code'}</button>{/if}
 </form>
