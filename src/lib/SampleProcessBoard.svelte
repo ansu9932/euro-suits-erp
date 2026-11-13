@@ -1,28 +1,187 @@
 <script lang="ts">
- import {indentReference} from './sampleProcess';
- import {untrack} from 'svelte';
+ import {Check,ChevronRight,Clock3,RefreshCw} from '@lucide/svelte';
+ import {tick,untrack} from 'svelte';
  import {api} from './api';
- import {processViews,processLabel,processTone,stamp,actionLabel,sampleStatusLabel} from './sampleProcess';
+ import SampleProcessPanel from './SampleProcessPanel.svelte';
+ import {indentReference,processSteps,processViews,processLabel,processTone,stamp,actionLabel,sampleStatusLabel,type ProcessStep} from './sampleProcess';
+
  let {company,view='all',revision=0,onopen}:{company:string;view?:string;revision?:number;onopen:(id:number,indent:number)=>void}=$props();
- let data:any=$state(null),error=$state(''),busy=$state(false),search=$state(''),query=$state(''),page=$state(1),filter=$state('all'),sequence=0;
- $effect(()=>{const c=company,v=view,r=revision,p=page,q=query,f=filter;untrack(()=>load(c,v==='all'?f:v,p,q));return()=>{sequence++}});
- async function load(company:string,view:string,page:number,search:string){const seq=++sequence;busy=true;error='';try{const result=await api('/sample-process?'+new URLSearchParams({company,view,page:String(page),search}));if(seq===sequence)data=result}catch(e){if(seq===sequence)error=(e as Error).message}finally{if(seq===sequence)busy=false}}
- function apply(){page=1;query=search.trim();load(company,view==='all'?filter:view,page,query)}
+ let data:any=$state(null),error=$state(''),busy=$state(false),search=$state(''),query=$state(''),page=$state(1),filter=$state('all'),notice=$state('');
+ let editor:{row:any;step:string}|null=$state(null);
+ let sequence=0,loadedCompany='';
+ let searchInput:HTMLInputElement;
+ let opener:HTMLButtonElement|null=null;
+ const activeView=$derived(view==='all'?filter:view);
+
+ $effect(()=>{
+  const scope=company,queue=activeView,currentPage=page,term=query,version=revision;
+  untrack(()=>{
+   if(loadedCompany!==scope){data=null;editor=null;loadedCompany=scope}
+   load(scope,queue,currentPage,term);
+  });
+  return()=>{sequence++};
+ });
+ async function load(scope=company,queue=activeView,currentPage=page,term=query){
+  const request=++sequence;busy=true;error='';
+  try{
+   const result=await api('/sample-process?'+new URLSearchParams({company:scope,view:queue,page:String(currentPage),search:term}));
+   if(request===sequence)data=result;
+  }catch(problem){if(request===sequence)error=(problem as Error).message}
+  finally{if(request===sequence)busy=false}
+ }
+ function apply(){
+  const term=search.trim(),unchanged=page===1&&query===term;
+  page=1;query=term;
+  if(unchanged)load();
+ }
+ function openStage(row:any,step:ProcessStep,event:MouseEvent){
+  opener=event.currentTarget as HTMLButtonElement;
+  notice='';editor={row,step:step[2]};
+ }
+ async function closeStage(){
+  editor=null;
+  await tick();
+  if(opener?.isConnected)opener.focus({preventScroll:true});
+  else searchInput?.focus({preventScroll:true});
+  opener=null;
+ }
+ async function updated(){
+  notice='Stage update saved. Approval status appears beside the indent.';
+  await load();
+ }
+ function audit(row:any){
+  editor=null;
+  onopen(row.request_id,row.id);
+ }
+ function stageState(row:any,step:ProcessStep){
+  if(row.production.process_exception?.stage===step[0])return 'issue';
+  if(row.latest_update?.decision==='Pending'&&step[3].some(key=>key===row.latest_update.action))return 'pending';
+  if(row.production[step[2]])return 'complete';
+  return row.process_stage===step[0]?'active':'waiting';
+ }
+ function stageText(row:any,step:ProcessStep){
+  const production=row.production,actual=production[step[2]];
+  if(stageState(row,step)==='pending')return 'Awaiting approval';
+  if(actual)return stamp(actual);
+  if(step[0]==='fabric'||step[0]==='trims')return production[step[0]+'_availability']||'Not recorded';
+  if(stageState(row,step)==='issue')return production.process_exception.result;
+  return 'Not recorded';
+ }
+ function statusText(row:any){
+  const issue=row.production.process_exception;
+  if(issue)return issue.result+' · '+processLabel(issue.stage);
+  return row.production.register_source?.process_status||sampleStatusLabel(row.status);
+ }
+ function quantity(row:any){
+  const value=row.profile.source_quantity;
+  if(value===''||value===null)return 'Quantity not recorded';
+  const count=value??1;
+  return count+' '+(Number(count)===1?'piece':'pieces');
+ }
 </script>
-<section class="sp-board" aria-label={processViews[view]||'Sample process'} aria-busy={busy}>
- <div class="sp-board__heading"><div><h3>Accepted progress & department updates</h3><p>Accepted progress is separate from department reports awaiting the assigned merchant.</p></div><button class="button secondary" disabled={busy} onclick={apply}>{busy?'Refreshing…':'Refresh'}</button></div>
- <form class="sp-filters" onsubmit={e=>{e.preventDefault();apply()}}><label>Search indent, buyer or style<input bind:value={search} maxlength="120" placeholder="Indent / original Excel reference / style"/></label>{#if view==='all'}<label>Report view<select bind:value={filter} onchange={()=>{page=1}}>{#each Object.entries(processViews) as [key,label]}<option value={key}>{label}</option>{/each}<option value="closed">Completed / rejected</option></select></label>{/if}<button class="button primary" disabled={busy}>Apply filters</button></form>
- <div class="sp-legend" aria-label="Status colour key"><span class="sp-chip sp-chip--waiting">Waiting</span><span class="sp-chip sp-chip--active">In progress</span><span class="sp-chip sp-chip--pending">Awaiting approval</span><span class="sp-chip sp-chip--complete">Completed</span><span class="sp-chip sp-chip--issue">Rework / rejected</span></div>
- {#if error}<p class="form-error" role="alert">{error} <button class="text-button" onclick={apply}>Retry</button></p>{/if}
- {#if !data&&!error}<p role="status">Loading sample follow-up…</p>{:else if data}<div class="sp-table-scroll"><table class="sp-register"><thead><tr><th>Indent / buyer / style</th><th>Accepted progress</th><th>Plan & required date</th><th>Latest update / review</th><th>Remarks / AWB</th><th>Action</th></tr></thead><tbody>{#each data.rows as row (row.id)}
- <tr><td><strong>{indentReference(row)}</strong>{#if row.profile.legacy_indent_number}<span class="sp-meta">Old indent {row.profile.legacy_indent_number}</span>{/if}<b>{row.buyer} · {row.profile.buyer_style||'Style not recorded'}</b><span class="sp-meta">{row.size||'Size not recorded'} · {row.colour||'Colour not recorded'}</span><span class="sp-meta">Merchant: {row.merchant_id?row.merchant:'Not assigned'}</span></td>
- <td><span class={'sp-chip sp-chip--'+processTone(row)}>{row.production.process_exception?row.production.process_exception.result+' · '+processLabel(row.production.process_exception.stage):sampleStatusLabel(row.status)}</span><span class="sp-meta">Next: {processLabel(row.process_stage)}</span>{#if row.production.cad_sent_at}<span class="sp-meta">Sent to CAD: {stamp(row.production.cad_sent_at)}</span>{/if}{#if row.production.fabric_availability}<span class="sp-meta">Fabric: {row.production.fabric_availability}</span>{/if}{#if row.production.trims_availability}<span class="sp-meta">Trims: {row.production.trims_availability}</span>{/if}<span class="sp-meta">Tailor: {row.production.sample_maker||'Not allocated'}</span></td>
- <td><span>Plan: {row.production.sewing_plan_date?stamp(row.production.sewing_plan_date):'Not set'}</span><span class="sp-meta">Required: {row.profile.buyer_required_date?stamp(row.profile.buyer_required_date):'Not set'}</span><span class:sp-late={Number(row.late_days)>0}>{row.late_days===null?'Late days unavailable':row.late_days+' late day'+(row.late_days===1?'':'s')}</span></td>
- <td>{#if row.latest_update}<b>{actionLabel(row.latest_update.action)}</b><span class={'sp-chip sp-chip--'+(row.latest_update.decision==='Approved'?'complete':row.latest_update.decision==='Pending'?'pending':'issue')}>{row.latest_update.decision}</span><span class="sp-meta">{row.latest_update.submitted_by} · {stamp(row.latest_update.submitted_at)}</span>{#if row.latest_update.reviewed_by}<span class="sp-meta">Reviewed: {row.latest_update.reviewed_by} · {stamp(row.latest_update.reviewed_at)}</span>{/if}{:else}<span class="sp-meta">No department update recorded</span>{/if}</td>
- <td class="sp-register__remarks">{#if row.production.process_exception}<b class="sp-issue-text">{row.production.process_exception.result}: {row.production.process_exception.comment}</b>{/if}{#if row.latest_update?.comment}<p>{row.latest_update.comment}</p>{/if}{#if row.latest_update?.review_comment}<p><b>Review:</b> {row.latest_update.review_comment}</p>{/if}{#if row.production.audit_remarks}<p>QA: {row.production.audit_remarks}</p>{/if}{#if row.issue_comments?.length}<details><summary class="sp-issue-text">Rework / rejection notes ({row.issue_count})</summary>{#each row.issue_comments as issue}<p><b>{actionLabel(issue.action)} · {issue.decision}</b><br/>{issue.comment} {issue.review_comment}<span class="sp-meta">{issue.submitted_by} · {stamp(issue.submitted_at)}</span></p>{/each}{#if row.issue_count>5}<span class="sp-meta">Latest 5 shown. View the indent for full history.</span>{/if}</details>{/if}<span class="sp-meta">AWB: {row.production.awb||'Not recorded'}</span></td>
- <td><button class="button secondary sp-open" disabled={busy} onclick={()=>onopen(row.request_id,row.id)}>{row.latest_update?.decision==='Pending'&&row.can_review?'Review update':'View / update'}</button></td></tr>
- {:else}<tr><td colspan="6">{busy?'Loading…':'No samples match this queue in your current access. Use another process or clear the search.'}</td></tr>{/each}</tbody></table></div><footer class="sp-pagination"><span>{data.total} garments · page {page}</span><div><button class="button secondary" disabled={busy||page===1} onclick={()=>page--}>Previous</button><button class="button secondary" disabled={busy||page*50>=data.total} onclick={()=>page++}>Next</button></div></footer>{/if}
+
+<section class="sp-board" aria-label={view==='all'?'Indent progress':processViews[view]||'Sample process'} aria-busy={busy}>
+ <header class="sp-board__heading">
+  <div><h3>{view==='all'?'Indent progress':processViews[view]||'Sample process'}</h3><p>Choose a stage to update it. Every submission and review keeps its user, date and time.</p></div>
+  <button class="button secondary sp-refresh" type="button" disabled={busy} onclick={()=>load()}><RefreshCw size={16} aria-hidden="true"/>{busy?'Refreshing…':'Refresh'}</button>
+ </header>
+ <form class="sp-filters" onsubmit={event=>{event.preventDefault();apply()}}>
+  <label class="sp-search">Search indent, buyer or style<input bind:this={searchInput} bind:value={search} maxlength="120" placeholder="Indent, old Excel number or style"/></label>
+  {#if view==='all'}<label>Show<select bind:value={filter} onchange={()=>{page=1}}><option value="all">All indents</option>{#each Object.entries(processViews).filter(([key])=>key!=='all') as [key,label]}<option value={key}>{label}</option>{/each}<option value="closed">Completed / rejected</option></select></label>{/if}
+  <button class="button primary" disabled={busy}>Search</button>
+ </form>
+ <div class="sp-legend" aria-label="Recorded stage colours"><span class="sp-key sp-key--complete">Recorded</span><span class="sp-key sp-key--active">Current stage</span><span class="sp-key sp-key--pending">Awaiting approval</span><span class="sp-key sp-key--issue">Rework / rejected</span></div>
+ {#if error}<p class="form-error" role="alert">{error} <button class="text-button" type="button" onclick={()=>load()}>Retry</button></p>{/if}
+ {#if notice}<p class="sp-notice" role="status">{notice}</p>{/if}
+ {#if !data&&!error}<p class="sp-empty" role="status">Loading indent progress…</p>{:else if data}
+  <div class="sp-list">
+   {#each data.rows as row (row.id)}
+    <article class="sp-indent" aria-label={'Progress for '+indentReference(row)}>
+     <div class="sp-indent__heading">
+      <div class="sp-indent__identity"><strong>{indentReference(row)}</strong><span>{row.buyer} · {row.profile.buyer_style||'Style not recorded'}</span>{#if row.profile.legacy_indent_number}<small>Old indent {row.profile.legacy_indent_number}</small>{/if}</div>
+      <div class="sp-indent__details"><b>{row.size||'Size not recorded'} · {row.colour||'Colour not recorded'} · {quantity(row)}</b><span>Merchant · {row.merchant_id?row.merchant:'Not assigned'}</span>{#if row.profile.buyer_required_date}<span>Required · {stamp(row.profile.buyer_required_date)}</span>{/if}</div>
+      <div class="sp-indent__status"><span class={'sp-chip sp-chip--'+processTone(row)}>{statusText(row)}</span>{#if row.production.register_source}<small>Chart status · recorded steps below</small>{:else}<small>Next · {processLabel(row.process_stage)}</small>{/if}{#if Number(row.late_days)>0}<small class="sp-issue-text">{row.late_days} late day{row.late_days===1?'':'s'}</small>{/if}</div>
+      <button class="button secondary sp-details" type="button" disabled={busy} onclick={()=>onopen(row.request_id,row.id)}>{row.latest_update?.decision==='Pending'&&row.can_review?'Review update':'Details'}<ChevronRight size={15} aria-hidden="true"/></button>
+     </div>
+     <ol class="sp-stages" aria-label={'Stages for '+indentReference(row)}>
+      {#each processSteps as step (step[2])}
+       {@const tone=stageState(row,step)}
+       <li><button class={'sp-stage sp-stage--'+tone} type="button" disabled={busy} aria-haspopup="dialog" aria-label={step[1]+' for '+indentReference(row)+': '+stageText(row,step)} title={stageText(row,step)} onclick={event=>openStage(row,step,event)}><span class="sp-stage__label">{#if tone==='complete'}<Check size={13} aria-hidden="true"/>{:else if tone==='pending'}<Clock3 size={13} aria-hidden="true"/>{/if}{step[1]}</span><span class="sp-stage__value">{stageText(row,step)}</span></button></li>
+      {/each}
+     </ol>
+     {#if row.latest_update||row.production.process_exception||Number(row.issue_count)>0||row.production.awb}
+      <div class="sp-indent__updates">
+       {#if row.latest_update}<span class={'sp-chip sp-chip--'+(row.latest_update.decision==='Approved'?'complete':row.latest_update.decision==='Pending'?'pending':'issue')}>{row.latest_update.decision}</span><span><strong>{actionLabel(row.latest_update.action)}</strong> · {row.latest_update.submitted_by} · {stamp(row.latest_update.submitted_at)}</span>{#if row.latest_update.reviewed_by}<span>Reviewed by {row.latest_update.reviewed_by} · {stamp(row.latest_update.reviewed_at)}</span>{/if}{/if}
+       {#if row.production.awb}<span>AWB · {row.production.awb}</span>{/if}
+       {#if row.production.process_exception}<p class="sp-issue-text">{row.production.process_exception.comment}</p>{/if}
+       {#if row.latest_update?.comment}<p>{row.latest_update.comment}</p>{/if}
+       {#if row.latest_update?.review_comment}<p><strong>Review comment</strong> · {row.latest_update.review_comment}</p>{/if}
+       {#if Number(row.issue_count)>0}<button class="text-button sp-issue-text" type="button" onclick={()=>onopen(row.request_id,row.id)}>Rework / rejection history ({row.issue_count})</button>{/if}
+      </div>
+     {/if}
+    </article>
+   {:else}<p class="sp-empty">No indents match these filters. Clear the search or choose another view.</p>{/each}
+  </div>
+  <footer class="sp-pagination"><span>{data.total} indents · Page {page}</span><div><button class="button secondary" type="button" disabled={busy||page===1} onclick={()=>page--}>Previous</button><button class="button secondary" type="button" disabled={busy||page*50>=data.total} onclick={()=>page++}>Next</button></div></footer>
+ {/if}
 </section>
+
+{#if editor}
+ {#key editor.row.id+':'+editor.step}
+  {@const selected=editor}
+  <SampleProcessPanel piece={selected.row} merchant={selected.row.merchant_id?selected.row.merchant:''} editorOnly initialStep={selected.step} onclose={closeStage} onchange={updated} onaudit={()=>audit(selected.row)}/>
+ {/key}
+{/if}
+
 <style>
- .sp-board{min-width:0}.sp-board__heading,.sp-pagination{display:flex;justify-content:space-between;align-items:center;gap:16px}.sp-board h3{margin:0}.sp-board p{margin:4px 0}.sp-filters{display:flex;align-items:end;gap:12px;margin:16px 0}.sp-filters label:first-child{flex:1}.sp-filters label{display:grid;gap:6px;min-width:0}.sp-filters input,.sp-filters select{width:100%;min-height:44px}.sp-legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.sp-table-scroll{overflow:auto;border:1px solid #e1e6ec;border-radius:12px}.sp-register{width:100%;min-width:1080px;border-collapse:collapse;table-layout:fixed}.sp-register th:nth-child(1){width:20%}.sp-register th:nth-child(2){width:17%}.sp-register th:nth-child(3){width:16%}.sp-register th:nth-child(4){width:21%}.sp-register th:nth-child(5){width:15%}.sp-register th:nth-child(6){width:11%}.sp-register td{vertical-align:top;overflow-wrap:anywhere;white-space:normal!important}.sp-register td :is(span,b,p,summary){white-space:normal!important;overflow-wrap:anywhere;max-width:100%}.sp-register td>strong,.sp-register td>b,.sp-register td>span{display:block;margin-bottom:4px}.sp-register td>strong{font-size:16px;color:#142b40}.sp-meta{display:block;color:#3f4b5b;font-size:12px;line-height:1.5}.sp-register summary{min-height:44px;align-content:center;cursor:pointer}.sp-register__remarks p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}.sp-late,.sp-issue-text{color:#a12432;font-weight:700}.sp-chip{display:inline-flex!important;width:fit-content;align-items:center;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:650;line-height:1.4;border:1px solid transparent}.sp-chip--waiting{color:#40516a;background:#edf1f6;border-color:#d5dce6}.sp-chip--active{color:#164e92;background:#edf5ff;border-color:#c7def8}.sp-chip--pending{color:#894606;background:#fff7e5;border-color:#ecd5a5}.sp-chip--complete{color:#126044;background:#edf8f1;border-color:#c3dfcf}.sp-chip--issue{color:#a12432;background:#fff0f2;border-color:#ecc7ce}.sp-open{width:100%;white-space:normal;min-width:96px}.sp-pagination{margin-top:12px}.sp-pagination>div{display:flex;gap:8px}
+ .sp-board{min-width:0;border:1px solid #dce4ea;border-radius:16px;background:#fff;color:#18293a;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;font-size:13px;font-weight:600}
+ .sp-board__heading{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 20px;border-bottom:1px solid #e7edf1}
+ .sp-board__heading h3{margin:0;font-size:18px;font-weight:750;color:#172c40}
+ .sp-board__heading p{margin:4px 0 0;color:#425569;font-size:12px;line-height:1.5}
+ .sp-refresh,.sp-details{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;min-height:44px;flex:none}
+ .sp-filters{display:flex;align-items:end;gap:12px;margin:0;padding:12px 20px;background:#f8fafb;border-bottom:1px solid #e7edf1}
+ .sp-filters label{display:grid;gap:6px;color:#263d52;font-size:12px;font-weight:700;min-width:0}
+ .sp-search{flex:1}
+ .sp-filters input,.sp-filters select{width:100%;min-height:44px;padding:8px 12px;border:1px solid #bdcad5;border-radius:10px;background:#fff;color:#152637;font:inherit;font-weight:600;caret-color:#08776d}
+ .sp-filters input::placeholder{color:#526273;opacity:1}
+ .sp-filters select{max-width:270px}
+ .sp-legend{display:flex;flex-wrap:wrap;gap:8px 16px;padding:10px 20px;font-size:11px;color:#34485e;border-bottom:1px solid #e7edf1}
+ .sp-key{display:flex;align-items:center;gap:6px}
+ .sp-key::before{content:'';width:8px;height:8px;border:1px solid currentColor;border-radius:2px;background:#edf3f7}
+ .sp-key--complete::before{background:#d9eee4;color:#5f9a7a}.sp-key--active::before{background:#dceef8;color:#5884a3}.sp-key--pending::before{background:#fff0c9;color:#ac8434}.sp-key--issue::before{background:#f9dce0;color:#b46e77}
+ .sp-list{max-height:73vh;overflow:auto;overscroll-behavior:contain;scrollbar-color:#acbac8 #f4f7fa;scrollbar-width:thin}
+ .sp-indent{padding:14px 20px;border-bottom:1px solid #e4ebf0;min-width:0}
+ .sp-indent:last-child{border-bottom:0}
+ .sp-indent__heading{display:grid;grid-template-columns:minmax(180px,1.3fr) minmax(170px,1.3fr) minmax(130px,1fr) auto;align-items:center;gap:12px;margin-bottom:10px}
+ .sp-indent__identity,.sp-indent__details,.sp-indent__status{min-width:0}
+ .sp-indent__identity strong{display:block;font-size:15px;font-weight:750;color:#142b40;font-variant-numeric:tabular-nums}
+ .sp-indent__identity>span,.sp-indent__details>b{display:block;margin-top:2px;font-size:12px;color:#21384b;overflow-wrap:anywhere;font-weight:700}
+ .sp-indent small,.sp-indent__details>span{display:block;color:#42566a;font-size:11px;line-height:1.5;margin-top:2px;overflow-wrap:anywhere}
+ .sp-stages{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
+ .sp-stages li{display:flex;min-width:0}
+ .sp-stage{display:block;width:100%;min-height:44px;padding:6px 8px;text-align:left;border:1px solid #d5dfe7;border-radius:8px;background:#f8fafb;color:#293f54;font:inherit;cursor:pointer}
+ .sp-stage__label{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:750;line-height:1.25}
+ .sp-stage__label :global(svg){flex:none}
+ .sp-stage__value{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px;font-size:11px;line-height:1.3;font-weight:600;color:#43576b}
+ .sp-stage:hover{border-color:#177c70;background:#eef8f5}
+ .sp-stage--complete{border-color:#a9ceb9;background:#eff8f2;color:#185c3e}.sp-stage--complete .sp-stage__value{color:#2c5e47}
+ .sp-stage--active{border-color:#adcbdc;background:#edf5fa;color:#164e70}.sp-stage--active .sp-stage__value{color:#2b5c79}
+ .sp-stage--pending{border-color:#e2c884;background:#fff8e6;color:#825413}.sp-stage--pending .sp-stage__value{color:#825413}
+ .sp-stage--issue{border-color:#dfb1b9;background:#fff0f2;color:#8d293a}.sp-stage--issue .sp-stage__value{color:#8d293a}
+ .sp-stage:disabled{cursor:wait;opacity:.65}
+ .sp-chip{display:inline-flex;align-items:center;max-width:100%;width:fit-content;border-radius:7px;padding:4px 7px;border:1px solid #cdd8e3;background:#f1f5f8;color:#354c64;font-size:11px;line-height:1.35;font-weight:750;overflow-wrap:anywhere}
+ .sp-chip--waiting{background:#f0f4f8;border-color:#d1dce6;color:#354c64}.sp-chip--active{color:#194d7d;background:#edf5ff;border-color:#b8d2ed}.sp-chip--pending{color:#80500d;background:#fff6df;border-color:#dfc78f}.sp-chip--complete{color:#155a3b;background:#edf8f1;border-color:#b4d4c0}.sp-chip--issue{color:#8f2638;background:#fff0f2;border-color:#dfb6be}
+ .sp-indent__updates{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;margin-top:10px;font-size:11px;color:#405469;line-height:1.5}
+ .sp-indent__updates p{flex-basis:100%;margin:0;color:#273d51;white-space:pre-wrap;overflow-wrap:anywhere}
+ .sp-indent__updates .text-button{min-height:32px;padding:2px 0;font-size:11px}
+ .sp-issue-text{color:#922c3d!important;font-weight:750}
+ .sp-notice,.sp-board>.form-error{margin:10px 20px;font-size:13px}.sp-notice{color:#075e54}
+ .sp-empty{padding:28px 20px;margin:0;color:#3d5368;line-height:1.5}
+ .sp-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 20px;border-top:1px solid #e1e8ee;font-size:12px;font-variant-numeric:tabular-nums}
+ .sp-pagination>div{display:flex;gap:8px}
+ .sp-board :is(button,input,select):focus-visible{outline:2px solid #08796f;outline-offset:2px}
+ .sp-board ::selection{background:#c6e8df;color:#102b33}
+ @media(min-width:1024px) and (max-width:1240px){.sp-board__heading,.sp-filters,.sp-indent,.sp-pagination{padding-inline:14px}.sp-indent__heading{grid-template-columns:minmax(140px,1.2fr) minmax(140px,1.2fr) minmax(110px,1fr) auto}.sp-stage{padding-inline:6px}.sp-stage__label{font-size:11px}}
+ @media(max-width:850px){.sp-stages{grid-template-columns:repeat(4,minmax(0,1fr))}.sp-indent__heading{grid-template-columns:1fr 1fr}.sp-filters{flex-wrap:wrap}.sp-search{flex-basis:100%}}
+ @media(prefers-contrast:more){.sp-board :is(small,.sp-stage__value){color:#1d3348}.sp-stage,.sp-chip{border-color:currentColor}}
 </style>

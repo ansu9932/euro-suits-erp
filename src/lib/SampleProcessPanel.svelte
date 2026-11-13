@@ -5,7 +5,7 @@
  import {untrack} from 'svelte';
  import {api} from './api';
  import {indentReference,processSteps,processLabel,actionLabel,stamp,planFields,sampleStatusLabel,type ProcessStep} from './sampleProcess';
- let {piece,merchant='',onchange,onaudit}:{piece:any;merchant?:string;onchange:()=>Promise<void>;onaudit:()=>void}=$props();
+ let {piece,merchant='',onchange,onaudit,editorOnly=false,initialStep='',onclose}:{piece:any;merchant?:string;onchange:()=>Promise<void>;onaudit:()=>void;editorOnly?:boolean;initialStep?:string;onclose?:()=>void}=$props();
  let data:any=$state(null),busy=$state(false),error=$state(''),notice=$state(''),action=$state(''),note=$state(''),reviewNote=$state(''),result=$state(''),stage=$state(''),expected=$state(''),destination=$state('Merchant'),values:any=$state({}),sequence=0;
  let selectedStep=$state<ProcessStep|null>(null);
  let editorError=$state('');
@@ -28,8 +28,8 @@
   selectedStep?.[2]==='allocation_actual'?planFields.filter(([key])=>key==='sample_maker'||key==='allocation_plan_date'):
   selectedStep?.[2]==='merchant_actual'?planFields.filter(([key])=>key==='handover_dc'):planFields
  );
- $effect(()=>{const id=piece.id,v=piece.version;untrack(()=>load(id));return()=>{sequence++}});
- async function load(id=piece.id){const seq=++sequence;try{const d=await api('/sample-indents/'+id+'/process');if(seq===sequence){data=d;error=''}}catch(e){if(seq===sequence)error=(e as Error).message}}
+ $effect(()=>{const id=piece.id,v=piece.version,step=initialStep;untrack(()=>{if(editorOnly&&!selectedStep&&step)selectedStep=processSteps.find(item=>item[2]===step)??null;load(id)});return()=>{sequence++}});
+ async function load(id=piece.id){const seq=++sequence;try{const d=await api('/sample-indents/'+id+'/process');if(seq===sequence){data=d;error='';if(editorOnly&&selectedStep&&!action)openStage(selectedStep)}}catch(e){if(seq===sequence)error=(e as Error).message}}
  function choose(key:string){
   if(key==='audit'){closeEditor();onaudit();return}
   action=key;note='';editorError='';
@@ -40,7 +40,7 @@
   destination=piece.production.handover_destination||'Merchant';
   stage=key==='resolve'?piece.production.process_exception?.stage||'':selectedStep?.[0]||'';
  }
- function closeEditor(){selectedStep=null;action='';editorError=''}
+ function closeEditor(){selectedStep=null;action='';editorError='';if(editorOnly)onclose?.()}
  function openStage(step:ProcessStep){
   selectedStep=step;
   const missingTailor=step[2]==='allocation_actual'&&!piece.production.sample_maker;
@@ -66,11 +66,12 @@
   const payload:any=review?{action:'review_process',update_id:pending.id,decision:review,note:reviewNote}:{action,note,result,stage,expected_date:result==='In stock'?'':expected,destination};
   if(action==='plan'&&!review)payload.production=Object.fromEntries(editorFields.map(([key])=>[key,String(values[key]||'')]));
   if(action==='handover'&&!review)payload.dispatch=Object.fromEntries(['awb','dispatch_to','dispatch_from','dispatch_contact'].map(key=>[key,values[key]||'']));
-  await api('/sample-indents/'+piece.id,{version:piece.version,...payload});closeEditor();reviewNote='';await onchange();await load();notice=review?'Review recorded.':data?.can_record_directly?'Update recorded.':'Update submitted for approval by '+approvalTarget+'.';
+  await api('/sample-indents/'+piece.id,{version:piece.version,...payload});reviewNote='';if(editorOnly){await onchange();onclose?.();return}closeEditor();await onchange();await load();notice=review?'Review recorded.':data?.can_record_directly?'Update recorded.':'Update submitted for approval by '+approvalTarget+'.';
  }catch(e){if(selectedStep||action)editorError=(e as Error).message;else error=(e as Error).message}finally{busy=false}}
 
 </script>
 <section class="sp-process" aria-label={'Process for indent '+piece.id}>
+{#if !editorOnly}
  <div class="sp-process__heading"><div><h4>Department follow-up</h4><p>Responsible merchant: <strong>{merchant||'Not assigned — MD / Super Admin must assign one'}</strong></p></div><span class="sp-status" class:sp-status--issue={!!piece.production.process_exception||['Rework','Rejected'].includes(piece.status)}>{piece.production.process_exception?piece.production.process_exception.result:sampleStatusLabel(piece.status)}</span></div>
  <ol class="sp-timeline" aria-label="Saved milestones">
   {#each processSteps as step (step[2])}
@@ -113,9 +114,11 @@
    </div>
   </details>
  {/if}
+{/if}
   {#if selectedStep}
    <SampleStageDialog title={selectedStep[1]+' · Indent '+indentReference(piece)} close={closeEditor} {busy}>
     <p class="stage-status"><strong>Saved status:</strong> {milestone(selectedStep[0],selectedStep[2])}</p>
+    {#if editorOnly&&error}<p class="form-error" role="alert">{error} <button class="text-button" type="button" onclick={()=>load()}>Retry</button></p>{/if}
     {#if stageActions.length>1||(!action&&stageActions.length===1)}
      <label>Stage action<select value={action} disabled={busy} onchange={e=>choose(e.currentTarget.value)}>
       <option value="" disabled>Choose a stage action</option>
@@ -123,7 +126,7 @@
      </select></label>
     {/if}
     {#if pending}
-     <p>An update is awaiting approval by {pendingTarget}. See the review below the stage cards.</p>
+     <p>An update is awaiting approval by {pendingTarget}. {editorOnly?'Open this indent’s Details to review the update.':'See the review below the stage cards.'}</p>
     {:else if !activeAction}
      {#if !data}<p role="status">{error||'Loading available stage actions…'}</p>
      {:else if selectedStep?.[2]==='cad_sent_at'&&data.can_send_cad&&piece.status==='Ready'&&!piece.production.cad_sent_at&&!piece.production.process_exception}
