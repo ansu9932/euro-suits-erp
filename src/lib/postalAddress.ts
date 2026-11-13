@@ -1,5 +1,3 @@
-import {minimumWindow} from './loadingWindow';
-
 export type PostalLocation={city:string;state:string;district:string};
 export type AddressPatch=Partial<{city:string;state:string;postalCode:string;address:string}>;
 export const indianPIN=(value:string)=>/^[1-9]\d{5}$/.test(value.trim());
@@ -12,7 +10,6 @@ export function postalSuggestions(locations:PostalLocation[]){
 }
 
 export async function lookupPostalAddress(pin:string,signal:AbortSignal):Promise<PostalLocation[]>{
- return minimumWindow(async()=>{
  const response=await fetch('/api/company-postal-lookup?country=IN&postal_code='+encodeURIComponent(pin),{signal,credentials:'same-origin'});
  if(response.status===401)window.dispatchEvent(new Event('erp:session-expired'));
  if(!response.ok)throw new Error('Postal lookup unavailable');
@@ -22,6 +19,5 @@ export async function lookupPostalAddress(pin:string,signal:AbortSignal):Promise
   if(!item||typeof item!=='object')return false;
   const row=item as Record<string,unknown>;
   return ['city','state','district'].every(key=>typeof row[key]==='string'&&(row[key] as string).length<=100);
- });
  });
 }

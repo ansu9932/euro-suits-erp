@@ -20,7 +20,10 @@
 <!-- Both layers occupy one grid cell; neither label changes the button width. -->
 <button {...attributes} {type} class={`erp-loader-button ${className}`} class:erp-loader-button--loading={active} disabled={disabled||active} aria-busy={active} data-loader-owned onclick={click}>
  <span class="erp-loader-button__idle" aria-hidden={active}>{#if children}{@render children()}{:else}{label}{/if}</span>
- <span class="erp-loader-button__busy" aria-hidden={!active}><SpinnerLoader size={16} label=""/>{loadingLabel}</span>
+ <span class="erp-loader-button__busy" aria-hidden={!active}>
+  {#if active}<SpinnerLoader size={16} label=""/>{:else}<span class="erp-loader-button__space"></span>{/if}
+  {loadingLabel}
+ </span>
 </button>
 
 <style>
@@ -30,6 +33,7 @@
  .erp-loader-button:disabled{cursor:not-allowed;opacity:.65}.erp-loader-button--loading:disabled{cursor:wait;opacity:.88}
  .erp-loader-button__idle,.erp-loader-button__busy{grid-area:1/1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:0;white-space:nowrap;transition:opacity 180ms cubic-bezier(.22,1,.36,1),transform 180ms cubic-bezier(.22,1,.36,1)}
  .erp-loader-button__busy{--loader-color:currentColor;opacity:0;visibility:hidden;transform:translateY(3px)}
+ .erp-loader-button__space{width:16px;height:16px;flex:none}
  .erp-loader-button--loading .erp-loader-button__idle{opacity:0;visibility:hidden;transform:translateY(-3px)}
  .erp-loader-button--loading .erp-loader-button__busy{opacity:1;visibility:visible;transform:none}
  @media(prefers-reduced-motion:reduce){.erp-loader-button,.erp-loader-button__idle,.erp-loader-button__busy{transition:none;transform:none!important}}

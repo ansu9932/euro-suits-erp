@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {holdDashboardLoad} from './signInTransition';
  import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import {reportingManagerIds,reportingManagerAllowed} from "./reporting";
  import OrganizationTree from "./OrganizationTree.svelte";
@@ -18,7 +19,11 @@
  let visibleTeams=$derived(data.teams.filter((t:Row)=>(t.name+' '+(data.companies.find((c:Row)=>c.id===t.company_id)?.name||'')).toLowerCase().includes(search.toLowerCase())));
  function teamUsers(team:Row){return data.users.filter((u:Row)=>u.active&&u.scope==='team'&&u.companies.includes(team.company_id)&&u.teams.includes(team.id))}
  async function load(){try{data=await api('/setup-users')}finally{loaded=true}}
- onMount(()=>{load().catch(e=>error=e.message)});
+ onMount(()=>{
+  const finishSignIn=holdDashboardLoad();
+  void load().catch(e=>error=e.message).finally(finishSignIn);
+  return finishSignIn;
+ });
  function edit(u?:Row){kind='user';error='';resetPasswordControls();form=u?{...structuredClone($state.snapshot(u)),features:[...u.setup_features],permissions:[...u.effective_permissions],password:'',password_confirmation:'',reports_to_ids:reportingManagerIds(u)}:{username:'',name:'',email:'',phone:'+91',password:data.local?'1234':'',password_confirmation:'',designation_id:data.designations.find((d:Row)=>d.name==='Junior Merchant')?.id||data.designations[0]?.id,inherit_designation:true,features:[],permissions:[],active:true,scope:'team',companies:[],teams:[],lines:[],orders:[],finishing_units:[],reports_to_ids:[],territory:'',restrict_buyers:false,buyer_ids:[],production_areas:[]};changeDesignation()}
  function changeDesignation(){if(!form)return;const d=data.designations.find((d:Row)=>d.id===Number(form!.designation_id));if(!d)return;form.role=d.role;if(form.inherit_designation){form.features=[...d.features];form.permissions=[...d.permissions]}else{form.features=form.features.filter((f:string)=>d.features.includes(f));form.permissions=form.permissions.filter((p:string)=>d.permissions.includes(p))}}
  function editDesignation(d?:Row){kind='designation';error='';form=d?structuredClone($state.snapshot(d)):{name:'',department:'',role:'Marketing',features:[],permissions:[]}}

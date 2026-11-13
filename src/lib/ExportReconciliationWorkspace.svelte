@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {holdDashboardLoad} from './signInTransition';
  import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import {onMount,tick} from 'svelte';
  import {ArrowLeft,Plus,RefreshCw,Search} from '@lucide/svelte';
@@ -32,7 +33,11 @@
  }
  async function open(id:number){if(busy)return;detailLoading=true;try{await run(async()=>{const result=await api('/exports/'+id);if(result.record.record_kind==='jv')throw new Error('Reconciliation is available for export invoices only.');detail=result;number='';selectedNumber=result.record.documentation_cleared?.ebrc_number||savedEbrcNumbers(result.record)[0]||'';previousNumber='';const documents=(result.files||[]).filter((file:Row)=>file.kind==='ebrc');selectedFile=result.record.documentation_cleared?.file_id?String(result.record.documentation_cleared.file_id):documents.length===1?String(documents[0].id):'';queued=[];numberUncertain=false;dirty=false;notice=''})}finally{detailLoading=false}if(detail)await focus('reconciliation-task-title')}
  async function back(){if(busy||detailLoading)return;if(dirty&&!window.confirm('Leave unsaved eBRC input or queued documents? Saved invoice documents and clearance history remain.'))return;detail=null;number='';queued=[];dirty=false;numberUncertain=false;notice='';error='';await focus('reconciliation-register-title')}
- onMount(()=>{void run(loadList).then(()=>{if(initialInvoice)void open(initialInvoice)})});
+ onMount(()=>{
+  const finishSignIn=holdDashboardLoad();
+  void run(loadList).then(async()=>{if(initialInvoice)await open(initialInvoice)}).finally(finishSignIn);
+  return finishSignIn;
+ });
  async function refresh(){await run(async()=>{if(detail){await refreshDetail();numberUncertain=false;notice='Saved eBRC details refreshed. Check the number and attachments before repeating an unconfirmed action.'}else await loadList()})}
  async function saveNumber(){
   if(busy||!detail||!canManage||uncertain)return;if(!number.trim()){error='Enter the eBRC number.';return}

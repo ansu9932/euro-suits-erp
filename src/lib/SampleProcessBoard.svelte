@@ -31,6 +31,7 @@
   finally{if(request===sequence)busy=false}
  }
  function apply(){
+  if(busy)return;
   const term=search.trim(),unchanged=page===1&&query===term;
   page=1;query=term;
   if(unchanged)load();
@@ -108,8 +109,11 @@
  <form class="sp-filters" onsubmit={event=>{event.preventDefault();apply()}}>
   <label class="sp-search">
    <span class:sp-visually-hidden={progressLayout}>Search indent, buyer or style</span>
-   {#if progressLayout}<Search size={18} aria-hidden="true"/>{/if}
-   <input bind:this={searchInput} bind:value={search} maxlength="120" placeholder={progressLayout?'Search indent, buyer or style…':'Indent, old Excel number or style'}/>
+   <span class="sp-search-field">
+    {#if progressLayout}<Search size={18} class="sp-search-icon" aria-hidden="true"/>{/if}
+    <input bind:this={searchInput} bind:value={search} aria-label="Search indent, buyer or style" maxlength="120" placeholder={progressLayout?'Search indent, buyer or style…':'Indent, old Excel number or style'}/>
+    {#if busy&&data}<span class="sp-search-spinner"><SpinnerLoader size={16} label="Updating indent progress…"/></span>{/if}
+   </span>
   </label>
   {#if view==='all'}<label class="sp-filter-view">Show<select bind:value={filter} onchange={()=>{page=1}}><option value="all">All indents</option>{#each Object.entries(processViews).filter(([key])=>key!=='all') as [key,label]}<option value={key}>{label}</option>{/each}<option value="closed">Completed / rejected</option></select></label>{/if}
   <button class="button primary" disabled={busy}>Search</button>
@@ -117,7 +121,6 @@
  <div class="sp-legend" aria-label="Recorded stage colours"><span class="sp-key sp-key--complete">Recorded</span><span class="sp-key sp-key--active">Current stage</span><span class="sp-key sp-key--pending">Awaiting approval</span><span class="sp-key sp-key--issue">Rework / rejected</span>{#if progressLayout}<span class="sp-key sp-key--unrecorded">Not recorded</span>{/if}</div>
  {#if error}<p class="form-error" role="alert">{error} <button class="text-button" type="button" onclick={()=>load()}>Retry</button></p>{/if}
  {#if notice}<p class="sp-notice" role="status">{notice}</p>{/if}
- {#if busy&&data}<SpinnerLoader label="Updating indent progress…"/>{/if}
  {#if !data&&!error}<SkeletonLoader variant="list" rows={3} columns={5} label="Loading indent progress…"/>{:else if data}
   <div class="sp-list">
    {#each data.rows as row (row.id)}
@@ -169,6 +172,9 @@
  .sp-filters{display:flex;align-items:end;gap:12px;margin:0;padding:12px 20px;background:#f8fafb;border-bottom:1px solid #e7edf1}
  .sp-filters label{display:grid;gap:6px;color:#263d52;font-size:12px;font-weight:700;min-width:0}
  .sp-search{flex:1}
+ .sp-search-field{position:relative;display:block;min-width:0}
+ .sp-filters .sp-search-field input{padding-right:38px}
+ .sp-search-spinner{position:absolute;inset:0 12px 0 auto;display:flex;align-items:center;pointer-events:none}
  .sp-filters input,.sp-filters select{width:100%;min-height:44px;padding:8px 12px;border:1px solid #bdcad5;border-radius:10px;background:#fff;color:#152637;font:inherit;font-weight:600;caret-color:#08776d}
  .sp-filters input::placeholder{color:#526273;opacity:1}
  .sp-filters select{max-width:270px}
@@ -242,7 +248,7 @@
   clip-path: inset(50%);
   white-space: nowrap;
  }
- .sp-board--progress .sp-search :global(svg) {
+ .sp-board--progress .sp-search :global(.sp-search-icon) {
   position: absolute;
   inset: 50% auto auto 12px;
   transform: translateY(-50%);

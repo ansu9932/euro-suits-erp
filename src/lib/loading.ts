@@ -1,7 +1,5 @@
 import {writable} from 'svelte/store';
 import {trackAction} from './actionLock';
-import {minimumWindow,MINIMUM_LOADING_MS} from './loadingWindow';
-export {minimumWindow,MINIMUM_LOADING_MS} from './loadingWindow';
 
 type Operation={id:number;label:string};
 const operations=writable<Operation[]>([]);
@@ -11,21 +9,19 @@ let sequence=0;
 
 /** Reference counting prevents one finished task from hiding another task. */
 export function beginFullScreen(label:string){
- const id=++sequence,start=Date.now();let finished=false;
+ const id=++sequence;
  operations.update(items=>[...items,{id,label}]);
- return async()=>{
-  if(finished)return;finished=true;
-  const remaining=MINIMUM_LOADING_MS-(Date.now()-start);
-  if(remaining>0)await new Promise(resolve=>setTimeout(resolve,remaining));
-  operations.update(items=>items.filter(item=>item.id!==id));
- };
+ return ()=>operations.update(items=>items.filter(item=>item.id!==id));
 }
 
 export function withFullScreen<T>(label:string,work:()=>T|PromiseLike<T>):Promise<T>{
  const finish=beginFullScreen(label);
- return trackAction(minimumWindow(work)).finally(finish);
+ return withAction(work).finally(finish);
 }
-export function withAction<T>(work:()=>T|PromiseLike<T>):Promise<T>{return trackAction(minimumWindow(work))}
+export function withAction<T>(work:()=>T|PromiseLike<T>):Promise<T>{
+ try{return trackAction(Promise.resolve(work()))}
+ catch(error){return Promise.reject(error)}
+}
 
 const downloads=new Map<string,Promise<void>>();
 export function downloadReport(url:string,fallback='report.xlsx'):Promise<void>{

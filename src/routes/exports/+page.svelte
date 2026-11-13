@@ -1,7 +1,8 @@
 <script lang="ts">
  import {PageLoader} from '$lib/components/loaders';
  import SignInShell from '$lib/SignInShell.svelte';
- import {onMount} from 'svelte';
+ import {onMount,tick} from 'svelte';
+ import {resumeSignIn} from '$lib/signInTransition';
  import {ArrowLeft, LockKeyhole, LogOut} from '@lucide/svelte';
  import {api} from '$lib/api';
  import {enter} from '$lib/motion';
@@ -20,13 +21,14 @@
  let hasWorkspaceHome=$derived.by(()=>!!user&&workspaceRedirect(user,user.portal,'companies')!=='/exports');
  let generation=0;
  onMount(()=>{
+  const finishSignIn=resumeSignIn();
   let active=true;
   const ticket=++generation;
   const expired=()=>{generation++;user=null;exportDirty=false;error='Your session changed. Please sign in again.';};
   window.addEventListener('erp:session-expired',expired);
   api('/session').then(session=>{if(active&&ticket===generation)user=session.user;})
-   .catch(e=>{if(active)error=e.message;}).finally(()=>{if(active)ready=true;});
-  return()=>{active=false;generation++;window.removeEventListener('erp:session-expired',expired);};
+   .catch(e=>{if(active)error=e.message;}).finally(async()=>{if(active)ready=true;await tick();finishSignIn();});
+  return()=>{active=false;finishSignIn();generation++;window.removeEventListener('erp:session-expired',expired);};
  });
  function signedIn(result:Row){generation++;user=result.user;exportDirty=false;error='';}
  async function logout(){

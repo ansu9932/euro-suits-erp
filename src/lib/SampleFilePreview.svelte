@@ -1,12 +1,15 @@
 <script lang="ts">
  import {SkeletonLoader} from '$lib/components/loaders';
- import {minimumWindow} from '$lib/loading';
  import {onMount,onDestroy} from 'svelte';import SamplePdfCanvas from './SamplePdfCanvas.svelte';import {uploadTo} from './api';
  let {file,id,name,downloadLabel='Download original',onclose}:{file?:File;id?:number;name:string;downloadLabel?:string;onclose:()=>void}=$props();
  let pdfBlob:Blob|null=$state(null);let dialog:HTMLDialogElement,kind=$state(''),url=$state(''),text=$state(''),error=$state(''),loading=$state(true);let alive=true;const controller=new AbortController();
  onMount(()=>{dialog.showModal();(async()=>{try{const ext=name.split('.').pop()?.toLowerCase()||'';let blob:Blob;
  if(file&&['docx','xlsx'].includes(ext)){const result=await uploadTo('/sample-files/preview',file);if(alive){text=result.text;kind='text'};return}
- if(file){blob=file}else{blob=await minimumWindow(async()=>{const response=await fetch('/api/sample-files/'+id+'?preview=1',{credentials:'same-origin',signal:controller.signal});if(!response.ok){const data=await response.json().catch(()=>({}));throw Error(data.error||'Preview could not be loaded.')}return response.blob()})}
+ if(file){blob=file}else{
+  const response=await fetch('/api/sample-files/'+id+'?preview=1',{credentials:'same-origin',signal:controller.signal});
+  if(!response.ok){const data=await response.json().catch(()=>({}));throw Error(data.error||'Preview could not be loaded.')}
+  blob=await response.blob();
+ }
  if(['txt','csv','eml','dxf','plt','docx','xlsx'].includes(ext)){const body=await blob.slice(0,204800).text();if(alive){text=body;kind='text'}}else if(['pdf','png','jpg','jpeg'].includes(ext)){const type=ext==='pdf'?'application/pdf':ext==='png'?'image/png':'image/jpeg';const value=URL.createObjectURL(new Blob([blob],{type}));if(!alive){URL.revokeObjectURL(value);return}url=value;if(ext==='pdf')pdfBlob=blob;kind=ext==='pdf'?'pdf':'image'}else{throw Error('Preview is available for PDF, images, text, email, DOCX and XLSX. Download this file to view it.')}
  }catch(e){if(alive)error=(e as Error).message}finally{if(alive)loading=false}})()});
  function close(){if(!alive)return;alive=false;controller.abort();dialog.close();onclose()}

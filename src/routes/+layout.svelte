@@ -2,8 +2,10 @@
  import {onMount} from 'svelte';
  import {reportClientIssue} from '$lib/diagnostics';
  import {installActionLocks} from '$lib/actionLock';
- import {onNavigate} from '$app/navigation';
- import {beginFullScreen,installReportDownloads} from '$lib/loading';
+ import {navigating} from '$app/state';
+ import {installReportDownloads} from '$lib/loading';
+ import {PageLoader,PostLoginTransition} from '$lib/components/loaders';
+ import {signInPhase} from '$lib/signInTransition';
  import LoaderHost from '$lib/LoaderHost.svelte';
  import '../interactions.css';
  import '../readability.css';
@@ -13,12 +15,10 @@
  import '$lib/styles/hig-dashboard.css';
  import '$lib/components/loaders/loader-integration.css';
  let {children}=$props();
- onNavigate(navigation=>{
-  if(!navigation.from||navigation.from.url.pathname===navigation.to?.url.pathname)return;
-  const finish=beginFullScreen('Opening your workspace…');
-  void navigation.complete.catch(finish);
-  return()=>{void finish()};
- });
+ const routePending=$derived(!!navigating.to && (
+  navigating.from?.url.pathname !== navigating.to.url.pathname ||
+  navigating.from?.url.search !== navigating.to.url.search
+ ));
  onMount(()=>{
   const removeActionLocks=installActionLocks();
   const removeReportDownloads=installReportDownloads();
@@ -27,5 +27,9 @@
   return()=>{removeActionLocks();removeReportDownloads();window.removeEventListener('error',runtime);window.removeEventListener('unhandledrejection',promise)};
  });
 </script>
-{@render children()}
+<div style="display:contents" inert={routePending}>
+ {@render children()}
+</div>
+<PageLoader isLoading={routePending && !$signInPhase} enhanced/>
+<PostLoginTransition/>
 <LoaderHost/>

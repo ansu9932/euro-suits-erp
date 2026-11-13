@@ -1,9 +1,25 @@
 <script lang="ts">
  import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
- import {minimumWindow} from '$lib/loading';
  import {onMount,onDestroy,tick} from 'svelte';import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
  let {blob}:{blob:Blob}=$props();let canvas:HTMLCanvasElement;let pageNumber=$state(1),pages=$state(0),busy=$state(true),rendered=$state(false),error=$state('');let alive=true,document:any,task:any,renderTask:any;
- async function render(number:number){busy=true;error='';try{await minimumWindow(async()=>{const page=await document.getPage(number);if(!alive)return;await tick();const base=page.getViewport({scale:1});const scale=Math.min(1.8,1100/base.width,Math.sqrt(4000000/(base.width*base.height)));const viewport=page.getViewport({scale});canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);renderTask=page.render({canvas,canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;if(alive)pageNumber=number;page.cleanup()});if(alive)rendered=true;}catch(e){if(alive)error=(e as Error).message}finally{if(alive)busy=false}}
+ async function render(number:number){
+  busy=true;error='';
+  let page;
+  try{
+   page=await document.getPage(number);
+   await tick();
+   if(!alive)return;
+   const base=page.getViewport({scale:1});
+   const scale=Math.min(1.8,1100/base.width,Math.sqrt(4000000/(base.width*base.height)));
+   const viewport=page.getViewport({scale});
+   canvas.width=Math.ceil(viewport.width);
+   canvas.height=Math.ceil(viewport.height);
+   renderTask=page.render({canvas,canvasContext:canvas.getContext('2d'),viewport});
+   await renderTask.promise;
+   if(alive){pageNumber=number;rendered=true}
+  }catch(e){if(alive)error=(e as Error).message}
+  finally{if(alive){page?.cleanup();busy=false}}
+ }
  onMount(()=>{(async()=>{try{const pdf=await import('pdfjs-dist');if(!alive)return;pdf.GlobalWorkerOptions.workerSrc=workerUrl;const bytes=await blob.arrayBuffer();if(!alive)return;task=pdf.getDocument({data:new Uint8Array(bytes),disableFontFace:true,useSystemFonts:true,maxImageSize:32000000,cMapUrl:'/pdf-preview/cmaps/',cMapPacked:true,standardFontDataUrl:'/pdf-preview/standard_fonts/',wasmUrl:'/pdf-preview/wasm/'});document=await task.promise;if(!alive)return;pages=document.numPages;await render(1)}catch(e){if(alive){error=(e as Error).message;busy=false}}})()});
  onDestroy(()=>{alive=false;renderTask?.cancel();if(task)void task.destroy().catch(()=>{})});
 </script>

@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {holdDashboardLoad} from './signInTransition';
  import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
  import {withFullScreen} from '$lib/loading';
  import {indentReference} from './sampleProcess';
@@ -55,7 +56,11 @@
  }
  function clearField(event:Event){const node=(event.target as HTMLElement).closest<HTMLElement>('[data-field]');const key=node?.dataset.field;if(key&&fieldErrors[key]){delete fieldErrors[key];(event.target as HTMLElement).removeAttribute('aria-invalid')}}
  async function run(work:()=>Promise<void>){if(busy)return;busy=true;error='';notice='';try{await work()}catch(e){error=(e as Error).message;fieldErrors=(e as any).fields||{};await revealErrors()}finally{busy=false}}
- onMount(()=>{run(load)});
+ onMount(()=>{
+  const finishSignIn=holdDashboardLoad();
+  void run(load).finally(finishSignIn);
+  return finishSignIn;
+ });
  function fresh(){fieldErrors={};intake=false;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};if(!company&&companies.length>1){error='Select a workspace company before creating a request.';return}form={company_id:Number(company||companies[0]?.id),buyer_id:'',profile:Object.fromEntries(fields.map(f=>[f[0],f[2]==='date'&&f[0]==='request_date'?new Date().toLocaleDateString('en-CA'):''])),variants:[{size:'',colour:'',quantity:1}],bom:[]}}
  async function open(id:number,indent=0){
   if(busy)return;
@@ -94,7 +99,7 @@
  async function upload(event:Event){const input=event.target as HTMLInputElement;const files=Array.from(input.files||[]);await run(async()=>{for(const file of files)await uploadTo('/sample-requests/'+detail.record.id+'/files?category='+encodeURIComponent(category)+(fileIndent?'&indent_id='+fileIndent:''),file);detail=await api('/sample-requests/'+detail.record.id)});input.value=''}
  async function stockSave(){await run(async()=>{await api('/sample-stock',stockForm);stockForm=null;await load();if(detail)detail=await api('/sample-requests/'+detail.record.id);notice='Stock movement recorded.'})}
  async function previewForm(kind:SampleFormKind,id=0){if(reportBusy||!detail)return;const piece=detail.pieces.find((p:any)=>p.id===(id||focusIndent))||(!id&&!focusIndent?detail.pieces[0]:null);if(!piece)return;reportBusy=true;error='';try{formPreview=await withFullScreen('Preparing '+(kind==='audit'?'sample audit':'sample indent')+' PDF…',()=>createSampleForm(kind,$state.snapshot(detail),$state.snapshot(piece),(key:any)=>data.materials.find((m:any)=>String(m.id)===String(key))?.code||''))}catch(e){error=(e as Error).message}finally{reportBusy=false}}
- function print(kind:string,id=0){printMode=kind;printPiece=id;setTimeout(()=>window.print(),50)}
+ async function print(kind:string,id=0){printMode=kind;printPiece=id;await tick();window.print()}
 </script>
 {#if formPreview}{#key formPreview.name}<SampleFilePreview file={formPreview} name={formPreview.name} downloadLabel="Download PDF" onclose={()=>formPreview=null}/>{/key}{/if}
 {#if previewFile}{#key previewFile.id}<SampleFilePreview id={previewFile.id} name={previewFile.name} onclose={()=>previewFile=null}/>{/key}{/if}
