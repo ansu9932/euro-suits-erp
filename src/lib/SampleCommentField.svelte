@@ -1,15 +1,14 @@
 <script lang="ts">
- import {Check,LoaderCircle,Mic,Square} from '@lucide/svelte';
+ import {Check,LoaderCircle,Mic,Sparkles,Square} from '@lucide/svelte';
  import {onMount,tick} from 'svelte';
  import {csrf} from './api';
  import {startDictationMeter} from './dictationMeter';
- import {enter,referenceFeedback} from './motion';
- import SampleDictationCode from './SampleDictationCode.svelte';
+ import {enter} from './motion';
 
- let {value=$bindable(),dictating=$bindable(false),label,hint='',required=false,disabled=false,indentId,action,stage='',updateId,requestId,companyId,buyerId,maxLength=2000}:{
+ let {value=$bindable(),dictating=$bindable(false),label,hint='',required=false,disabled=false,indentId,action,stage='',updateId,requestId,companyId,buyerId,maxLength=2000,placeholder=''}:{
   value?:string;dictating?:boolean;label:string;hint?:string;required?:boolean;disabled?:boolean;
   indentId?:number;action:string;stage?:string;updateId?:number;
-  requestId?:number;companyId?:number;buyerId?:number;maxLength?:number;
+  requestId?:number;companyId?:number;buyerId?:number;maxLength?:number;placeholder?:string;
  }=$props();
  const id=$props.id();
  const utf8=new TextEncoder();
@@ -162,7 +161,7 @@
    };
    recorder.start(1000);
    phase='recording';
-   message='Recording for up to 30 seconds.';
+   message='Listening… Speak now.';
    recording.timer=setTimeout(stop,recordingLimitMs);
    await tick();
    if(active!==recording||phase!=='recording')return;
@@ -283,58 +282,107 @@
        <button type="button" class="sample-comment__stop" bind:this={stopButton} onclick={stop}><Square size={12} aria-hidden="true"/>Stop</button>
       </div>
      {:else}
-      <span class="sample-comment__pill sample-comment__processing" aria-hidden="true" use:enter><LoaderCircle size={15}/>{phase==='starting'?'Microphone access':'Transforming to text…'}</span>
+      <span class="sample-comment__pill sample-comment__processing" aria-hidden="true" use:enter>
+       <span class="sample-comment__orbit"><LoaderCircle size={17}/>{#if phase==='transcribing'}<Sparkles size={9}/>{/if}</span>
+       {phase==='starting'?'Microphone access':'Transforming to text…'}
+      </span>
      {/if}
      <button type="button" class="sample-comment__cancel" bind:this={cancelButton} onclick={cancel}>Cancel dictation</button>
     {/if}
-    <SampleDictationCode disabled={phase!=='idle'||disabled}/>
    </div>
   {/if}
  </div>
  <div class="sample-comment__input">
-  <textarea {id} bind:this={textarea} bind:value rows="2" maxlength={maxLength} {required} use:referenceFeedback={insertedCount} aria-describedby={enabled?id+'-dictation':undefined}></textarea>
+  <textarea {id} bind:this={textarea} bind:value rows="3" maxlength={maxLength} {required} placeholder={placeholder||(enabled?'Type or dictate '+label.toLowerCase()+'…':'')} aria-describedby={enabled?id+'-dictation':undefined}></textarea>
+  {#if phase==='transcribing'}
+   <div class="sample-comment__conversion" class:sample-comment__conversion--empty={!value} aria-hidden="true">
+    {#if !value}<span>Converting speech to text…</span>{/if}
+   </div>
+  {:else if completed}
+   {#key insertedCount}<span class="sample-comment__arrival" aria-hidden="true"></span>{/key}
+  {/if}
  </div>
  {#if enabled}
-  <p id={id+'-dictation'} class:sample-comment__feedback--error={failed} class="sample-comment__feedback" role="status">{message}</p>
+  <p id={id+'-dictation'} class:sample-comment__feedback--error={failed} class="sample-comment__feedback" role="status">{message||'Ready for voice or keyboard input'}</p>
  {/if}
 </div>
 
 <style>
- .sample-comment__heading,.sample-comment__actions{display:flex;align-items:center;gap:8px}
- .sample-comment__heading{justify-content:space-between;flex-wrap:wrap}
- .sample-comment label{font-size:13px;font-weight:700;color:#172536}
+ .sample-comment{display:grid;gap:10px;min-width:0}
+ .sample-comment__heading,.sample-comment__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .sample-comment__heading{justify-content:space-between}
+ .sample-comment label{font-size:13px;font-weight:650;color:#405166}
  .sample-comment label b{color:#a12435}
- .sample-comment small{font-size:11px;font-weight:550}
- .sample-comment textarea{display:block;width:100%;min-width:0;min-height:44px;margin-top:6px;padding:8px 10px;border:1px solid #cbd5df;border-radius:12px;background:#f8fafc;color:#111;font:inherit;resize:vertical;transition:border-color .2s,background-color .2s}
- .sample-comment__actions{flex-wrap:wrap}
- .sample-comment__actions button{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:5px 10px;border:1px solid #b8d8d1;border-radius:8px;background:#edf7f5;color:#075e54;font-size:12px;font-weight:700;cursor:pointer}
- .sample-comment__actions button:hover{background:#dcefe9}
- .sample-comment__actions button:focus-visible,.sample-comment textarea:focus-visible{outline:2px solid #08746f;outline-offset:2px}
+ .sample-comment small{font-size:12px;font-weight:550}
+ .sample-comment textarea{
+  --ui-field:#fff;
+  --ui-border:#d4dde6;
+  display:block;width:100%;min-width:0;min-height:92px;margin:0;padding:11px 13px;box-sizing:border-box;
+  border:1px solid #d4dde6;border-radius:12px;background:#fff;color:#172536;font:inherit;font-weight:500;
+  line-height:1.55;resize:vertical;transition:border-color .24s,box-shadow .24s,background-color .24s
+ }
+ .sample-comment textarea::placeholder{color:#627188}
+ .sample-comment__actions button{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:5px 11px;
+  border:1px solid #b2ded6;border-radius:12px;background:#f2faf8;color:#075e54;
+  font-size:12px;font-weight:700;cursor:pointer;transition:background-color .2s,transform .2s
+ }
+ .sample-comment__actions button:hover:enabled{background:#e2f4ef}
+ .sample-comment__actions button:active:enabled{transform:scale(.97)}
+ .sample-comment__actions button:focus-visible{outline:2px solid #08746f;outline-offset:2px}
+ .sample-comment textarea:focus-visible{outline:2px solid #08746f;outline-offset:2px}
  .sample-comment__actions button:disabled{cursor:default;opacity:.6}
- .sample-comment__pill{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 10px;border:1px solid;border-radius:12px;font-size:12px;font-weight:700}
- .sample-comment__recording{padding-right:0;color:#8c2033;background:#fff1f3;border-color:#edc1ca}
- .sample-comment__actions .sample-comment__stop{min-height:44px;padding:0 8px;background:#a1243a;border-color:#a1243a;color:#fff}
- .sample-comment__actions .sample-comment__stop:hover{background:#851a2e}
- .sample-comment__dot{width:8px;height:8px;border-radius:50%;background:#b52f48;animation:dictation-dot 1.6s ease-in-out infinite}
+ .sample-comment__pill{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 11px;border:1px solid;border-radius:12px;font-size:12px;font-weight:700}
+ .sample-comment__recording{padding:3px 4px 3px 10px;color:#9a1e3a;background:#fff1f3;border-color:#f3b9c5}
+ .sample-comment__actions .sample-comment__stop{padding:0 9px;background:#aa153c;border-color:#aa153c;color:#fff}
+ .sample-comment__actions .sample-comment__stop:hover:enabled{background:#891332}
+ .sample-comment__dot{width:9px;height:9px;border-radius:50%;background:#ce244c;animation:dictation-dot 1.6s ease-in-out infinite}
  .sample-comment__meter{display:flex;align-items:center;gap:3px;height:19px}
- .sample-comment__meter span{width:3px;height:100%;border-radius:3px;background:#b52f48;transform:scaleY(var(--level,.22));transition:transform 80ms ease-out}
- .sample-comment__time{min-width:35px;font-variant-numeric:tabular-nums}
- .sample-comment__processing{color:#075e54;background:#edf7f5;border-color:#b8d8d1}
- .sample-comment[data-phase='transcribing'] .sample-comment__processing :global(svg){animation:dictation-spin 1s linear infinite}
+ .sample-comment__meter span{width:3px;height:100%;border-radius:3px;background:#ce244c;transform:scaleY(var(--level,.22));transition:transform 80ms ease-out}
+ .sample-comment__time{min-width:36px;font:700 12px ui-monospace,monospace;font-variant-numeric:tabular-nums}
+ .sample-comment__processing{color:#075e54;background:#edf8f5;border-color:#9ddbd1}
+ .sample-comment__orbit{display:grid;place-items:center;width:17px;height:17px}
+ .sample-comment__orbit :global(svg){grid-area:1/1}
+ .sample-comment[data-phase='transcribing'] .sample-comment__orbit :global(svg:first-child){animation:dictation-spin 1s linear infinite}
  .sample-comment__done{color:#145f45;background:#edf8f2;border-color:#badcca}
  .sample-comment__input{position:relative}
- .sample-comment[data-phase='recording'] textarea{border-color:#ba5769}
- .sample-comment[data-phase='transcribing'] textarea{border-color:#388e80;background:#f0faf7}
- .sample-comment[data-phase='transcribing'] .sample-comment__input::after{content:'';position:absolute;inset:auto 12px 0;height:2px;pointer-events:none;border-radius:3px;background:linear-gradient(90deg,transparent,#148477,transparent);background-size:45% 100%;background-repeat:no-repeat;animation:dictation-sweep 1.2s ease-in-out infinite}
- @keyframes dictation-dot{50%{opacity:.55;transform:scale(.82)}}
- @keyframes dictation-spin{to{transform:rotate(360deg)}}
- @keyframes dictation-sweep{from{background-position:-85% 0}to{background-position:185% 0}}
- @media (prefers-reduced-motion: reduce){
-  .sample-comment *,.sample-comment .sample-comment__input::after,.sample-comment[data-phase='transcribing'] .sample-comment__processing :global(svg){animation:none;transition:none}
+ .sample-comment[data-phase='recording'] textarea:not([aria-invalid='true']){
+  --ui-border:#c44965;--ui-focus:#c44965;--ui-focus-shadow:0 0 0 3px #f8dbe3;
+  border-color:var(--ui-border);box-shadow:var(--ui-focus-shadow)
  }
- .sample-comment__actions .sample-comment__cancel{background:#fff;border-color:#cbd5df;color:#32475b}
- .sample-comment__actions .sample-comment__cancel:hover{background:#f1f5f8}
- .sample-comment__feedback{margin:5px 0 0;color:#365265;font-size:12px;font-weight:600}
- .sample-comment__feedback:empty{margin:0}
- .sample-comment__feedback--error{color:#a12435}
+ .sample-comment[data-phase='transcribing'] textarea:not([aria-invalid='true']){
+  --ui-field:#f4fbf9;--ui-border:#278d80;--ui-focus:#278d80;--ui-focus-shadow:0 0 0 3px #d9efea;
+  border-color:var(--ui-border);background:var(--ui-field);box-shadow:var(--ui-focus-shadow)
+ }
+ .sample-comment__arrival{
+  position:absolute;inset:1px;border-radius:11px;background:#8ed3c154;opacity:0;
+  pointer-events:none;animation:dictation-arrival .4s ease-out
+ }
+ .sample-comment__conversion{
+  position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;isolation:isolate;
+  pointer-events:none;border-radius:12px
+ }
+ .sample-comment__conversion--empty{background:#f8fcfb80;backdrop-filter:blur(2px)}
+ .sample-comment__conversion::before{
+  content:'';position:absolute;inset:0 auto 0 0;width:48%;z-index:-1;
+  background:linear-gradient(90deg,transparent,#a8e4d944,transparent);
+  animation:dictation-sweep 1.15s ease-in-out infinite
+ }
+ .sample-comment__conversion span{
+  padding:5px 12px;border:1px solid #b2ded6;border-radius:99px;background:#fff;
+  color:#075e54;font-size:12px;font-weight:650
+ }
+ .sample-comment__actions .sample-comment__cancel{border-color:#d4dde6;background:#fff;color:#32475b}
+ .sample-comment__actions .sample-comment__cancel:hover:enabled{background:#f1f5f8}
+ .sample-comment__feedback{margin:0;color:#4e6176;font-size:12px;font-weight:550}
+ .sample-comment[data-phase='recording'] .sample-comment__feedback,.sample-comment__feedback--error{color:#9a1e3a}
+ .sample-comment[data-phase='transcribing'] .sample-comment__feedback{color:#075e54}
+ @keyframes dictation-arrival{from{opacity:1}to{opacity:0}}
+ @keyframes dictation-dot{50%{opacity:.58;transform:scale(.84)}}
+ @keyframes dictation-spin{to{transform:rotate(360deg)}}
+ @keyframes dictation-sweep{from{transform:translateX(-100%)}to{transform:translateX(310%)}}
+ @media (prefers-reduced-motion: reduce){
+  .sample-comment *,.sample-comment__conversion::before,
+  .sample-comment[data-phase='transcribing'] .sample-comment__orbit :global(svg:first-child){animation:none;transition:none}
+ }
 </style>

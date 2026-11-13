@@ -125,10 +125,10 @@
 {/if}
   {#if selectedStep}
    <SampleStageDialog title={selectedStep[1]+' · Indent '+indentReference(piece)} close={closeEditor} {busy}>
-    <p class="stage-status"><strong>Saved status:</strong> {milestone(selectedStep[0],selectedStep[2])}</p>
+    <p class="stage-status">Saved status: <strong>{milestone(selectedStep[0],selectedStep[2])}</strong></p>
     {#if editorOnly&&error}<p class="form-error" role="alert">{error} <button class="text-button" type="button" onclick={()=>load()}>Retry</button></p>{/if}
     {#if stageActions.length>1||(!action&&stageActions.length===1)}
-     <label>Stage action<select value={action} disabled={busy} onchange={e=>choose(e.currentTarget.value)}>
+     <label class="stage-action">Stage action<select value={action} disabled={busy} onchange={e=>choose(e.currentTarget.value)}>
       <option value="" disabled>Choose a stage action</option>
       {#each stageActions as item}<option value={item.key}>{item.label}</option>{/each}
      </select></label>
@@ -145,22 +145,24 @@
      {/if}
     {:else}
      <form class="sp-editor" onsubmit={e=>{e.preventDefault();send()}}>
-      {#if editorError}<p class="form-error" role="alert">{editorError}</p>{/if}
-      <h4>{activeAction.label}</h4>
-   {#if action==='fabric'||action==='trims'}<div class="sp-form-grid"><label>Availability<select bind:value={result} required><option value="">Choose availability</option><option value="In stock">In house / in stock</option><option>To order</option><option>Ordered</option></select></label>{#if result==='To order'||result==='Ordered'}<label>Expected arrival date<input type="date" bind:value={expected} required={result==='Ordered'}/></label>{/if}</div>
-   {:else if action==='send_cad'}<p>Send this indent to Pattern follow-up for CAD to pick up.</p>
-   {:else if action==='cut_start'||action==='cut'}<p>Confirm the pattern and marker are complete, the sample file is clear, and fabric and trims are ready.</p>
-   {:else if action==='allocate'}<p>Allocate this indent to {piece.production.sample_maker||'the sample tailor saved in the plan'}.</p>
-   {:else if action==='plan'}<div class="sp-form-grid">{#each editorFields as [key,label,type]}<label>{label}<input type={type==='date'?'date':'text'} bind:value={values[key]} maxlength="2000"/></label>{/each}</div>
-   {:else if action==='file_review'}<label>Sample file<select bind:value={result}><option>Clear</option><option>Missing</option></select></label>
-   {:else if action==='exception'||action==='resolve'}<div class="sp-form-grid"><label>Department / stage<select bind:value={stage} disabled={action==='resolve'} required>{#each data.stages as key}<option value={key}>{processLabel(key)}</option>{/each}</select></label>{#if action==='exception'}<label>Result<select bind:value={result}><option>Rework</option><option>Rejected</option></select></label>{/if}</div>
-   {:else if action==='merchant_handover'}{#if piece.production.handover_dc}<p>Handover DC: <strong>{piece.production.handover_dc}</strong></p>{/if}<label>Handover destination<select bind:value={destination}><option>Merchant</option><option>Showroom</option></select></label>
-   {:else if action==='handover'}<div class="sp-form-grid"><label>AWB / shipment or delivery reference<input bind:value={values.awb} maxlength="2000" required/></label><label>Contact<input bind:value={values.dispatch_contact} maxlength="2000"/></label><label>To — customer name and address<textarea bind:value={values.dispatch_to} maxlength="2000" required></textarea></label><label>From — sender name and address<textarea bind:value={values.dispatch_from} maxlength="2000" required></textarea></label></div>
-   {:else if action==='buyer_feedback'}<label>Buyer result<select bind:value={result} required><option value="">Choose result</option><option>Pass</option><option>Fail</option><option>Comments</option></select></label>{/if}
-   {#key action+':'+stage}
-    <SampleCommentField label="Update comment" bind:value={note} bind:dictating={updateDictating} required={commentRequired} disabled={busy} indentId={piece.id} {action} stage={['exception','resolve'].includes(action)?stage:''}/>
-   {/key}
-   <div class="sp-actions"><button class="button secondary" type="button" disabled={busy} onclick={closeEditor}>Cancel</button><button class="button primary" disabled={busy||updateDictating}>{busy?'Saving…':data.can_record_directly?(action==='send_cad'?'Send to CAD':'Record update'):'Submit for approval'}</button></div>
+      <div class="sp-editor__card">
+       {#if editorError}<p class="form-error" role="alert">{editorError}</p>{/if}
+       <h4>{activeAction.label}</h4>
+       {#if action==='fabric'||action==='trims'}<div class="sp-form-grid"><label>Availability<select bind:value={result} required><option value="">Choose availability</option><option value="In stock">In house / in stock</option><option>To order</option><option>Ordered</option></select></label>{#if result==='To order'||result==='Ordered'}<label>Expected arrival date<input type="date" bind:value={expected} required={result==='Ordered'}/></label>{/if}</div>
+       {:else if action==='send_cad'}<p>Send this indent to Pattern follow-up for CAD to pick up.</p>
+       {:else if action==='cut_start'||action==='cut'}<p>Confirm the pattern and marker are complete, the sample file is clear, and fabric and trims are ready.</p>
+       {:else if action==='allocate'}<p>Allocate this indent to {piece.production.sample_maker||'the sample tailor saved in the plan'}.</p>
+       {:else if action==='plan'}<div class="sp-form-grid">{#each editorFields as [key,label,type]}<label>{label}<input type={type==='date'?'date':'text'} bind:value={values[key]} maxlength="2000"/></label>{/each}</div>
+       {:else if action==='file_review'}<label>Sample file<select bind:value={result}><option>Clear</option><option>Missing</option></select></label>
+       {:else if action==='exception'||action==='resolve'}<div class="sp-form-grid"><label>Department / stage<select bind:value={stage} disabled={action==='resolve'} required>{#each data.stages as key}<option value={key}>{processLabel(key)}</option>{/each}</select></label>{#if action==='exception'}<label>Result<select bind:value={result}><option>Rework</option><option>Rejected</option></select></label>{/if}</div>
+       {:else if action==='merchant_handover'}{#if piece.production.handover_dc}<p>Handover DC: <strong>{piece.production.handover_dc}</strong></p>{/if}<label>Handover destination<select bind:value={destination}><option>Merchant</option><option>Showroom</option></select></label>
+       {:else if action==='handover'}<div class="sp-form-grid"><label>AWB / shipment or delivery reference<input bind:value={values.awb} maxlength="2000" required/></label><label>Contact<input bind:value={values.dispatch_contact} maxlength="2000"/></label><label>To — customer name and address<textarea bind:value={values.dispatch_to} maxlength="2000" required></textarea></label><label>From — sender name and address<textarea bind:value={values.dispatch_from} maxlength="2000" required></textarea></label></div>
+       {:else if action==='buyer_feedback'}<label>Buyer result<select bind:value={result} required><option value="">Choose result</option><option>Pass</option><option>Fail</option><option>Comments</option></select></label>{/if}
+       {#key action+':'+stage}
+        <SampleCommentField label="Update comment" placeholder={action==='pattern'?'Add pattern completion remarks or measurements…':''} bind:value={note} bind:dictating={updateDictating} required={commentRequired} disabled={busy} indentId={piece.id} {action} stage={['exception','resolve'].includes(action)?stage:''}/>
+       {/key}
+      </div>
+      <div class="sp-actions sp-editor__actions"><button class="button secondary" type="button" disabled={busy} onclick={closeEditor}>Cancel</button><button class="button primary" disabled={busy||updateDictating}>{busy?'Saving…':data.can_record_directly?(action==='send_cad'?'Send to CAD':'Record update'):'Submit for approval'}</button></div>
      </form>
     {/if}
    </SampleStageDialog>
@@ -175,7 +177,17 @@
  .sp-timeline strong,.sp-timeline span{display:block;font-size:12px;font-weight:750}
  .sp-timeline span{margin-top:4px;color:#324154;font-size:11px;font-weight:650}
  .sp-timeline__done button{background:#e8f5ec;border-color:#b8d9c7;color:#145037}
- .sp-timeline__done span{color:#254d3c}.sp-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}.sp-process label{display:block;font-size:13px;font-weight:700;color:#172536}.sp-process input,.sp-process select,.sp-process textarea{display:block;width:100%;min-width:0;min-height:44px;margin-top:6px;padding:8px 10px;border:1px solid #cbd5df;border-radius:12px;background:#f8fafc;color:#111;font:inherit}.sp-process textarea{resize:vertical}.sp-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px 16px;margin-bottom:12px}.stage-status{margin-top:0!important;color:#23384b}.sp-editor,.sp-pending{padding:16px;margin-top:12px;border:1px solid #dce3e9;border-radius:12px;background:#fafbfc}.sp-pending{background:#fffaf0;border-color:#e9d6af}.sp-issue{padding:12px;border:1px solid #ecc7ce;border-radius:12px;color:#961f30;background:#fff2f4;margin:12px 0}.sp-comment{white-space:pre-wrap;overflow-wrap:anywhere}.sp-notice{color:#075e54}.sp-lateness{color:#3f4b5b}
+ .sp-timeline__done span{color:#254d3c}.sp-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}.sp-process label{display:block;font-size:13px;font-weight:700;color:#172536}.sp-process input,.sp-process select,.sp-process textarea{display:block;width:100%;min-width:0;min-height:44px;margin-top:6px;padding:8px 10px;border:1px solid #cbd5df;border-radius:12px;background:#f8fafc;color:#111;font:inherit}.sp-process textarea{resize:vertical}.sp-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px 16px;margin-bottom:12px}
+ .sp-process .stage-status{margin:0 0 14px;color:#526174;font-weight:500}
+ .stage-status strong{color:#172536;font-weight:700}
+ .sp-process .stage-action{margin-bottom:14px}
+ .sp-process .stage-action select{background-color:#fff!important}
+ .sp-editor{display:grid;gap:16px;margin-top:0}
+ .sp-editor__card{display:grid;gap:12px;min-width:0;padding:16px;border:1px solid #dce3e9;border-radius:12px;background:#fff;box-shadow:0 1px 2px #1326390d}
+ .sp-editor__card h4,.sp-editor__card p,.sp-editor__card .sp-form-grid{margin:0}
+ .sp-editor__actions{margin-top:0}
+ .sp-pending{padding:16px;margin-top:12px;border:1px solid #e9d6af;border-radius:12px;background:#fffaf0}
+ .sp-issue{padding:12px;border:1px solid #ecc7ce;border-radius:12px;color:#961f30;background:#fff2f4;margin:12px 0}.sp-comment{white-space:pre-wrap;overflow-wrap:anywhere}.sp-notice{color:#075e54}.sp-lateness{color:#3f4b5b}
  .sp-history{margin-top:16px;border-top:1px solid #dce3e9;padding-top:8px}
  .sp-history summary{display:flex;align-items:center;gap:6px;min-height:44px;cursor:pointer;list-style:none;color:#26384a;font-weight:700}
  .sp-history summary::-webkit-details-marker{display:none}
