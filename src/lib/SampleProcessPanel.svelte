@@ -154,7 +154,7 @@
        <h4>{activeAction.label}</h4>
        {#if action==='fabric'||action==='trims'}<div class="sp-form-grid"><label>Availability<select bind:value={result} required><option value="">Choose availability</option><option value="In stock">In house / in stock</option><option>To order</option><option>Ordered</option></select></label>{#if result==='To order'||result==='Ordered'}<label>Expected arrival date<input type="date" bind:value={expected} required={result==='Ordered'}/></label>{/if}</div>
        {:else if action==='send_cad'}<p>Send this indent to Pattern follow-up for CAD to pick up.</p>
-       {:else if action==='cut_start'||action==='cut'}<p>Confirm the pattern and marker are complete, the sample file is clear, and fabric and trims are ready.</p>
+       {:else if action==='cut_start'||action==='cut'}<p>Confirm the pattern and marker are complete, and fabric and trims are ready.</p>
        {:else if action==='allocate'}<p>Allocate this indent to {piece.production.sample_maker||'the sample tailor saved in the plan'}.</p>
        {:else if action==='plan'}<div class="sp-form-grid">{#each editorFields as [key,label,type]}<label>{label}<input type={type==='date'?'date':'text'} bind:value={values[key]} maxlength="2000"/></label>{/each}</div>
        {:else if action==='file_review'}<label>Sample file<select bind:value={result}><option>Clear</option><option>Missing</option></select></label>
