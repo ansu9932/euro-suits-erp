@@ -102,7 +102,7 @@
   <span class="prompt">{dragging ? 'Drop files here' : !canUpload ? 'Attachments unavailable' : full ? 'File limit reached' : disabled ? 'Saving…' : 'Drag and drop files'}</span>
   {#if canUpload && !full && !disabled}<span class="choose">Choose files</span>{/if}
  </button>
- <p id={uid + '-help'} class="help">{canUpload ? 'Up to 10 MB each · PDF, images, Office, email, CAD, text or ZIP' : 'Your account does not have document upload access.'}</p>
+ <p id={uid + '-help'} class="help">{canUpload ? 'Up to 10 MB each · PDF, images, Office, email, CAD, text or ZIP' : 'Ask a Super Admin to enable attachment uploads for your account.'}</p>
  {#if uploadError}<p class="upload-error" role="alert">{uploadError}</p>{:else if error}<p class="upload-error" role="alert">{error}</p>{/if}
  {#if files.length}
   <ul aria-label={title + ' files ready to attach'}>

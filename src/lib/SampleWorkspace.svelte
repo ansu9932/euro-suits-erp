@@ -162,7 +162,7 @@
   </div>
  {/if}</div>
  <div class="sample-upload-grid">{#each (intake?['Buyer email']:['Trims','Mail','Files']) as group}<div class="sample-upload-group"><SampleUploads existing={(form.files||[]).filter((f:any)=>(f.category===group||group==='Mail'&&f.category==='EST')).length} title={group==='Buyer email'?'Mail attachment':group}
- files={queued[group]} disabled={busy} canUpload={data?.can_documents!==false} uploading={uploadingFile}
+ files={queued[group]} disabled={busy} canUpload={intake ? data?.can_documents === true : (data?.can_upload_indent_files ?? data?.can_documents) === true} uploading={uploadingFile}
  uploadError={uploadFailure?.group===group?uploadFailure.message:''}
  onfiles={files=>{queued[group]=files;if(uploadFailure?.group===group)uploadFailure=null}}/>{#each (form.files||[]).filter((f:any)=>(f.category===group||group==='Mail'&&f.category==='EST')) as file}<button type="button" class="text-button" onclick={()=>previewFile=file}>Preview {file.name}</button>{/each}</div>{/each}</div>
  {#if option}<div class="inline-editor"><label>New {label(option.kind)}<input bind:value={option.label} maxlength="100"/></label><button class="button primary" disabled={busy||!option.label.trim()} onclick={addOption}>Add option</button><button class="button secondary" onclick={()=>option=null}>Cancel</button></div>{/if}
