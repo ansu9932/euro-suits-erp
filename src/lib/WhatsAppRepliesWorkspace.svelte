@@ -1,5 +1,5 @@
 <script lang="ts">
- import {onMount} from 'svelte';
+ import {onMount, tick} from 'svelte';
  import {ChevronRight, MessageCircle, QrCode, RefreshCw} from '@lucide/svelte';
  import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import {api} from './api';
@@ -7,7 +7,7 @@
 
  type Recipient = {
   user_id:number; name:string; role:string; phone:string; active:boolean;
-  enabled:boolean; consent_note:string; erp_only?:boolean;
+  enabled:boolean; consent_note:string; erp_only?:boolean; eligible?:boolean;
  };
  type Delivery = {
   id:number; reference:string; label:string; module:string; status:string;
@@ -21,8 +21,12 @@
  };
 
  let data:ReplyData|null=$state(null);
- let busy=$state(false), error=$state(''), notice=$state(''), password=$state('');
+ type Action = 'connect'|'disconnect'|'settings'|'recipient'|'refresh';
+ let working=$state<Action|null>(null), feedback=$state<Action>('refresh'), error=$state(''), notice=$state('');
+ let connectionPassword=$state(''), settingsPassword=$state(''), recipientPassword=$state('');
  let enabled=$state(false), dailyCap=$state(100), recipient:Recipient|null=$state(null);
+ let recipientHeading=$state<HTMLHeadingElement>();
+ let recipientTrigger:HTMLButtonElement|undefined;
  let qrURL=$state('');
  let qrRequest:AbortController|undefined;
  let disposed=false;
@@ -31,66 +35,127 @@
   STOPPED:'Disconnected', FAILED:'Connection needs attention', NOT_FOUND:'Ready to link',
   UNAVAILABLE:'Connection unavailable', NOT_CONFIGURED:'Setup needed'
  };
+ let busy=$derived(working!==null);
  let connection=$derived.by(()=>data?.session?.status||'STOPPED');
+ let recipientCount=$derived.by(()=>data?.recipients.filter(item=>item.active&&item.enabled&&item.eligible!==false).length??0);
+ let activationHint=$derived(connection!=='WORKING'?'Link the WhatsApp number first.':recipientCount===0?'Enable at least one approval recipient first.':'');
 
  function clearQR(){
-  qrRequest?.abort();
-  qrRequest=undefined;
   if(qrURL)URL.revokeObjectURL(qrURL);
   qrURL='';
  }
- async function load(){
+ async function load(syncSettings=true){
   const result=await api('/developer/whatsapp-replies') as ReplyData;
-  if(disposed)return;
-  data=result;
-  enabled=result.settings.enabled;
-  dailyCap=result.settings.daily_cap;
-  if(result.session?.status==='WORKING')clearQR();
+  if(!disposed){
+   data=result;
+   if(syncSettings){
+    enabled=result.settings.enabled;
+    dailyCap=result.settings.daily_cap;
+   }
+   if(result.session.status==='WORKING')clearQR();
+  }
+  return result;
  }
- async function refresh(){
+ function start(action:Action){
+  working=feedback=action;
+  error=notice='';
+ }
+ async function refresh(action:'refresh'|'connect'='refresh'){
   if(busy)return;
-  busy=true;error='';
-  try{await load()}catch(problem){error=(problem as Error).message}finally{busy=false}
+  start(action);
+  try{await load()}catch(problem){error=(problem as Error).message}finally{working=null}
  }
- async function run(body:Record<string,unknown>){
+ async function run(action:'disconnect'|'settings'|'recipient', body:Record<string,unknown>, password:string){
   if(busy||!password)return;
-  busy=true;error='';notice='';
+  start(action);
   let saved=false;
   try{
-   await api('/developer/whatsapp-replies',{...body,password});
-   saved=true;password='';recipient=null;
-   if(body.action==='connect'||body.action==='disconnect')clearQR();
-   await load();
-   notice=body.action==='connect'?'Connection started. Show the pairing code when the connection is ready to scan.':
-    body.action==='disconnect'?'WhatsApp disconnected.':
-    body.action==='recipient'?'Recipient access saved.':'Reply approval settings saved.';
+   await api('/developer/whatsapp-replies',{...body,action,password});
+   if(disposed)return;
+   saved=true;
+   if(action==='recipient')await closeRecipient();
+   if(action==='disconnect')clearQR();
+   await load(action!=='recipient');
+   notice=action==='disconnect'?'WhatsApp disconnected.':action==='recipient'?'Recipient access saved.':'Reply approval settings saved.';
   }catch(problem){
    error=saved?'The action finished, but the current status could not be loaded. Refresh to check.':(problem as Error).message;
-  }finally{busy=false}
+  }finally{
+   if(action==='disconnect')connectionPassword='';
+   if(action==='settings')settingsPassword='';
+   if(action==='recipient')recipientPassword='';
+   working=null;
+   if(action==='recipient'&&saved){await tick();recipientTrigger?.focus()}
+  }
  }
- async function showQR(){
+ async function openRecipient(item:Recipient, trigger:HTMLButtonElement){
+  recipientTrigger=trigger;
+  recipient={...item,enabled:item.enabled||Boolean(item.phone)};
+  recipientPassword='';
+  feedback='recipient';
+  error=notice='';
+  await tick();
+  recipientHeading?.focus();
+ }
+ async function closeRecipient(){
+  recipient=null;
+  recipientPassword='';
+  await tick();
+  recipientTrigger?.focus();
+ }
+ async function fetchQR(signal:AbortSignal){
+  const response=await fetch('/api/developer/whatsapp-replies/qr',{
+   credentials:'same-origin',cache:'no-store',signal
+  });
+  if(!response.ok){
+   if(response.status===401)window.dispatchEvent(new Event('erp:session-expired'));
+   const problem=await response.json().catch(()=>({error:'The pairing code is unavailable. Generate a new QR and try again.'}));
+   throw new Error(problem.error||'The pairing code is unavailable. Generate a new QR and try again.');
+  }
+  if(!response.headers.get('Content-Type')?.startsWith('image/png'))throw new Error('The pairing code response could not be read. Generate a new QR and try again.');
+  const image=await response.blob();
+  if(image.size>2*1024*1024)throw new Error('The pairing image is too large. Generate a new QR and try again.');
+  if(!signal.aborted){
+   clearQR();
+   qrURL=URL.createObjectURL(image);
+  }
+ }
+ async function showQR(authorize=false){
   if(busy)return;
-  busy=true;error='';notice='';clearQR();
+  start('connect');
   const controller=new AbortController();
   qrRequest=controller;
   try{
-   const response=await fetch('/api/developer/whatsapp-replies/qr',{
-    credentials:'same-origin',cache:'no-store',signal:controller.signal
-   });
-   if(!response.ok){
-    if(response.status===401)window.dispatchEvent(new Event('erp:session-expired'));
-    const problem=await response.json().catch(()=>({error:'The pairing code is unavailable. Refresh the connection and try again.'}));
-    throw new Error(problem.error||'The pairing code is unavailable. Refresh the connection and try again.');
+   if(authorize){
+    const result=await api('/developer/whatsapp-replies',{action:'connect',password:connectionPassword}) as {session:ReplyData['session']};
+    if(controller.signal.aborted)return;
+    let session=result.session;
+    if(data)data={...data,session};
+    // NOWEB starts in the background. Fetch the QR as soon as it is ready.
+    for(let attempt=0;attempt<12&&['STARTING','STOPPED'].includes(session.status);attempt++){
+     await new Promise(resolve=>setTimeout(resolve,1000));
+     if(controller.signal.aborted)return;
+     session=(await load(false)).session;
+    }
+    if(controller.signal.aborted)return;
+    if(session.status==='WORKING'){
+     clearQR();
+     notice='WhatsApp is connected.';
+     return;
+    }
+    if(session.status!=='SCAN_QR_CODE'){
+     throw new Error(data?.connection_error||'WhatsApp did not finish starting. Generate a new pairing QR to try again.');
+    }
    }
-   if(!response.headers.get('Content-Type')?.startsWith('image/png'))throw new Error('The pairing code response could not be read. Refresh and try again.');
-   const image=await response.blob();
-   if(image.size>2*1024*1024)throw new Error('The pairing image is too large. Refresh and try again.');
-   if(!disposed&&!controller.signal.aborted)qrURL=URL.createObjectURL(image);
+   await fetchQR(controller.signal);
   }catch(problem){
-   if(!controller.signal.aborted)error=(problem as Error).message;
+   if(!controller.signal.aborted){
+    error=(problem as Error).message;
+    if(!authorize)clearQR();
+   }
   }finally{
    if(qrRequest===controller)qrRequest=undefined;
-   busy=false;
+   connectionPassword='';
+   working=null;
   }
  }
  function stamp(value:string){
@@ -99,7 +164,7 @@
  }
  onMount(()=>{
   refresh();
-  return()=>{disposed=true;clearQR()};
+  return()=>{disposed=true;qrRequest?.abort();clearQR()};
  });
 </script>
 
@@ -108,13 +173,12 @@
   <div class="wa-replies__title"><MessageCircle size={20} aria-hidden="true"/><h2>WhatsApp reply approvals</h2></div>
   <div class="wa-replies__heading-actions">
    {#if data}<span class="wa-replies__status" data-state={connection}>{connectionNames[connection]||connection.replaceAll('_',' ')}</span>{/if}
-   <button class="button secondary" type="button" disabled={busy} onclick={refresh}><RefreshCw size={16} aria-hidden="true"/>Refresh connection</button>
+   <button class="button secondary" type="button" disabled={busy} onclick={()=>refresh()}><RefreshCw size={16} aria-hidden="true"/>Refresh connection</button>
   </div>
  </header>
  <p class="wa-replies__intro">Review requests from WhatsApp using the reference in each message. Dashboard and WhatsApp decisions use the same ERP approval history.</p>
- {#if error}<p class="form-error" role="alert">{error}</p>{/if}
- {#if notice}<p class="wa-replies__notice" role="status">{notice}</p>{/if}
- {#if busy&&data}<div class="wa-replies__loading"><SpinnerLoader size={16} label=""/><span role="status">Updating reply approvals…</span></div>{/if}
+ {#if error&&feedback==='refresh'}<p class="form-error" role="alert">{error}</p>{/if}
+ {#if working==='refresh'&&data}<div class="wa-replies__loading"><SpinnerLoader size={16} label=""/><span role="status">Checking WhatsApp connection…</span></div>{/if}
  {#if data}
   <div class="wa-replies__content" use:enter>
    {#if !data.configured}
@@ -125,16 +189,23 @@
    <div class="wa-replies__connection">
     <div>
      <h3>Link a dedicated WhatsApp number</h3>
-     <p>On that phone, open WhatsApp → Linked devices → Link a device, then scan the pairing code.</p>
+     <p>Use a dedicated phone. In WhatsApp, open <strong>Linked devices → Link a device</strong> and scan the QR.</p>
      {#if data.session?.me?.id}<p class="wa-replies__connected">Linked account <strong>{data.session.me.pushName||data.session.me.id.replace(/@.*/,'')}</strong></p>{/if}
-     <div class="wa-replies__actions">
-      {#if connection!=='WORKING'}
-       <button class="button primary" type="button" disabled={busy||!data.configured||!password} onclick={()=>run({action:'connect'})}>Link WhatsApp number</button>
-       <button class="button secondary" type="button" disabled={busy||!data.configured||connection==='STOPPED'||connection==='NOT_FOUND'} onclick={showQR}><QrCode size={16} aria-hidden="true"/>Show pairing code</button>
-      {:else}
-       <button class="button secondary" type="button" disabled={busy||!password} onclick={()=>run({action:'disconnect'})}>Disconnect number</button>
-      {/if}
-     </div>
+     {#if error&&(feedback==='connect'||feedback==='disconnect')}<p class="form-error" role="alert">{error}</p>{/if}
+     {#if notice&&(feedback==='connect'||feedback==='disconnect')}<p class="wa-replies__notice" role="status">{notice}</p>{/if}
+     {#if !qrURL}
+      <form class="wa-replies__action-form" onsubmit={event=>{
+       event.preventDefault();
+       if(connection==='WORKING')run('disconnect',{},connectionPassword);
+       else showQR(true);
+      }}>
+       <label>Developer password<input type="password" bind:value={connectionPassword} autocomplete="current-password" maxlength="128" required disabled={busy||!data.configured}/></label>
+       <button class="button {connection==='WORKING'?'secondary':'primary'}" disabled={busy||!data.configured}>
+        {#if working==='connect'||working==='disconnect'}<SpinnerLoader size={16} label=""/>{:else if connection!=='WORKING'}<QrCode size={16} aria-hidden="true"/>{/if}
+        {working==='connect'?'Generating pairing QR…':working==='disconnect'?'Disconnecting…':connection==='WORKING'?'Disconnect number':'Generate pairing QR'}
+       </button>
+      </form>
+     {/if}
     </div>
     <div class="wa-replies__commands">
      <h3>Reply with a decision</h3>
@@ -146,32 +217,57 @@
    {#if qrURL}
     <div class="wa-replies__pairing">
      <img src={qrURL} alt="Scan this code with the dedicated WhatsApp number to link ERP reply approvals" width="240" height="240"/>
-     <div><h3>Scan to finish linking</h3><p>Keep this code private. After scanning, refresh the connection to confirm that it is connected.</p><button class="button secondary" type="button" disabled={busy} onclick={showQR}>Refresh pairing code</button></div>
+     <div>
+      <h3>Scan to finish linking</h3>
+      <p>After scanning, select <strong>Check connection</strong>. If the code expires, refresh it here.</p>
+      <div class="wa-replies__actions">
+       <button class="button primary" type="button" disabled={busy} onclick={()=>refresh('connect')}>Check connection</button>
+       <button class="button secondary" type="button" disabled={busy} onclick={()=>showQR()}>{working==='connect'?'Checking…':'Refresh pairing code'}</button>
+      </div>
+     </div>
     </div>
    {/if}
    <div class="wa-replies__settings">
-    <label class="wa-replies__password">Your developer password<input type="password" bind:value={password} autocomplete="current-password" maxlength="128" placeholder="Required to change connection or access"/></label>
-    <form onsubmit={event=>{event.preventDefault();run({action:'settings',enabled,daily_cap:dailyCap,version:data!.settings.version})}}>
-     <label class="wa-replies__check"><input type="checkbox" bind:checked={enabled} disabled={busy||!data.configured&&!enabled}/>Enable WhatsApp approval notifications</label>
-     <label class="wa-replies__cap">Daily message limit<input type="number" min="1" max="1000" required bind:value={dailyCap} disabled={busy}/></label>
-     <button class="button primary" disabled={busy||!password||enabled&&!data.configured}>Save reply settings</button>
+    <h3>Approval notifications</h3>
+    {#if activationHint&&!data.settings.enabled}<p>{activationHint}</p>{/if}
+    {#if error&&feedback==='settings'}<p class="form-error" role="alert">{error}</p>{/if}
+    {#if notice&&feedback==='settings'}<p class="wa-replies__notice" role="status">{notice}</p>{/if}
+    <form onsubmit={event=>{event.preventDefault();run('settings',{enabled,daily_cap:dailyCap,version:data!.settings.version},settingsPassword)}}>
+     <label class="wa-replies__check"><input type="checkbox" bind:checked={enabled} disabled={busy||!!activationHint&&!enabled}/>Enable WhatsApp approval notifications</label>
+     <div class="wa-replies__action-form">
+      <label>Developer password<input type="password" bind:value={settingsPassword} autocomplete="current-password" maxlength="128" required disabled={busy}/></label>
+      <label class="wa-replies__cap">Daily message limit<input type="number" min="1" max="1000" required bind:value={dailyCap} disabled={busy}/></label>
+      <button class="button primary" disabled={busy||enabled&&!!activationHint}>{working==='settings'?'Saving…':'Save reply settings'}</button>
+     </div>
     </form>
    </div>
    <details class="wa-replies__disclosure">
-    <summary><ChevronRight class="wa-replies__chevron" size={17} aria-hidden="true"/>Approval recipients <span>{data.recipients.filter(item=>item.enabled).length} enabled</span></summary>
+    <summary><ChevronRight class="wa-replies__chevron" size={17} aria-hidden="true"/>Approval recipients <span>{recipientCount} enabled</span></summary>
     <p>Enable Super Admin and MD recipients who agreed to receive requests. Finance Heads can receive the first shortfall review. Each reply uses the recipient’s ERP permissions.</p>
+    {#if notice&&feedback==='recipient'}<p class="wa-replies__notice" role="status">{notice}</p>{/if}
+    {#if !recipient&&error&&feedback==='recipient'}<p class="form-error" role="alert">{error}</p>{/if}
     <div class="table-wrap"><table>
      <thead><tr><th>Administrator</th><th>WhatsApp number</th><th>Access</th><th>Action</th></tr></thead>
      <tbody>{#each data.recipients as item (item.user_id)}
-      <tr><td><strong>{item.name}</strong><span class="wa-replies__meta">{item.role}</span></td><td>{item.phone||'Add a number in User access'}</td><td>{!item.active?'Account disabled':item.enabled?'Enabled':'Off'}{#if item.erp_only}<span class="wa-replies__meta">Review in ERP</span>{/if}</td><td><button class="button secondary" type="button" disabled={busy||!item.active} onclick={()=>recipient={...item}}>Manage recipient</button></td></tr>
+      <tr>
+       <td><strong>{item.name}</strong><span class="wa-replies__meta">{item.role}</span></td>
+       <td>{item.phone||'Add a number in User access'}</td>
+       <td>{!item.active?'Account disabled':item.eligible===false?'Needs approval permission':item.enabled?'Enabled':'Off'}{#if item.erp_only}<span class="wa-replies__meta">Review in ERP</span>{/if}</td>
+       <td>{#if item.active&&(item.enabled||item.eligible!==false&&item.phone)}<button class="button secondary" type="button" disabled={busy} onclick={event=>openRecipient(item,event.currentTarget)}>{item.enabled?'Manage recipient':'Enable recipient'}</button>{:else}—{/if}</td>
+      </tr>
      {:else}<tr><td colspan="4">No eligible administrators are available.</td></tr>{/each}</tbody>
     </table></div>
     {#if recipient}
-     <form class="wa-replies__recipient" onsubmit={event=>{event.preventDefault();if(recipient)run({action:'recipient',user_id:recipient.user_id,enabled:recipient.enabled,consent_note:recipient.consent_note})}}>
-      <h3>{recipient.name}</h3>
-      <label class="wa-replies__check"><input type="checkbox" bind:checked={recipient.enabled} disabled={busy}/>Enable approval requests for this administrator</label>
+     <form class="wa-replies__recipient" onsubmit={event=>{event.preventDefault();if(recipient)run('recipient',{user_id:recipient.user_id,enabled:recipient.enabled,consent_note:recipient.consent_note},recipientPassword)}}>
+      <h3 bind:this={recipientHeading} tabindex="-1">{recipient.name}</h3>
+      {#if error&&feedback==='recipient'}<p class="form-error" role="alert">{error}</p>{/if}
+      <label class="wa-replies__check"><input type="checkbox" bind:checked={recipient.enabled} disabled={busy||recipient.eligible===false&&!recipient.enabled}/>Receive WhatsApp approval requests</label>
       <label>Consent record<textarea bind:value={recipient.consent_note} maxlength="500" rows="2" required={recipient.enabled} disabled={busy} placeholder="When and how this administrator agreed to receive approval requests"></textarea></label>
-      <div class="wa-replies__actions"><button class="button secondary" type="button" disabled={busy} onclick={()=>recipient=null}>Cancel</button><button class="button primary" disabled={busy||!password}>Save recipient</button></div>
+      <div class="wa-replies__action-form">
+       <label>Developer password<input type="password" bind:value={recipientPassword} autocomplete="current-password" maxlength="128" required disabled={busy}/></label>
+       <button class="button primary" disabled={busy||recipient.enabled&&recipient.eligible===false}>{working==='recipient'?'Saving…':'Save recipient'}</button>
+       <button class="button secondary" type="button" disabled={busy} onclick={closeRecipient}>Cancel</button>
+      </div>
      </form>
     {/if}
    </details>
@@ -216,10 +312,10 @@
  .wa-replies input:focus-visible,.wa-replies textarea:focus-visible,.wa-replies button:focus-visible,.wa-replies summary:focus-visible{outline:2px solid #08746f;outline-offset:3px}
  .wa-replies input[type="checkbox"]{width:20px;height:20px;margin:0;accent-color:#0a7a6b;flex:none}
  .wa-replies .wa-replies__check{display:flex;align-items:center;gap:9px;min-height:44px;line-height:1.4}
- .wa-replies__settings{display:grid;grid-template-columns:minmax(220px,.75fr) minmax(0,1.7fr);gap:20px;padding-top:16px;border-top:1px solid #e0e7ec;align-items:end}
- .wa-replies__settings form{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
- .wa-replies__settings .wa-replies__check{flex:1 1 230px;padding-bottom:0}
- .wa-replies__cap{width:120px;flex:none}
+ .wa-replies__settings{padding-top:16px;border-top:1px solid #e0e7ec}
+ .wa-replies__action-form{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:0}
+ .wa-replies__action-form>label{flex:0 1 220px}
+ .wa-replies__action-form>.wa-replies__cap{flex:0 1 145px}
  .wa-replies__pairing{display:flex;align-items:center;gap:20px;padding:12px;background:#f7faf9;border:1px solid #d6e4df;border-radius:12px}
  .wa-replies__pairing img{display:block;width:240px;height:240px;object-fit:contain;background:#fff;border-radius:8px;flex:none}
  .wa-replies__pairing p{max-width:45ch}
