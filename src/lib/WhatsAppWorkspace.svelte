@@ -2,6 +2,7 @@
  import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import {onMount} from 'svelte';
  import {api} from './api';
+ import WhatsAppRepliesWorkspace from './WhatsAppRepliesWorkspace.svelte';
  import type {Row} from './types';
  let data:Row|null=$state(null),busy=$state(false),error=$state(''),notice=$state(''),password=$state(''),section=$state('Templates');
  let edit:Row|null=$state(null),recipient:Row|null=$state(null),testPhone=$state('+918389841671'),consent=$state(false);
@@ -17,6 +18,7 @@
  {#if busy&&data}<SpinnerLoader label="Updating WhatsApp workspace" size={16}/>{/if}
  <header class="wa-heading"><div><p class="eyebrow">EURO SUITS · NOTIFICATIONS</p><h1>WhatsApp control centre</h1><p>Work alerts, daily reminders and delivery checks.</p></div><button class="button secondary" disabled={busy} onclick={refresh}>Refresh</button></header>
  {#if error}<p class="form-error" role="alert">{error}</p>{/if}{#if notice}<p class="company-notice" role="status">{notice}</p>{/if}
+ <WhatsAppRepliesWorkspace/>
  {#if data}
  <div class="wa-stats"><article><small>Connection</small><strong>{data.configured?'Credentials configured':'Setup required'}</strong></article><article><small>Automatic messages</small><strong>{data.settings.enabled?'Enabled':'Paused'}</strong></article><article><small>Daily summary</small><strong>{String(data.settings.reminder_hour).padStart(2,'0')}:00 IST</strong></article><article><small>Enabled recipients</small><strong>{data.recipients.filter((r:Row)=>r.enabled).length}</strong></article></div>
  {#if !data.configured}<p class="company-warning">Meta sender registration and server credentials are required before sending. Preview and edit your templates below.</p>{/if}
