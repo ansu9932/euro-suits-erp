@@ -26,7 +26,7 @@ export function sampleFormDocument(kind:SampleFormKind,detail:any,piece:any,mate
  const bom=(group?:string)=>(r.bom||[]).filter((b:any)=>!group||b.group===group).map((b:any)=>[b.component,b.reference,[text(b.quantity),b.unit].filter(Boolean).join(' '),b.colour,b.size,b.remarks].filter(v=>v!==null&&v!==undefined&&v!=='').join(' · ')).join('\n');
  const issues=(detail.issues||[]).filter((i:any)=>i.indent_id===piece.id);
  const dc=issues.map((i:any)=>'SDC-'+String(i.id).padStart(7,'0')).join(', ');
- const content:any[]=[{table:{widths:[100,'*'],body:[[{stack:logo?[{image:logo,fit:[85,32]}]:[{text:'EURO SUITS',color:'#fff',bold:true}],border:[false,false,false,false],margin:[10,8,0,6]},{stack:[{text:name.toUpperCase(),fontSize:16,bold:true,color:'#fff',alignment:'right'},{text:indent,fontSize:9,color:'#e4e9f2',alignment:'right',margin:[0,4,0,0]}],border:[false,false,false,false],margin:[0,8,10,6]}]]},layout:{fillColor:()=>navy,hLineWidth:()=>0,vLineWidth:()=>0},margin:[0,0,0,7]},
+ const content:any[]=[{table:{widths:[118,'*'],body:[[{stack:logo?[{image:logo,fit:[102,45]}]:[{text:'EURO SUITS',color:'#fff',bold:true}],border:[false,false,false,false],margin:[8,5,0,5]},{stack:[{text:name.toUpperCase(),fontSize:16,bold:true,color:'#fff',alignment:'right'},{text:indent,fontSize:9,color:'#e4e9f2',alignment:'right',margin:[0,4,0,0]}],border:[false,false,false,false],margin:[0,9,10,6]}]]},layout:{fillColor:()=>navy,hLineWidth:()=>0,vLineWidth:()=>0},margin:[0,0,0,7]},
  {text:[{text:'Indent '+indent,bold:true},'  ·  Request SR-'+r.id+(p.legacy_indent_number?'  ·  Original Excel indent '+p.legacy_indent_number:'')],fontSize:8,color:'#283d50',margin:[0,0,0,7]}];
  if(kind==='indent'){
  content.push(grid([
@@ -68,9 +68,15 @@ export function sampleFormDocument(kind:SampleFormKind,detail:any,piece:any,mate
 let engine:Promise<any>|undefined;
 export async function createSampleForm(kind:SampleFormKind,detail:any,piece:any,material:(id:any)=>string):Promise<File>{
  engine||=Promise.all([import('pdfmake/build/pdfmake'),import('pdfmake/build/vfs_fonts')]).then(([pdf,fonts])=>{const make=pdf.default;make.addVirtualFileSystem(fonts.default);make.setUrlAccessPolicy(()=>false);return make}).catch(e=>{engine=undefined;throw e});
- const response=await fetch('/logo.png',{credentials:'same-origin'});if(!response.ok)throw Error('The form logo could not load. Retry preview.');
- const bitmap=await createImageBitmap(await response.blob());let logo:string;
- try{const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;const ctx=canvas.getContext('2d');if(!ctx)throw Error('The form logo could not render.');ctx.fillStyle='#1F3864';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0);logo=canvas.toDataURL('image/jpeg',.95)}finally{bitmap.close()}
+ const response=await fetch('/sample-form-logo.jpg',{credentials:'same-origin'});
+ if(!response.ok)throw Error('The form logo could not load. Retry preview.');
+ const image=await response.blob();
+ const logo=await new Promise<string>((resolve,reject)=>{
+  const reader=new FileReader();
+  reader.onload=()=>resolve(String(reader.result));
+  reader.onerror=()=>reject(Error('The form logo could not be read. Retry preview.'));
+  reader.readAsDataURL(image);
+ });
 
  const make=await engine;const pdf=await make.createPdf(sampleFormDocument(kind,detail,piece,material,logo)).getBlob();
  return new File([pdf],(kind==='indent'?'Sample-Indent-Form':'Sample-Audit-Form')+'-'+(piece.indent_number||piece.id)+'.pdf',{type:'application/pdf'});
