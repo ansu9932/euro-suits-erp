@@ -21,7 +21,6 @@
  let remarkDictating=$state(false);
  let uploadingFile=$state<File|null>(null);
  let uploadFailure=$state<{group:string;message:string}|null>(null);
- let intimationView=$state<'compact'|'split'>('compact');
  let intake=$state(false), queued:any=$state({Trims:[],Mail:[],Files:[],'Buyer email':[]});
  let view=$state(untrack(()=>intimationOnly?'intimation':initialView)),revision=$state(0),fileIndent=$state('');
  let data:any=$state(null),detail:any=$state(null),form:any=$state(null),busy=$state(false),error=$state(''),notice=$state(''),review=$state(''),search=$state(''),category=$state('Buyer email'),stockForm:any=$state(null),option:any=$state(null),production:any=$state(null),printMode=$state('indent'),printPiece=$state(0),focusIndent=$state(0),reportBusy=$state(false);let formPreview:File|null=$state(null);
@@ -149,19 +148,11 @@
  <div role="dialog" aria-modal="true" aria-labelledby="sample-editor-title" tabindex="-1" class="sample-dialog ux-dialog" bind:this={editor} oninput={clearField} onchange={clearField} class:intimation-dialog={intake}>
  <header>
   <div class="editor-heading">{#if intake}<FileText size={19} aria-hidden="true"/>{/if}<h2 id="sample-editor-title">{intake?'New intimation':form.id?'Sample request · '+requestIndentLabel(form):'Generate sample indent'}</h2></div>
-  <div class="editor-header-actions">
-   {#if intake}
-    <div class="intimation-view" role="group" aria-label="Intimation layout">
-     <button type="button" class:primary={intimationView==='compact'} aria-pressed={intimationView==='compact'} onclick={()=>intimationView='compact'}>Compact</button>
-     <button type="button" class:primary={intimationView==='split'} aria-pressed={intimationView==='split'} onclick={()=>intimationView='split'}>Split View</button>
-    </div>
-   {/if}
-   <button type="button" disabled={busy} class="button secondary" aria-label="Close" onclick={()=>{form=null;option=null}}>{#if intake}<X size={18} aria-hidden="true"/>{:else}Close{/if}</button>
-  </div>
+  <button type="button" disabled={busy} class="button secondary" aria-label="Close" onclick={()=>{form=null;option=null}}>{#if intake}<X size={18} aria-hidden="true"/>{:else}Close{/if}</button>
  </header>
  <div class="ux-dialog__body" use:enter>
  {#if error}<div class="form-error" role="alert">{error}</div>{/if}
- <div class="editor-layout" class:intimation-split={intake&&intimationView==='split'}>
+ <div class="editor-layout">
  <div class="form-grid"><label data-field="buyer_id" class:field-error={!!fieldErrors.buyer_id}>{intake?'Brand / buyer':'Buyer'}<select bind:value={form.buyer_id} onchange={()=>{if(intake)form.profile.brand=data.buyers.find((b:any)=>b.id===Number(form.buyer_id))?.name||''}}><option value="">Choose buyer</option>{#each data.buyers.filter((b:any)=>b.company_id===Number(form.company_id)) as b}<option value={b.id}>{b.name}</option>{/each}</select>{#if fieldErrors.buyer_id}<small class="field-error-message">{fieldErrors.buyer_id}</small>{/if}</label>
  {#if form.profile.legacy_indent_number}<label>Original Excel indent<input value={form.profile.legacy_indent_number} readonly/></label>{/if}
  {#if form.completion&&form.profile.historical_registered==='true'}<label data-field="source_quantity" class:field-error={!!fieldErrors.source_quantity}>Historical number of pieces<input type="number" min="1" max="10000" step="1" value={form.profile.source_quantity??''} oninput={e=>form.profile.source_quantity=e.currentTarget.value}/>{#if fieldErrors.source_quantity}<small class="field-error-message">{fieldErrors.source_quantity}</small>{/if}</label>{/if}
@@ -315,32 +306,25 @@
   .sample-dialog.ux-dialog.intimation-dialog{box-sizing:border-box;width:min(100%,1040px);height:auto;max-height:min(92dvh,calc(100dvh - 40px))}
   .intimation-dialog>header,.intimation-dialog>footer{align-items:center}
   .intimation-dialog>footer{flex-wrap:wrap}
-  .intimation-dialog .editor-heading,.intimation-dialog .editor-header-actions{display:flex;align-items:center;gap:12px}
+  .intimation-dialog .editor-heading{display:flex;align-items:center;gap:12px}
   .intimation-dialog .editor-heading :global(svg){color:#e0f1ed;flex:none}
   .intimation-dialog .ux-dialog__body{min-width:0;scrollbar-color:#c3ced9 transparent;scrollbar-width:thin}
   .intimation-dialog .editor-layout{display:grid;gap:16px;align-items:start}
-  .intimation-dialog .editor-layout.intimation-split{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
   .sample-dialog.ux-dialog.intimation-dialog .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
   .intimation-dialog [data-field="email_subject"]{grid-column:1/-1}
   .intimation-dialog label{min-width:0;font-size:13px;gap:6px}
   .intimation-dialog :is(input,select,textarea,button){box-sizing:border-box;min-height:44px}
   .intimation-dialog .option-line select{min-width:0}
   .intimation-dialog .option-line button{flex:none}
-  .intimation-dialog .intimation-view{display:flex;gap:2px;padding:2px;border:1px solid #526174;border-radius:10px}
-  .intimation-view button{border:0;border-radius:7px;background:transparent;color:#fff;font:inherit;font-weight:650;padding:4px 10px;cursor:pointer}
-  .intimation-view button[aria-pressed="true"]{background:#e0f1ed;color:#075b55}
-  .intimation-view button:focus-visible{outline:2px solid #fff;outline-offset:2px}
   .intimation-dialog .intimation-variants{padding:12px;border:1px solid #dce3eb;border-radius:12px;background:#f7f9fb}
   .sample-dialog.ux-dialog.intimation-dialog .intimation-variants>h3{margin:0 0 4px;font-size:16px}
   .intimation-dialog .variant{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(80px,.65fr) auto;gap:8px;margin:8px 0}
   .intimation-dialog .variant>button{align-self:end}
   .intimation-dialog .intimation-communication{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:16px;align-items:start}
-  .intimation-dialog .intimation-split .intimation-communication{grid-template-columns:minmax(0,1fr);padding-inline-start:16px;border-inline-start:1px solid #dce3eb}
   .sample-dialog.ux-dialog.intimation-dialog .sample-upload-grid{grid-template-columns:minmax(0,1fr);margin:0}
   .intimation-dialog .intimation-communication textarea{min-height:132px}
  }
  @media(max-width:1023px){
-  .intimation-dialog .intimation-view{display:none}
   .intimation-dialog .sample-upload-grid{grid-template-columns:minmax(0,1fr)}
   .intimation-dialog .editor-heading{display:flex;gap:8px;align-items:center}
  }
