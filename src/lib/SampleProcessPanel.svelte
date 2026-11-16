@@ -2,7 +2,6 @@
  import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
  import {ChevronRight} from '@lucide/svelte';
  import SampleStageDialog from './SampleStageDialog.svelte';
- import SampleProcessChanges from './SampleProcessChanges.svelte';
  import SampleCommentField from './SampleCommentField.svelte';
  import {untrack} from 'svelte';
  import {api} from './api';
@@ -93,8 +92,8 @@
  {#if piece.production.process_exception}<div class="sp-issue"><strong>{piece.production.process_exception.result} · {processLabel(piece.production.process_exception.stage)}</strong><p>{piece.production.process_exception.comment}</p><span>{piece.production.process_exception.by} · {stamp(piece.production.process_exception.at)}</span></div>{/if}
  {#if data}
   {#if data.late_days!=null}<p class="sp-lateness">{data.late_days} late day{data.late_days===1?'':'s'}{piece.production.handover_actual?' at final handover.':' as of today (IST).'}</p>{/if}
-  {#if pending}<section class="sp-pending"><h4>Awaiting approval · {actionLabel(pending.action)}</h4><p><strong>{pending.submitted_by}</strong> · {stamp(pending.submitted_at)}</p>{#if pending.comment}<p class="sp-comment">{pending.comment}</p>{/if}
-   <SampleProcessChanges changes={pending.changes}/>
+  {#if pending}<section class="sp-pending" aria-label="Update awaiting approval">
+   <p>Submitted by <strong>{pending.submitted_by}</strong> · {stamp(pending.submitted_at)}</p>
    {#if data.can_review}
     {#key pending.id}
      <SampleCommentField label="Review comment" hint="(required for correction or rejection)" bind:value={reviewNote} bind:dictating={reviewDictating} disabled={busy} indentId={piece.id} action="review_process" updateId={pending.id}/>
@@ -102,7 +101,7 @@
     <div class="sp-actions"><button class="button primary" disabled={busy||reviewDictating} onclick={()=>send('Approved')}>Accept update</button><button class="button secondary" disabled={busy||reviewDictating||!reviewNote.trim()} onclick={()=>send('Changes requested')}>Request correction</button><button class="button danger" disabled={busy||reviewDictating||!reviewNote.trim()} onclick={()=>send('Rejected')}>Reject update</button></div>
    {:else}<p>Waiting for approval by {pendingTarget}.</p>{/if}
   </section>{/if}
-  <details class="sp-history" open={data.updates.length>0}>
+  <details class="sp-history">
    <summary><ChevronRight size={16} aria-hidden="true"/>Update &amp; review history <span>({data.updates.length}{data.updates.length===1000?'+':''})</span></summary>
    <div class="sp-history__records">
     {#each data.updates as update (update.id)}
@@ -115,10 +114,6 @@
       {#if update.comment}<p class="sp-comment">{update.comment}</p>{/if}
       {#if update.reviewed_by}<p>Reviewed: <strong>{update.reviewed_by}</strong> · {stamp(update.reviewed_at)}</p>{/if}
       {#if update.review_comment}<p class="sp-comment"><strong>Review:</strong> {update.review_comment}</p>{/if}
-      <details class="sp-history__changes">
-       <summary><ChevronRight size={14} aria-hidden="true"/>Reported changes</summary>
-       <SampleProcessChanges changes={update.changes}/>
-      </details>
      </article>
     {:else}
      <p>No updates recorded yet.</p>
@@ -198,7 +193,7 @@
  .sp-history summary::-webkit-details-marker{display:none}
  .sp-history summary:focus-visible{outline:2px solid #08746f;outline-offset:2px;border-radius:5px}
  .sp-history summary :global(svg){flex:none;transition:transform 160ms ease}
- .sp-history[open]>summary :global(svg),.sp-history__changes[open]>summary :global(svg){transform:rotate(90deg)}
+ .sp-history[open]>summary :global(svg){transform:rotate(90deg)}
  .sp-history>summary span{color:#4b5d70}
  .sp-history__records{display:grid;gap:16px;padding-top:8px}
  .sp-history article{min-width:0;padding:16px;border:1px solid #dce3e9;border-radius:12px;background:#f8fafc;box-shadow:0 1px 2px #1326390d;--decision-color:#26384a}
@@ -210,6 +205,5 @@
  .sp-history__title span{color:var(--decision-color);font-size:13px;font-weight:750}
  .sp-history article p{margin:0 0 9px;color:#26384a;overflow-wrap:anywhere}
  .sp-history article .sp-comment{color:#172536}
- .sp-history__changes{margin-top:12px;border-top:1px solid #26384a24;padding-top:4px}
  @media(prefers-reduced-motion:reduce){.sp-history summary :global(svg){transition:none}}
 </style>
