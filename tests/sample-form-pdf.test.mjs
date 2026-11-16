@@ -23,3 +23,18 @@ test('saved indent remarks appear as bold plain text in their own full-width row
  assert(allText(indent).includes('Existing production remarks.'));
  assert(!allText(sampleFormDocument('audit',detail,piece,()=>'' )).includes(message));
 });
+
+test('both PDF headers use the selected garment’s registered indent number',()=>{
+ const {piece,detail}=fixture();
+ piece.indent_number='SR00030';
+ const selected={...piece,id:1401,indent_number:'SR00031'};
+ detail.pieces.push(selected);
+ for(const kind of ['indent','audit']){
+  const document=sampleFormDocument(kind,detail,selected,()=> '');
+  const header=document.content[0].table.body[0][1].stack;
+  assert.equal(header[1].text,'SR00031');
+  assert.equal(document.info.subject,'Indent SR00031');
+  assert.equal(document.footer(1,1).text,'Indent SR00031 · 1 / 1');
+  assert.doesNotMatch(allText(document).join(' '),/SR00030|SMIND099|AU099/);
+ }
+});

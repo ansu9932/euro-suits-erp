@@ -14,7 +14,8 @@ export function formDate(v:unknown):string {
 export function sampleFormDocument(kind:SampleFormKind,detail:any,piece:any,material:(id:any)=>string,logo=''):any {
  if(!piece?.id || !detail?.pieces?.some((p:any)=>p.id===piece.id))throw Error('Choose a registered sample indent.');
  const r=detail.record,p=r.profile||{},s=piece.production||{},reports=s.audit_reports||[],qa=reports.at(-1)||{},navy='#1F3864',border='#9ca3af';
- const name=kind==='indent'?'Sample Indent Form':'Sample Audit Form',code=kind==='indent'?'SMIND099':'AU099';
+ const name=kind==='indent'?'Sample Indent Form':'Sample Audit Form';
+ const indent=indentReference(piece);
  const ref=(id:any)=>id?material(id)||'':'';
  const value=(v:any)=>({text:text(v),fontSize:8,lineHeight:1.1,margin:[0,3,0,1]});
  const field=(label:string,v:any='',span=1,bold=false)=>({stack:[{text:label.toUpperCase(),bold:true,fontSize:6.8,color:'#374151'},{...value(v),bold}],colSpan:span,margin:[4,3,4,3]});
@@ -25,8 +26,8 @@ export function sampleFormDocument(kind:SampleFormKind,detail:any,piece:any,mate
  const bom=(group?:string)=>(r.bom||[]).filter((b:any)=>!group||b.group===group).map((b:any)=>[b.component,b.reference,[text(b.quantity),b.unit].filter(Boolean).join(' '),b.colour,b.size,b.remarks].filter(v=>v!==null&&v!==undefined&&v!=='').join(' · ')).join('\n');
  const issues=(detail.issues||[]).filter((i:any)=>i.indent_id===piece.id);
  const dc=issues.map((i:any)=>'SDC-'+String(i.id).padStart(7,'0')).join(', ');
- const content:any[]=[{table:{widths:[100,'*'],body:[[{stack:logo?[{image:logo,fit:[85,32]}]:[{text:'EURO SUITS',color:'#fff',bold:true}],border:[false,false,false,false],margin:[10,8,0,6]},{stack:[{text:name.toUpperCase(),fontSize:16,bold:true,color:'#fff',alignment:'right'},{text:code,fontSize:9,color:'#e4e9f2',alignment:'right',margin:[0,4,0,0]}],border:[false,false,false,false],margin:[0,8,10,6]}]]},layout:{fillColor:()=>navy,hLineWidth:()=>0,vLineWidth:()=>0},margin:[0,0,0,7]},
- {text:[{text:'Indent '+indentReference(piece),bold:true},'  ·  Request SR-'+r.id+(p.legacy_indent_number?'  ·  Original Excel indent '+p.legacy_indent_number:'')],fontSize:8,color:'#283d50',margin:[0,0,0,7]}];
+ const content:any[]=[{table:{widths:[100,'*'],body:[[{stack:logo?[{image:logo,fit:[85,32]}]:[{text:'EURO SUITS',color:'#fff',bold:true}],border:[false,false,false,false],margin:[10,8,0,6]},{stack:[{text:name.toUpperCase(),fontSize:16,bold:true,color:'#fff',alignment:'right'},{text:indent,fontSize:9,color:'#e4e9f2',alignment:'right',margin:[0,4,0,0]}],border:[false,false,false,false],margin:[0,8,10,6]}]]},layout:{fillColor:()=>navy,hLineWidth:()=>0,vLineWidth:()=>0},margin:[0,0,0,7]},
+ {text:[{text:'Indent '+indent,bold:true},'  ·  Request SR-'+r.id+(p.legacy_indent_number?'  ·  Original Excel indent '+p.legacy_indent_number:'')],fontSize:8,color:'#283d50',margin:[0,0,0,7]}];
  if(kind==='indent'){
  content.push(grid([
  ['Date',formDate(p.request_date)],['Sample Type',p.sample_type],['Smpl Req Dt',formDate(p.buyer_required_date)],
@@ -35,7 +36,7 @@ export function sampleFormDocument(kind:SampleFormKind,detail:any,piece:any,mate
  ['Fab Req',ref(p.material_id)],['Col Req',piece.colour],['Length Mtr',p.length_metres],
  ['Alt Fab',ref(p.alternate_material_id)],['Alt Ref',p.alternate_reference],['DC No',dc],['Fab Into Dt',formDate(p.fabric_in_date)]
  ],3));
- content.push(table([band('Sizes, colours and registered indent',6),['Col','Size','Indent No','Col','Size','Indent No'].map(l=>({...field(l),fillColor:'#f3f4f6'})),[value(piece.colour),value(piece.size),value(indentReference(piece)),value(''),value(''),value('')],...Array.from({length:2},()=>Array.from({length:6},()=>({text:' ',margin:[4,3]}))),[field('MTR/DC NO',issues.map((i:any)=>[i.metres===null||i.metres===undefined?'':Math.abs(Number(i.metres))+' m',i.code,'SDC-'+String(i.id).padStart(7,'0')].filter(Boolean).join(' · ')).join('\n'),6),{},{},{},{},{}]],6,2));
+ content.push(table([band('Sizes, colours and registered indent',6),['Col','Size','Indent No','Col','Size','Indent No'].map(l=>({...field(l),fillColor:'#f3f4f6'})),[value(piece.colour),value(piece.size),value(indent),value(''),value(''),value('')],...Array.from({length:2},()=>Array.from({length:6},()=>({text:' ',margin:[4,3]}))),[field('MTR/DC NO',issues.map((i:any)=>[i.metres===null||i.metres===undefined?'':Math.abs(Number(i.metres))+' m',i.code,'SDC-'+String(i.id).padStart(7,'0')].filter(Boolean).join(' · ')).join('\n'),6),{},{},{},{},{}]],6,2));
  content.push(grid([['Sample 2 Copy',[p.copy_sample_id,p.copy_purpose].filter(Boolean).join(' · ')],['CAD Ref',p.cad_reference],['Spec Ref / Dt / Signed',[p.spec_reference,formDate(p.spec_date),p.spec_signed].filter(Boolean).join(' · ')],['Spl Remarks',p.special_remarks]],4));
  content.push(table([[field('Special remark',p.email_message,1,true)]],1));
  content.push(table([band('BOM & Process Checklist',2),[field('BOM Details',bom()),field('Finishing Remarks',p.finishing_remarks)],[field('Pocketing',bom('Pocketing')),field('Value Additions',bom('Value additions'))],[field('Fusing',bom('Fusing')),field('Embroidery',p.embroidery)],[field('Sewing Trims',bom('Sewing trims')),field('Washing',p.washing)]],2));
@@ -60,9 +61,9 @@ export function sampleFormDocument(kind:SampleFormKind,detail:any,piece:any,mate
  content.push(table([[field('QA Signature',qa.auditor?text(qa.auditor)+'\nElectronically signed in ERP\n'+text(qa.signed_at):''),field('Approved 2 Snd',qa.result==='Approved'?'[x]':''),field('Re Work / Rejected',qa.result==='Rework'?'[x] Re Work':qa.result==='Rejected'?'[x] Rejected':''),field('Merchant Sign','')], [{text:'Contact: qam@eurosuitsmfg.com  |  bdm@eurosuitsmfg.com',fontSize:7,color:'#374151',alignment:'center',fillColor:'#f3f4f6',colSpan:4,margin:[4,5]}, {},{},{}]],4));
  }
  if(p.historical_registered==='true')content.push({text:'Historical registration · unavailable source fields intentionally blank.',fontSize:7,color:'#526170',margin:[0,4,0,0]});
- return {pageSize:'A4',pageMargins:[18,18,18,28],info:{title:name+' · Indent '+indentReference(piece),author:'Euro Suits ERP',subject:code},defaultStyle:{font:'Roboto',fontSize:8,color:'#111827'},content,
+ return {pageSize:'A4',pageMargins:[18,18,18,28],info:{title:name+' · Indent '+indent,author:'Euro Suits ERP',subject:'Indent '+indent},defaultStyle:{font:'Roboto',fontSize:8,color:'#111827'},content,
  background:()=>({text:'EURO SUITS',fontSize:56,bold:true,color:navy,opacity:.045,absolutePosition:{x:100,y:380}}),
- footer:(current:number,total:number)=>({text:`${code} · Indent ${indentReference(piece)} · ${current} / ${total}`,fontSize:7,color:'#526170',alignment:'right',margin:[18,8,18,0]})};
+ footer:(current:number,total:number)=>({text:`Indent ${indent} · ${current} / ${total}`,fontSize:7,color:'#526170',alignment:'right',margin:[18,8,18,0]})};
 }
 let engine:Promise<any>|undefined;
 export async function createSampleForm(kind:SampleFormKind,detail:any,piece:any,material:(id:any)=>string):Promise<File>{
