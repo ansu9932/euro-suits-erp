@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {workspaceRedirect} from '../src/lib/workspaceAccess.ts';
+import {signInOverviewPath,workspaceRedirect} from '../src/lib/workspaceAccess.ts';
 
 for (const portal of ['admin','md','finance']) {
  test(`${portal}: setup-only access works through an old operations link`,()=>{
@@ -47,4 +47,25 @@ test('export grants preserve company and operations workspaces when those are as
  assert.equal(workspaceRedirect({portal:'finance',grants:['export_view','view_orders'],setup_grants:[]},'finance','companies'),'/finance/operations');
  assert.equal(workspaceRedirect({portal:'finance',grants:['export_edit'],setup_grants:[]},'finance','companies'),null);
  assert.equal(workspaceRedirect({portal:'developer',grants:['export_view'],setup_grants:[]},'finance','companies'),'/developer');
+});
+
+test('sign-in lands on Overview for operations and developer accounts',()=>{
+ for(const portal of ['admin','md','finance']) {
+  assert.equal(signInOverviewPath({portal,grants:['view_orders'],setup_grants:['view']}),'/'+portal+'/operations');
+ }
+ for(const portal of ['sampling','merchandising','cutting','warehouse']) {
+  assert.equal(signInOverviewPath({portal,grants:['view_orders']}),'/'+portal);
+ }
+ assert.equal(signInOverviewPath({portal:'developer'}),'/developer');
+});
+
+test('Overview does not redirect restricted accounts away from their available workspace',()=>{
+ for(const user of [
+  {portal:'finance',grants:['export_view']},
+  {portal:'admin',setup_grants:['view']},
+  {portal:'cutting',grants:[]},
+  {portal:'finance',grants:['view_orders'],renewal_blocks:[{id:1}]}
+ ]) {
+  assert.equal(signInOverviewPath(user),null);
+ }
 });

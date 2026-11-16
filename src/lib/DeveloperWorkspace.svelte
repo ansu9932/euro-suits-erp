@@ -21,7 +21,7 @@
  let issues=$derived.by(()=>(data?.issues||[]).filter((i:Row)=>(filter==='All'||(filter==='Open'?i.status!=='Resolved':i.status===filter))&&(!search||(i.title+' '+i.route+' '+i.category+' '+(i.username||'')).toLowerCase().includes(search.toLowerCase()))));
  const time=(v:unknown)=>v?new Date(String(v)).toLocaleString():'—';
  async function load(){const result=await api('/developer');data=result;user=result.user;}
- async function signedIn(result:Row){if(!result.user.is_developer){redirectToWorkspace('/'+result.user.portal);return;}user=result.user;try{await load()}catch(e){error=(e as Error).message}}
+ async function signedIn(result:Row){if(!result.user.is_developer){redirectToWorkspace('/'+result.user.portal);return;}tab='Overview';user=result.user;try{await load()}catch(e){error=(e as Error).message}}
  onMount(()=>{const finishSignIn=resumeSignIn();let stopped=false;const expired=()=>{user=null;data=null;form=null;error='Please sign in again.'};window.addEventListener('erp:session-expired',expired);(async()=>{try{const s=await api('/session');if(s.user)await signedIn(s);}catch(e){error=(e as Error).message}finally{ready=true;await tick();finishSignIn()}})();const timer=setInterval(()=>{if(!stopped&&!document.hidden&&data&&!form&&!busy)load().catch(e=>error=e.message)},60000);return()=>{stopped=true;finishSignIn();clearInterval(timer);window.removeEventListener('erp:session-expired',expired)}});
  async function logout(){try{await api('/logout',{});user=null;data=null;form=null;}catch(e){error=(e as Error).message}}
  async function refresh(){if(busy)return;busy=true;error='';try{await load()}catch(e){error=(e as Error).message}finally{busy=false}}

@@ -1,6 +1,7 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {beginSignIn} from './signInTransition';
+ import {beginSignIn,redirectToWorkspace} from './signInTransition';
+ import {signInOverviewPath} from './workspaceAccess';
  import LoginFields from './LoginFields.svelte';
  import {ButtonLoader} from './components/loaders';
  import {api} from './api';
@@ -28,7 +29,15 @@
     resendSeconds=60;
    }else{
     transition.authenticated();
-    await onauthenticated(result);
+    const overview = signInOverviewPath(result.user);
+    if (overview && overview !== location.pathname) {
+     const destination = new URL(overview, location.origin);
+     destination.search = location.search;
+     if (destination.searchParams.get('view') === 'test') destination.searchParams.delete('view');
+     redirectToWorkspace(destination.pathname + destination.search);
+    } else {
+     await onauthenticated(result);
+    }
    }
   }catch(e){
    error=(e as Error).message;
