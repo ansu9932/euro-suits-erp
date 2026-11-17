@@ -8,10 +8,7 @@ document.addEventListener('click', event => {
  dialog.className = 'erp-video-dialog';
  dialog.setAttribute('aria-label', 'Euro Suits ERP video walkthrough');
  dialog.innerHTML = `
-  <header class="erp-video-header">
-   <h2>Euro Suits ERP walkthrough</h2>
-   <button type="button" aria-label="Close video">✕ <span>Close</span></button>
-  </header>
+  <button class="erp-video-close" type="button" aria-label="Close video"><span aria-hidden="true">✕</span></button>
   <div class="erp-video-screen">
    <video controls playsinline preload="auto" aria-label="Euro Suits ERP video walkthrough"></video>
    <div class="erp-video-loading" role="status"><span aria-hidden="true"></span>Loading video…</div>
