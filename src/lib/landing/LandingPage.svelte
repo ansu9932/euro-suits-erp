@@ -53,7 +53,7 @@
  <AIAnnouncement {paused}/>
  <header class="es-nav">
   <a class="es-brand" href="/" aria-label="Euro Suits home"><span class="es-logo"><img src="/logo.png" alt="" width="42" height="42"/></span><span>EURO SUITS<span class="brand-caption">MANUFACTURING ERP</span></span></a>
-  <nav class:open={menu} aria-label="Main navigation"><a href="#blazer" onclick={()=>menu=false}>Inside the blazer</a><a href="#about" onclick={()=>menu=false}>The company</a><a href="#workflow" onclick={()=>menu=false}>Workflow</a><a href="/guide.html" data-sveltekit-reload onclick={()=>menu=false}>Dashboard guide</a><a href="/privacy" data-sveltekit-reload onclick={()=>menu=false}>Privacy</a><a href="mailto:it@eurosuitsmfg.com" onclick={()=>menu=false}>Contact IT</a><a href="#workspaces" onclick={()=>menu=false}>Workspaces</a></nav>
+  <nav class:open={menu} aria-label="Main navigation"><a href="#blazer" onclick={()=>menu=false}>Inside the blazer</a><a href="#about" onclick={()=>menu=false}>The company</a><a href="#workflow" onclick={()=>menu=false}>Workflow</a><a href="/guide" data-sveltekit-reload onclick={()=>menu=false}>Dashboard guide</a><a href="/privacy" data-sveltekit-reload onclick={()=>menu=false}>Privacy</a><a href="mailto:it@eurosuitsmfg.com" onclick={()=>menu=false}>Contact IT</a><a href="#workspaces" onclick={()=>menu=false}>Workspaces</a></nav>
   <a class="es-nav-login" href="/signin">Sign in <ArrowUpRight size={16}/></a>
   <button class="es-menu" aria-label={menu?'Close navigation':'Open navigation'} aria-expanded={menu} onclick={()=>menu=!menu}>{#if menu}<X size={22}/>{:else}<Menu size={22}/>{/if}</button>
  </header>
@@ -105,7 +105,7 @@
  <button class="es-motion-dock" onclick={()=>paused=!paused} aria-label={paused?'Enable page animations':'Pause page animations'} aria-pressed={paused}>{#if paused}<Play size={14}/><span>Motion off</span>{:else}<Pause size={14}/><span>Motion on</span>{/if}</button>
  <footer class="es-footer">
   <a class="es-brand" href="/"><span class="es-logo"><img src="/logo.png" width="40" height="40" alt=""/></span><span>EURO SUITS<span class="brand-caption">MANUFACTURING ERP</span></span></a>
-  <nav class="es-footer-links" aria-label="Resources"><a href="#workflow">Workflow</a><a href="/guide.html" data-sveltekit-reload>Dashboard guide</a><a href="/privacy" data-sveltekit-reload>Privacy</a><a href="mailto:it@eurosuitsmfg.com">Contact IT <ArrowUpRight size={13}/></a></nav>
+  <nav class="es-footer-links" aria-label="Resources"><a href="#workflow">Workflow</a><a href="/guide" data-sveltekit-reload>Dashboard guide</a><a href="/privacy" data-sveltekit-reload>Privacy</a><a href="mailto:it@eurosuitsmfg.com">Contact IT <ArrowUpRight size={13}/></a></nav>
   <div class="es-footer-meta">
    <span>© {new Date().getFullYear()} Euro Suits MFG</span>
    <a href="https://github.com/ansu9932" target="_blank" rel="noopener noreferrer" aria-label="Built by ANSU — GitHub profile (opens in a new tab)">
