@@ -44,6 +44,8 @@
  });
 </script>
 <svelte:head>
+ <link rel="stylesheet" href="/walkthrough-player.css"/>
+ <script type="module" src="/walkthrough-player.js"></script>
  <title>Euro Suits · Every thread. One connected workflow.</title>
  <meta name="description" content="Explore the Euro Suits manufacturing ERP: connected company setup, fabric sourcing, sample approvals, planning, production and dispatch. Sign in to your department workspace."/>
  <meta name="theme-color" content="#14273c"/>
@@ -96,8 +98,7 @@
   <section class="es-video-guide" aria-labelledby="video-guide-title">
    <div><h2 id="video-guide-title">How it works</h2><p>Watch the Euro Suits ERP video walkthrough.</p></div>
    <div class="es-video-guide-action">
-    <a class="es-btn es-primary" href="https://notebooklm.link.google/CrintJLsPFXk" target="_blank" rel="noopener noreferrer"><Play size={18} aria-hidden="true"/>Watch video<ArrowUpRight size={16} aria-hidden="true"/></a>
-    <small>Opens in NotebookLM · Google sign-in required.</small>
+    <button class="es-btn es-primary" type="button" data-video-src="/media/euro-suits-erp-walkthrough-v1.mp4" aria-haspopup="dialog"><Play size={18} aria-hidden="true"/>Watch video</button>
    </div>
   </section>
   <section class="es-cta"><div class="es-micro">THE NEXT STEP IS YOURS</div><h2>Let’s get<br/>to work<span>.</span></h2><a class="es-btn" href="/signin">Open Euro Suits ERP <ArrowUpRight size={21}/></a><div class="es-cta-orbit" aria-hidden="true"></div></section>

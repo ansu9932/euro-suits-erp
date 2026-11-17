@@ -45,9 +45,11 @@ body .es-site .es-nav .es-nav-login{color:#fff!important}
  .es-site .es-nav nav a{color:#40546a;font-size:14px;min-height:44px}
 }
 
-.es-site .es-video-guide{display:flex;align-items:center;justify-content:space-between;gap:28px;margin:0 auto 64px;padding:32px;width:90%;max-width:1280px;border:1px solid #ccdfdc;border-radius:12px;background:#f0f8f6}
+.es-site .es-video-guide{display:flex;align-items:center;justify-content:space-between;gap:28px;margin:0 auto 64px;padding:32px;width:90%;max-width:1280px;border:0;border-radius:12px;background:#f0f8f6}
 .es-site .es-video-guide h2{font-size:clamp(24px,3vw,36px);line-height:1.2;margin:0 0 10px;color:#142b40}
 .es-site .es-video-guide p{margin:0;color:#40546a;font-size:15px;line-height:1.6}
 .es-site .es-video-guide-action{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
 .es-site .es-video-guide-action small{font-size:12px;line-height:1.5;color:#526174}
 @media(max-width:700px){.es-site .es-video-guide{flex-direction:column;align-items:flex-start;margin-bottom:40px;padding:24px;gap:20px}}
+
+.es-site button.es-btn[data-video-src]{font-family:inherit;cursor:pointer;border:0}

@@ -1,0 +1,16 @@
+.erp-video-dialog{box-sizing:border-box;width:min(1040px,calc(100vw - 24px));max-width:none;max-height:calc(100dvh - 24px);margin:auto;padding:0;border:0;border-radius:14px;background:#fff;color:#172b3e;box-shadow:0 24px 80px #10243655;overflow:auto;font:14px/1.5 system-ui,-apple-system,sans-serif}
+.erp-video-dialog::backdrop{background:#102436b8;backdrop-filter:blur(4px)}
+.erp-video-dialog .erp-video-header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 20px;background:#142b40;color:#fff}
+.erp-video-dialog .erp-video-header h2{margin:0;color:inherit;font:600 17px/1.4 system-ui,-apple-system,sans-serif;letter-spacing:0}
+.erp-video-dialog .erp-video-header button{display:inline-flex;align-items:center;justify-content:center;gap:8px;flex:none;min-height:44px;padding:8px 12px;border:0;border-radius:8px;background:#ffffff12;color:#fff;font:inherit;cursor:pointer}
+.erp-video-dialog .erp-video-header button:hover{background:#ffffff25}
+.erp-video-dialog button:focus-visible{outline:2px solid #73d3c2;outline-offset:3px}
+.erp-video-screen{position:relative;display:grid;place-items:center;background:#000}
+.erp-video-dialog video{display:block;width:100%;height:auto;max-height:calc(100dvh - 160px);aspect-ratio:16/9;background:#000;object-fit:contain}
+.erp-video-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:12px;color:#fff;background:#0006;pointer-events:none}
+.erp-video-loading[hidden],.erp-video-message[hidden]{display:none}
+.erp-video-loading>span{width:24px;height:24px;border:3px solid #ffffff50;border-top-color:#73d3c2;border-radius:50%;animation:erp-video-spin .8s linear infinite}
+.erp-video-dialog .erp-video-message{margin:0;padding:12px 20px;color:#40546a;font-size:14px}
+@keyframes erp-video-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.erp-video-loading>span{animation:none}}
+@media(max-width:600px){.erp-video-dialog .erp-video-header{padding:10px 12px}.erp-video-dialog .erp-video-header h2{font-size:15px}}
