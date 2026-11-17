@@ -26,3 +26,22 @@
 /* Header colors are explicit: legacy shared header rules use white text. */
 body .es-site .es-nav :is(.es-brand,.es-menu){color:#142b40!important}
 body .es-site .es-nav .es-nav-login{color:#fff!important}
+
+.es-site .es-nav nav a{white-space:nowrap}
+.es-site .es-footer{flex-wrap:wrap;row-gap:28px}
+.es-site .es-footer-links{display:flex;flex-wrap:wrap;align-items:center;gap:12px 25px;font-size:12px}
+.es-site .es-footer-links a{display:inline-flex;align-items:center;gap:5px;min-height:44px}
+.es-site .es-footer .es-builder{flex-basis:100%;width:100%;justify-content:center;padding-top:24px;border-top:1px solid #e0e7ee;font-size:13px}
+.es-site .es-builder a{display:inline-flex;align-items:center;gap:10px;min-height:44px;color:#526174;text-decoration:none}
+.es-site .es-builder strong{color:#142b40;font-weight:800;letter-spacing:.04em}
+.es-site .es-builder-mark{display:grid;place-items:center;width:38px;height:38px;border:1px solid #e0e7ee;border-radius:50%;background:#fff}
+.es-site .es-builder-mark img{display:block}
+.es-site .es-builder a:hover strong{color:#0a7a6b}
+.es-site .es-footer a:focus-visible,.es-site .es-nav a:focus-visible{outline:2px solid #0a7a6b;outline-offset:5px;border-radius:4px}
+@media(max-width:1100px){
+ .es-site .es-nav .es-nav-login{margin-left:auto}
+ .es-site .es-nav .es-menu{display:block;min-width:44px}
+ .es-site .es-nav nav{display:none;position:absolute;top:100%;left:0;right:0;padding:16px 24px;background:#fff;border-bottom:1px solid #e0e7ee}
+ .es-site .es-nav nav.open{display:flex;flex-direction:column;gap:4px}
+ .es-site .es-nav nav a{color:#40546a;font-size:14px;min-height:44px}
+}
