@@ -98,7 +98,7 @@
   <section class="es-video-guide" aria-labelledby="video-guide-title">
    <div><h2 id="video-guide-title">How it works</h2><p>Watch the Euro Suits ERP video walkthrough.</p></div>
    <div class="es-video-guide-action">
-    <button class="es-btn es-primary" type="button" data-video-src="/media/euro-suits-erp-walkthrough-v1.mp4" aria-haspopup="dialog"><Play size={18} aria-hidden="true"/>Watch video</button>
+    <button class="es-btn es-primary" type="button" data-video-src="/walkthrough-video" aria-haspopup="dialog"><Play size={18} aria-hidden="true"/>Watch video</button>
    </div>
   </section>
   <section class="es-cta"><div class="es-micro">THE NEXT STEP IS YOURS</div><h2>Let’s get<br/>to work<span>.</span></h2><a class="es-btn" href="/signin">Open Euro Suits ERP <ArrowUpRight size={21}/></a><div class="es-cta-orbit" aria-hidden="true"></div></section>
