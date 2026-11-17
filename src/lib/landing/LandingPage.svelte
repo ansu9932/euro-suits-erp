@@ -53,7 +53,7 @@
  <AIAnnouncement {paused}/>
  <header class="es-nav">
   <a class="es-brand" href="/" aria-label="Euro Suits home"><span class="es-logo"><img src="/logo.png" alt="" width="42" height="42"/></span><span>EURO SUITS<span class="brand-caption">MANUFACTURING ERP</span></span></a>
-  <nav class:open={menu} aria-label="Main navigation"><a href="#blazer" onclick={()=>menu=false}>Inside the blazer</a><a href="#about" onclick={()=>menu=false}>The company</a><a href="#workflow" onclick={()=>menu=false}>Workflow</a><a href="/guide.html" onclick={()=>menu=false}>Dashboard guide</a><a href="/privacy" data-sveltekit-reload onclick={()=>menu=false}>Privacy</a><a href="mailto:it@eurosuitsmfg.com" onclick={()=>menu=false}>Contact IT</a><a href="#workspaces" onclick={()=>menu=false}>Workspaces</a></nav>
+  <nav class:open={menu} aria-label="Main navigation"><a href="#blazer" onclick={()=>menu=false}>Inside the blazer</a><a href="#about" onclick={()=>menu=false}>The company</a><a href="#workflow" onclick={()=>menu=false}>Workflow</a><a href="/guide.html" data-sveltekit-reload onclick={()=>menu=false}>Dashboard guide</a><a href="/privacy" data-sveltekit-reload onclick={()=>menu=false}>Privacy</a><a href="mailto:it@eurosuitsmfg.com" onclick={()=>menu=false}>Contact IT</a><a href="#workspaces" onclick={()=>menu=false}>Workspaces</a></nav>
   <a class="es-nav-login" href="/signin">Sign in <ArrowUpRight size={16}/></a>
   <button class="es-menu" aria-label={menu?'Close navigation':'Open navigation'} aria-expanded={menu} onclick={()=>menu=!menu}>{#if menu}<X size={22}/>{:else}<Menu size={22}/>{/if}</button>
  </header>
@@ -93,12 +93,19 @@
    <div><div class="es-micro">A LITTLE MORE CLARITY</div><h2>Before you<br/><span>step inside.</span></h2></div>
    <div class="es-questions"><details><summary>How do I get access?<span>+</span></summary><p>Your administrator creates your account, assigns a role and enables the features you need. Use your own username and password on your department’s sign-in page.</p></details><details><summary>Can I see another team’s orders?<span>+</span></summary><p>Your access follows the company, team, line and order permissions assigned to your account. Contact your administrator if your responsibilities change.</p></details><details><summary>Where do I find my daily work?<span>+</span></summary><p>Sign in to your workspace to see the records and features available to you. Production teams can follow assigned work and record progress in their department.</p></details><details><summary>Who can help with an account or workflow issue?<span>+</span></summary><p>Contact your company administrator or the Euro Suits IT team at <a href="mailto:it@eurosuitsmfg.com">it@eurosuitsmfg.com</a>. Never share passwords or verification codes.</p></details></div>
   </section>
+  <section class="es-video-guide" aria-labelledby="video-guide-title">
+   <div><h2 id="video-guide-title">How it works</h2><p>Watch the Euro Suits ERP video walkthrough.</p></div>
+   <div class="es-video-guide-action">
+    <a class="es-btn es-primary" href="https://notebooklm.link.google/CrintJLsPFXk" target="_blank" rel="noopener noreferrer"><Play size={18} aria-hidden="true"/>Watch video<ArrowUpRight size={16} aria-hidden="true"/></a>
+    <small>Opens in NotebookLM · Google sign-in required.</small>
+   </div>
+  </section>
   <section class="es-cta"><div class="es-micro">THE NEXT STEP IS YOURS</div><h2>Let’s get<br/>to work<span>.</span></h2><a class="es-btn" href="/signin">Open Euro Suits ERP <ArrowUpRight size={21}/></a><div class="es-cta-orbit" aria-hidden="true"></div></section>
  </main>
  <button class="es-motion-dock" onclick={()=>paused=!paused} aria-label={paused?'Enable page animations':'Pause page animations'} aria-pressed={paused}>{#if paused}<Play size={14}/><span>Motion off</span>{:else}<Pause size={14}/><span>Motion on</span>{/if}</button>
  <footer class="es-footer">
   <a class="es-brand" href="/"><span class="es-logo"><img src="/logo.png" width="40" height="40" alt=""/></span><span>EURO SUITS<span class="brand-caption">MANUFACTURING ERP</span></span></a>
-  <nav class="es-footer-links" aria-label="Resources"><a href="#workflow">Workflow</a><a href="/guide.html">Dashboard guide</a><a href="/privacy" data-sveltekit-reload>Privacy</a><a href="mailto:it@eurosuitsmfg.com">Contact IT <ArrowUpRight size={13}/></a></nav>
+  <nav class="es-footer-links" aria-label="Resources"><a href="#workflow">Workflow</a><a href="/guide.html" data-sveltekit-reload>Dashboard guide</a><a href="/privacy" data-sveltekit-reload>Privacy</a><a href="mailto:it@eurosuitsmfg.com">Contact IT <ArrowUpRight size={13}/></a></nav>
   <div class="es-footer-meta">
    <span>© {new Date().getFullYear()} Euro Suits MFG</span>
    <a href="https://github.com/ansu9932" target="_blank" rel="noopener noreferrer" aria-label="Built by ANSU — GitHub profile (opens in a new tab)">
