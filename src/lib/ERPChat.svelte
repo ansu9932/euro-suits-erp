@@ -2,9 +2,9 @@
  import {onMount,tick} from 'svelte';
  import {afterNavigate,replaceState} from '$app/navigation';
  import {page} from '$app/state';
- import {ArrowLeft,Bell,Check,CheckCheck,ChevronDown,Download,FileText,Languages,Maximize2,MessageCircle,Mic,Minimize2,MoreHorizontal,Paperclip,Plus,Search,Send,Users,X} from '@lucide/svelte';
+ import {ArrowLeft,Bell,Check,CheckCheck,ChevronDown,Download,FileText,Languages,Maximize2,MessageCircle,Mic,Minimize2,MoreHorizontal,Paperclip,Plus,Search,Send,Square,Users,X} from '@lucide/svelte';
  import {api,csrf} from './api';
- import {languageNames,localNames,translateText,type LocalLanguage} from './chatLanguage';
+ import {createChatRecognition,languageNames,localNames,speechError,translateText,type Language,type LocalLanguage,type Recognition} from './chatLanguage';
  import {languagePanel} from './languagePanel';
  import {languagePreferences} from './languagePreferences';
  import './styles/erp-chat.css';
@@ -17,7 +17,7 @@
  type Settings='new'|'group'|'email'|'clear'|'leave';
  type EmailMode='immediate'|'offline_delay'|'off';
 
- const maxFiles=5,maxMedia=12*1024*1024;
+ const maxFiles=5,maxMedia=12*1024*1024,maxMessageLength=4000;
  const blockingSurfaces=[
   'dialog[open]','[aria-modal="true"]','[role="dialog"]',
   '.drawer-backdrop','.sample-overlay','.company-modal-backdrop',
@@ -28,6 +28,8 @@
  let {userId}:{userId:number}=$props();
  let blocked=$state(false),picked=$state<File[]>([]),fileInput=$state<HTMLInputElement>();
  let translating=$state(false),translationStatus=$state(''),translationTask:AbortController|undefined;
+ let dictation=$state.raw<{mic:Recognition;language:Language;stopping:boolean}|null>(null);
+ let dictationDeadline:ReturnType<typeof setTimeout>|undefined;
  let draftTranslation=$state<{original:string;result:string}>();
  let translated=$state<Record<number,{text:string;language:LocalLanguage}>>({});
  let messageNodes=new Map<number,HTMLElement>();
@@ -108,7 +110,7 @@
    );
    if(covered===blocked)return;
    blocked=covered;
-   if(covered){settings=null;menu=false;cancelTranslation();stopTyping();}
+   if(covered){settings=null;menu=false;cancelDictation();cancelTranslation();stopTyping();}
    else if(opened&&selected)void loadThread(selected,true);
   };
   const schedule=()=>{if(!frame)frame=requestAnimationFrame(check);};
@@ -130,7 +132,11 @@
   cleaned.searchParams.delete('chat');
   replaceState(cleaned,page.state);
  }
- afterNavigate(()=>{if(!disposed)openLink()});
+ afterNavigate(({from,to})=>{
+  if(disposed)return;
+  if(from?.url.pathname!==to?.url.pathname)cancelDictation();
+  openLink();
+ });
 
  onMount(()=>{
   if(!opened){
@@ -143,13 +149,17 @@
   if(opened&&selected&&details!==selected)void loadThread(selected);
   void refresh(false);
   void eventLoop();
-  const attended=()=>{if(!document.hidden){void refresh(true);void readVisible();}};
+  const attended=()=>{
+   if(document.hidden){cancelDictation();return;}
+   void refresh(true);void readVisible();
+  };
   window.addEventListener('focus',attended);
   document.addEventListener('visibilitychange',attended);
   return()=>{
    disposed=true;
    clearTimeout(typingTimer);
    pollController.abort();
+   cancelDictation();
    cancelTranslation();
    window.removeEventListener('focus',attended);
    document.removeEventListener('visibilitychange',attended);
@@ -199,7 +209,7 @@
 
  function selectThread(id:number){
   if(selected!==id){
-   stopTyping();cancelTranslation();
+   stopTyping();cancelDictation();cancelTranslation();
    picked=[];translated={};draftTranslation=undefined;
    threadGeneration++;details=null;messages=[];members=[];typing=[];draft='';menu=false;
    latestRead=0;reading=0;visibleSince='';selected=id;composeError='';
@@ -319,7 +329,7 @@
   const text=event.clipboardData?.getData('text/plain');
   if(text&&composer){
    const start=composer.selectionStart,end=composer.selectionEnd;
-   const insertion=text.slice(0,Math.max(0,4000-draft.length+end-start));
+   const insertion=text.slice(0,Math.max(0,maxMessageLength-draft.length+end-start));
    draft=draft.slice(0,start)+insertion+draft.slice(end);
    void tick().then(()=>composer?.setSelectionRange(start+insertion.length,start+insertion.length));
   }
@@ -329,20 +339,76 @@
   return {destroy(){messageNodes.delete(id);}};
  }
 
+ function clearDictation(){
+  clearTimeout(dictationDeadline);
+  dictation=null;
+ }
+ function cancelDictation(){
+  const mic=dictation?.mic;
+  clearDictation();
+  mic?.abort();
+ }
+ function stopDictation(){
+  if(!dictation||dictation.stopping)return;
+  const mic=dictation.mic;
+  dictation={...dictation,stopping:true};
+  clearTimeout(dictationDeadline);
+  dictationDeadline=setTimeout(()=>{
+   cancelDictation();
+   composeError='Voice typing took too long to finish. Try again.';
+  },12000);
+  try{mic.stop();}
+  catch{
+   cancelDictation();
+   composeError='Could not finish voice typing. Try again.';
+  }
+ }
  function dictate(){
-  const conversation=selected;
-  languagePanel.set({text:'',mode:'voice',apply:english=>{
-   if(disposed||selected!==conversation||!opened||sending)return false;
-   const next=[draft.trimEnd(),english].filter(Boolean).join(' ');
-   if(next.length>4000)return false;
-   draft=next;
-   return true;
-  }});
+  if(dictation){stopDictation();return;}
+  if(draft.length>=maxMessageLength){
+   composeError='The message is full. Shorten it to keep dictating.';
+   return;
+  }
+  const language=$languagePreferences.speech;
+  composeError='';
+  try{
+   const mic=createChatRecognition(language);
+   dictation={mic,language,stopping:false};
+   let receivedSpeech=false;
+   mic.onresult=event=>{
+    if(dictation?.mic!==mic)return;
+    const words:string[]=[];
+    for(let index=event.resultIndex;index<event.results.length;index++){
+     const part=event.results[index];
+     if(part.isFinal&&part[0].transcript.trim())words.push(part[0].transcript.trim());
+    }
+    if(!words.length)return;
+    receivedSpeech=true;
+    draft=[draft.trimEnd(),words.join(' ')].filter(Boolean).join(' ').slice(0,maxMessageLength);
+    if(draft.length>=maxMessageLength)stopDictation();
+   };
+   mic.onerror=event=>{
+    if(dictation?.mic!==mic)return;
+    clearDictation();
+    if(event.error!=='aborted')composeError=speechError(event.error,language);
+   };
+   mic.onend=()=>{
+    if(dictation?.mic!==mic)return;
+    clearDictation();
+    if(!receivedSpeech)composeError=speechError('no-speech',language);
+   };
+   dictationDeadline=setTimeout(stopDictation,60000);
+   mic.start();
+  }catch(e){
+   cancelDictation();
+   composeError=errorText(e);
+  }
  }
  function openChatLanguages(){
+  cancelDictation();
   const conversation=selected,original=draft;
   languagePanel.set({mode:'text',text:original,apply:result=>{
-   if(result.length>4000||disposed||sending||!opened||!conversation||conversation!==selected||draft!==original)return false;
+   if(result.length>maxMessageLength||disposed||sending||!opened||!conversation||conversation!==selected||draft!==original)return false;
    draftTranslation={original,result};
    draft=result;
    return true;
@@ -387,7 +453,7 @@
  async function send(event?:Event){
   event?.preventDefault();
   const id=selected,body=draft.trim(),files=picked;
-  if(!id||(!body&&!files.length)||sending||translating)return;
+  if(!id||(!body&&!files.length)||sending||translating||dictation)return;
   if(pendingMessage?.thread!==id||pendingMessage.body!==body||pendingMessage.files!==files){
    pendingMessage={thread:id,body,files,id:crypto.randomUUID()};
   }
@@ -453,11 +519,11 @@
   void tick().then(()=>searchInput?.focus());
  }
  function hide(){
-  opened=false;settings=null;menu=false;cancelTranslation();stopTyping();saveWindow();
+  opened=false;settings=null;menu=false;cancelDictation();cancelTranslation();stopTyping();saveWindow();
   void tick().then(()=>tray?.focus());
  }
  function backToList(){
-  mobileThread=false;cancelTranslation();stopTyping();menu=false;saveWindow();
+  mobileThread=false;cancelDictation();cancelTranslation();stopTyping();menu=false;saveWindow();
   void tick().then(()=>searchInput?.focus());
  }
  function showDialog(node:HTMLDialogElement){
@@ -465,6 +531,7 @@
   return{destroy(){node.close();}};
  }
  async function configure(kind:Settings){
+  cancelDictation();
   const generation=++settingsGeneration;
   settings=kind;menu=false;settingsError='';selectedPeople=[];memberQuery='';memberResults=[];
   initialGroupName=kind==='group'?(thread?.name??''):'';
@@ -630,20 +697,21 @@
         {/each}
        </div>
       {/if}
-      {#if uploadProgress!==null||translationStatus||draftTranslation&&draft===draftTranslation.result}
+      {#if uploadProgress!==null||dictation||translationStatus||draftTranslation&&draft===draftTranslation.result}
        <div class="chat-composer-status" aria-live="polite">
         {#if uploadProgress!==null}<span>{uploadProgress<100?'Uploading · '+uploadProgress+'%':'Saving attachment…'}</span>
+        {:else if dictation}<span>{dictation.stopping?'Finishing voice typing…':'Listening in '+languageNames[dictation.language]+'…'}</span>
         {:else if translationStatus}<span>{translationStatus}</span>
         {:else}<button type="button" onclick={undoDraftTranslation}>Undo translation</button>{/if}
        </div>
       {/if}
       <form class="chat-composer" onsubmit={send}>
        <input type="file" bind:this={fileInput} multiple hidden onchange={event=>{const input=event.currentTarget;addFiles(Array.from(input.files??[]));input.value='';}}/>
-       <textarea bind:this={composer} bind:value={draft} rows="1" maxlength="4000" placeholder="Write a message" aria-label="Write a message" onpaste={paste} oninput={onType} onkeydown={(event)=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void send(event);}}></textarea>
+       <textarea bind:this={composer} bind:value={draft} rows="1" maxlength={maxMessageLength} placeholder="Write a message" aria-label="Write a message" onpaste={paste} oninput={onType} onkeydown={(event)=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void send(event);}}></textarea>
        <div class="chat-composer-tools">
         <button type="button" class="chat-icon" title="Attach photos or files" aria-label="Attach photos or files" disabled={sending} onclick={()=>fileInput?.click()}><Paperclip size={18}/></button>
-        <button type="button" class="chat-icon" title="Voice to English" aria-label="Voice to English" disabled={sending||translating} onclick={dictate}><Mic size={18}/></button>
-        <button type="submit" class="chat-primary chat-send" aria-label="Send message" disabled={(!draft.trim()&&!picked.length)||sending||translating||details!==selected}><Send size={18}/></button>
+        <button type="button" class="chat-icon" class:chat-listening={!!dictation} title={dictation?'Stop voice typing':'Voice to text'} aria-label={dictation?'Stop voice typing':'Voice to text'} disabled={dictation?dictation.stopping:sending||translating} onclick={dictate}>{#if dictation}<Square size={16}/>{:else}<Mic size={18}/>{/if}</button>
+        <button type="submit" class="chat-primary chat-send" aria-label="Send message" disabled={(!draft.trim()&&!picked.length)||sending||translating||!!dictation||details!==selected}><Send size={18}/></button>
        </div>
       </form>
      {:else}
