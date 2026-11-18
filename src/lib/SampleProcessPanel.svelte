@@ -5,13 +5,15 @@
  import SampleCommentField from './SampleCommentField.svelte';
  import {untrack} from 'svelte';
  import {api} from './api';
- import {indentReference,processSteps,processLabel,actionLabel,stamp,planFields,sampleStatusLabel,type ProcessStep} from './sampleProcess';
+ import {indentReference,processSteps,processLabel,actionLabel,stamp,correctionForStep,correctionStage,planFields,sampleStatusLabel,type ProcessStep} from './sampleProcess';
  let {piece,merchant='',onchange,onaudit,editorOnly=false,initialStep='',onclose}:{piece:any;merchant?:string;onchange:()=>Promise<void>;onaudit:()=>void;editorOnly?:boolean;initialStep?:string;onclose?:()=>void}=$props();
  let data:any=$state(null),busy=$state(false),loading=$state(true),error=$state(''),notice=$state(''),action=$state(''),note=$state(''),reviewNote=$state(''),result=$state(''),stage=$state(''),expected=$state(''),destination=$state('Merchant'),values:any=$state({}),sequence=0;
  let selectedStep=$state<ProcessStep|null>(null);
  let editorError=$state('');
  let updateDictating=$state(false),reviewDictating=$state(false);
  let pending=$derived(data?.updates.find((u:any)=>u.decision==='Pending'));
+ let corrections=$derived(data?.active_corrections??[]);
+ let stepCorrection=$derived(selectedStep?correctionForStep(corrections,selectedStep):undefined);
  let approvalTarget=$derived(data?.approval_target||'assigned merchant');
  let pendingTarget=$derived(pending?.approval_target||'assigned merchant');
  let actions=$derived((data?.actions??[]) as {key:string;label:string}[]);
@@ -69,13 +71,13 @@
   const payload:any=review?{action:'review_process',update_id:pending.id,decision:review,note:reviewNote}:{action,note,result,stage,expected_date:result==='In stock'?'':expected,destination};
   if(action==='plan'&&!review)payload.production=Object.fromEntries(editorFields.map(([key])=>[key,String(values[key]||'')]));
   if(action==='handover'&&!review)payload.dispatch=Object.fromEntries(['awb','dispatch_to','dispatch_from','dispatch_contact'].map(key=>[key,values[key]||'']));
-  await api('/sample-indents/'+piece.id,{version:piece.version,...payload});reviewNote='';if(editorOnly){await onchange();onclose?.();return}closeEditor();await onchange();await load();notice=review?'Review recorded.':data?.can_record_directly?'Update recorded.':'Update submitted for approval by '+approvalTarget+'.';
+  await api('/sample-indents/'+piece.id,{version:piece.version,...payload});reviewNote='';if(editorOnly){await onchange();onclose?.();return}closeEditor();await onchange();await load();notice=review==='Changes requested'?'Rework requested.':review?'Review recorded.':data?.can_record_directly?'Update recorded.':'Update submitted for approval by '+approvalTarget+'.';
  }catch(e){if(selectedStep||action)editorError=(e as Error).message;else error=(e as Error).message}finally{busy=false}}
 
 </script>
 <section class="sp-process" aria-label={'Process for indent '+piece.id} aria-busy={loading||busy}>
 {#if !editorOnly}
- <div class="sp-process__heading"><div><h4>Department follow-up</h4><p>Responsible merchant: <strong>{merchant||'Not assigned — MD / Super Admin must assign one'}</strong></p></div><span class="sp-status" class:sp-status--issue={!!piece.production.process_exception||['Rework','Rejected'].includes(piece.status)}>{piece.production.process_exception?piece.production.process_exception.result:sampleStatusLabel(piece.status)}</span></div>
+ <div class="sp-process__heading"><div><h4>Department follow-up</h4><p>Responsible merchant: <strong>{merchant||'Not assigned — MD / Super Admin must assign one'}</strong></p></div><span class="sp-status" class:sp-status--issue={!!piece.production.process_exception||!!corrections.length||['Rework','Rejected'].includes(piece.status)}>{piece.production.process_exception?piece.production.process_exception.result:corrections.length?'Rework requested':sampleStatusLabel(piece.status)}</span></div>
  {#if loading&&!data&&!error}<SkeletonLoader variant="list" rows={2} label="Loading department follow-up…"/>{:else}
  {#if loading&&data}<div class="sp-loading"><SpinnerLoader size={16} label=""/><span role="status">Updating department follow-up…</span></div>{/if}
  <ol class="sp-timeline" aria-label="Saved milestones">
@@ -92,6 +94,9 @@
  {#if piece.production.process_exception}<div class="sp-issue"><strong>{piece.production.process_exception.result} · {processLabel(piece.production.process_exception.stage)}</strong><p>{piece.production.process_exception.comment}</p><span>{piece.production.process_exception.by} · {stamp(piece.production.process_exception.at)}</span></div>{/if}
  {#if data}
   {#if data.late_days!=null}<p class="sp-lateness">{data.late_days} late day{data.late_days===1?'':'s'}{piece.production.handover_actual?' at final handover.':' as of today (IST).'}</p>{/if}
+  {#each corrections as correction (correction.id)}
+   <section class="sp-issue" aria-label={correctionStage(correction)+' rework requested'}><strong>Rework requested · {correctionStage(correction)}</strong><p class="sp-comment">{correction.review_comment}</p>{#if correction.reviewed_by}<span>{correction.reviewed_by} · {stamp(correction.reviewed_at)}</span>{/if}</section>
+  {/each}
   {#if pending}<section class="sp-pending" aria-label="Update awaiting approval">
    <p>Submitted by <strong>{pending.submitted_by}</strong> · {stamp(pending.submitted_at)}</p>
    {#if data.can_review}
@@ -125,6 +130,7 @@
   {#if selectedStep}
    <SampleStageDialog title={selectedStep[1]+' · Indent '+indentReference(piece)} close={closeEditor} {busy}>
     <p class="stage-status">Saved status: <strong>{milestone(selectedStep[0],selectedStep[2])}</strong></p>
+    {#if stepCorrection}<section class="sp-issue"><strong>Rework requested</strong><p class="sp-comment">{stepCorrection.review_comment}</p></section>{/if}
     {#if editorOnly&&error}<p class="form-error" role="alert">{error} <button class="text-button" type="button" onclick={()=>load()}>Retry</button></p>{/if}
     {#if stageActions.length>1||(!action&&stageActions.length===1)}
      <label class="stage-action">Stage action<select value={action} disabled={busy} onchange={e=>choose(e.currentTarget.value)}>

@@ -4,7 +4,7 @@
  import {tick,untrack} from 'svelte';
  import {api} from './api';
  import SampleProcessPanel from './SampleProcessPanel.svelte';
- import {indentReference,processSteps,processViews,processLabel,processTone,stamp,actionLabel,sampleStatusLabel,type ProcessStep} from './sampleProcess';
+ import {indentReference,processSteps,processViews,processLabel,processTone,correctionForStep,correctionStage,stamp,actionLabel,sampleStatusLabel,type ProcessStep} from './sampleProcess';
 
  let {company,view='all',revision=0,onopen,progressLayout=false}:{company:string;view?:string;revision?:number;onopen:(id:number,indent:number)=>void;progressLayout?:boolean}=$props();
  let data:any=$state(null),error=$state(''),busy=$state(false),search=$state(''),query=$state(''),page=$state(1),filter=$state('all'),notice=$state('');
@@ -61,6 +61,7 @@
  function stageState(row:any,step:ProcessStep){
   if(row.production.process_exception?.stage===step[0])return 'issue';
   if(row.latest_update?.decision==='Pending'&&step[3].some(key=>key===row.latest_update.action))return 'pending';
+  if(correctionForStep(row.active_corrections,step))return 'issue';
   if(progressLayout&&step[2]==='audit_actual'&&['Rework','Rejected'].includes(row.production.audit_result))return 'issue';
   if(row.production[step[2]])return 'complete';
   return row.process_stage===step[0]?'active':'waiting';
@@ -69,14 +70,17 @@
   const production=row.production,actual=production[step[2]];
   const tone=stageState(row,step);
   if(tone==='pending')return 'Awaiting approval';
-  if(progressLayout&&tone==='issue')return production.process_exception?.result||production.audit_result;
+  if(tone==='issue'){
+   if(production.process_exception?.stage===step[0])return production.process_exception.result;
+   if(correctionForStep(row.active_corrections,step))return 'Rework requested';
+   return production.audit_result||'Stage issue';
+  }
   if(actual)return stamp(actual);
   if(progressLayout&&tone==='active'){
    const started=step[2].replace(/_actual$/,'_started');
    if(started!==step[2]&&production[started])return 'In progress · '+stamp(production[started]);
   }
   if(step[0]==='fabric'||step[0]==='trims')return production[step[0]+'_availability']||'Not recorded';
-  if(tone==='issue')return production.process_exception.result;
   return 'Not recorded';
  }
  function badgeTone(row:any){
@@ -91,6 +95,7 @@
  function statusText(row:any){
   const issue=row.production.process_exception;
   if(issue)return issue.result+' · '+processLabel(issue.stage);
+  if(row.active_corrections?.length)return 'Rework requested · '+correctionStage(row.active_corrections[0]);
   return row.production.register_source?.process_status||sampleStatusLabel(row.status);
  }
  function quantity(row:any){
@@ -128,7 +133,7 @@
      <div class="sp-indent__heading">
       <div class="sp-indent__identity"><strong>{indentReference(row)}</strong><span>{row.buyer} · {row.profile.buyer_style||'Style not recorded'}</span>{#if row.profile.legacy_indent_number}<small>Old indent {row.profile.legacy_indent_number}</small>{/if}</div>
       <div class="sp-indent__details"><b>{row.size||'Size not recorded'} · {row.colour||'Colour not recorded'} · {quantity(row)}</b><span>Merchant · {row.merchant_id?row.merchant:'Not assigned'}</span>{#if row.profile.buyer_required_date}<span>Required · {stamp(row.profile.buyer_required_date)}</span>{/if}</div>
-      <div class="sp-indent__status"><span class={'sp-chip sp-chip--'+badgeTone(row)}>{statusText(row)}</span>{#if row.production.register_source}<small>{progressLayout?'Chart status':'Chart status · recorded steps below'}</small>{:else if row.process_stage!=='closed'}<small>Next · {processLabel(row.process_stage)}</small>{/if}{#if Number(row.late_days)>0}<small class="sp-issue-text">{row.late_days} late day{row.late_days===1?'':'s'}</small>{/if}</div>
+      <div class="sp-indent__status"><span class={'sp-chip sp-chip--'+badgeTone(row)}>{statusText(row)}</span>{#if !row.active_corrections?.length&&!row.production.process_exception&&row.production.register_source}<small>{progressLayout?'Chart status':'Chart status · recorded steps below'}</small>{:else if !row.active_corrections?.length&&!row.production.process_exception&&row.process_stage!=='closed'}<small>Next · {processLabel(row.process_stage)}</small>{/if}{#if Number(row.late_days)>0}<small class="sp-issue-text">{row.late_days} late day{row.late_days===1?'':'s'}</small>{/if}</div>
       <button class="button secondary sp-details" type="button" disabled={busy} onclick={()=>onopen(row.request_id,row.id)}>{row.latest_update?.decision==='Pending'&&row.can_review?'Review update':'Details'}<ChevronRight size={15} aria-hidden="true"/></button>
      </div>
      <ol class="sp-stages" aria-label={'Stages for '+indentReference(row)}>
@@ -145,7 +150,10 @@
        {#if row.production.awb}<span>AWB · {row.production.awb}</span>{/if}
        {#if row.production.process_exception}<p class="sp-issue-text">{row.production.process_exception.comment}</p>{/if}
        {#if row.latest_update?.comment}<p>{row.latest_update.comment}</p>{/if}
-       {#if row.latest_update?.review_comment}<p><strong>Review comment</strong> · {row.latest_update.review_comment}</p>{/if}
+       {#if row.latest_update?.review_comment&&!row.active_corrections?.some((item:{id:number})=>item.id===row.latest_update.id)}<p><strong>Review comment</strong> · {row.latest_update.review_comment}</p>{/if}
+       {#each row.active_corrections??[] as correction (correction.id)}
+        <p class="sp-correction"><strong>{correctionStage(correction)} rework comment</strong><span>{correction.review_comment}</span>{#if correction.reviewed_by}<small>{correction.reviewed_by} · {stamp(correction.reviewed_at)}</small>{/if}</p>
+       {/each}
        {#if Number(row.issue_count)>0}<button class="text-button sp-issue-text" type="button" onclick={()=>onopen(row.request_id,row.id)}>Rework / rejection history ({row.issue_count})</button>{/if}
       </div>
      {/if}
@@ -334,4 +342,7 @@
   .sp-board--progress .sp-filter-view select {width: 100%;}
  }
  @media(prefers-contrast:more){.sp-board :is(small,.sp-stage__value){color:#1d3348}.sp-stage,.sp-chip{border-color:currentColor}}
+ .sp-indent__updates .sp-correction{display:grid;gap:3px;flex:1 0 100%;padding:8px 10px;border-left:3px solid #b12b42;border-radius:4px;background:#fff1f2;color:#792535}
+ .sp-correction span{white-space:pre-wrap;overflow-wrap:anywhere}
+ .sp-correction small{color:#5c4b55}
 </style>
