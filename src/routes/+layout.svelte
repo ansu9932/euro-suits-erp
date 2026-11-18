@@ -6,6 +6,10 @@
  import {installReportDownloads} from '$lib/loading';
  import {PageLoader,PostLoginTransition} from '$lib/components/loaders';
  import {signInPhase} from '$lib/signInTransition';
+ import ERPLanguage from '$lib/ERPLanguage.svelte';
+ import {loadLanguagePreferences} from '$lib/languagePreferences';
+ import {languagePanel} from '$lib/languagePanel';
+ import {resetTranslationSession} from '$lib/chatLanguage';
  import ERPChat from '$lib/ERPChat.svelte';
  import {sessionUserID} from '$lib/api';
  import {page} from '$app/state';
@@ -22,6 +26,11 @@
   navigating.from?.url.pathname !== navigating.to.url.pathname ||
   navigating.from?.url.search !== navigating.to.url.search
  ));
+ $effect(()=>{
+  if(!$sessionUserID)return;
+  const stop=loadLanguagePreferences($sessionUserID);
+  return ()=>{stop();languagePanel.set(null);resetTranslationSession();};
+ });
  onMount(()=>{
   const removeActionLocks=installActionLocks();
   const removeReportDownloads=installReportDownloads();
@@ -40,5 +49,5 @@
 <LoaderHost/>
 
 {#if $sessionUserID&&page.url.pathname!=='/'&&page.url.pathname!=='/privacy'&&page.url.pathname!=='/guide'}
- {#key $sessionUserID}<ERPChat userId={$sessionUserID}/>{/key}
+ {#key $sessionUserID}<ERPLanguage/><ERPChat userId={$sessionUserID}/>{/key}
 {/if}

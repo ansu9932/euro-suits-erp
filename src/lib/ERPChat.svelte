@@ -2,9 +2,11 @@
  import {onMount,tick} from 'svelte';
  import {afterNavigate,replaceState} from '$app/navigation';
  import {page} from '$app/state';
- import {ArrowLeft,Bell,Check,CheckCheck,ChevronDown,Download,FileText,Languages,Maximize2,MessageCircle,Mic,Minimize2,MoreHorizontal,Paperclip,Plus,Search,Send,Square,Users,X} from '@lucide/svelte';
+ import {ArrowLeft,Bell,Check,CheckCheck,ChevronDown,Download,FileText,Languages,Maximize2,MessageCircle,Mic,Minimize2,MoreHorizontal,Paperclip,Plus,Search,Send,Users,X} from '@lucide/svelte';
  import {api,csrf} from './api';
- import {createChatRecognition,createKannadaTranslation,type Recognition} from './chatLanguage';
+ import {languageNames,localNames,translateText,type LocalLanguage} from './chatLanguage';
+ import {languagePanel} from './languagePanel';
+ import {languagePreferences} from './languagePreferences';
  import './styles/erp-chat.css';
 
  type Person={id:number;name:string;department:string;email?:string;online:boolean};
@@ -15,7 +17,6 @@
  type Settings='new'|'group'|'email'|'clear'|'leave';
  type EmailMode='immediate'|'offline_delay'|'off';
 
- const kannada=createKannadaTranslation();
  const maxFiles=5,maxMedia=12*1024*1024;
  const blockingSurfaces=[
   'dialog[open]','[aria-modal="true"]','[role="dialog"]',
@@ -26,9 +27,8 @@
  ].join(',');
  let {userId}:{userId:number}=$props();
  let blocked=$state(false),picked=$state<File[]>([]),fileInput=$state<HTMLInputElement>();
- let dictating=$state(false),speech:Recognition|undefined,speechTimer:ReturnType<typeof setTimeout>;
  let translating=$state(false),translationStatus=$state(''),translationTask:AbortController|undefined;
- let draftOriginal=$state(''),draftKannada=$state(''),translated=$state<Record<number,string>>({});
+ let draftOriginal=$state(''),draftTranslation=$state(''),translated=$state<Record<number,{text:string;language:LocalLanguage}>>({});
  let messageNodes=new Map<number,HTMLElement>();
  let uploadProgress=$state<number|null>(null);
  let opened=$state(false),expanded=$state(false),mobileThread=$state(false);
@@ -107,7 +107,7 @@
    );
    if(covered===blocked)return;
    blocked=covered;
-   if(covered){settings=null;menu=false;cancelSpeech();cancelTranslation();stopTyping();}
+   if(covered){settings=null;menu=false;cancelTranslation();stopTyping();}
    else if(opened&&selected)void loadThread(selected,true);
   };
   const schedule=()=>{if(!frame)frame=requestAnimationFrame(check);};
@@ -149,7 +149,7 @@
    disposed=true;
    clearTimeout(typingTimer);
    pollController.abort();
-   cancelSpeech();cancelTranslation();kannada.destroy();
+   cancelTranslation();
    window.removeEventListener('focus',attended);
    document.removeEventListener('visibilitychange',attended);
   };
@@ -198,8 +198,8 @@
 
  function selectThread(id:number){
   if(selected!==id){
-   stopTyping();cancelSpeech();cancelTranslation();
-   picked=[];translated={};draftOriginal='';draftKannada='';
+   stopTyping();cancelTranslation();
+   picked=[];translated={};draftOriginal='';draftTranslation='';
    threadGeneration++;details=null;messages=[];members=[];typing=[];draft='';menu=false;
    latestRead=0;reading=0;visibleSince='';selected=id;composeError='';
   }
@@ -328,40 +328,23 @@
   return {destroy(){messageNodes.delete(id);}};
  }
 
- function cancelSpeech(){
-  clearTimeout(speechTimer);
-  const current=speech;
-  speech=undefined;dictating=false;
-  current?.abort();
+ function dictate(){
+  const conversation=selected;
+  languagePanel.set({text:'',mode:'voice',apply:english=>{
+   if(disposed||selected!==conversation||!opened||sending)return false;
+   const next=[draft.trimEnd(),english].filter(Boolean).join(' ');
+   if(next.length>4000)return false;
+   draft=next;
+   return true;
+  }});
  }
- function toggleDictation(){
-  if(speech){speech.stop();return;}
-  composeError='';
-  try{
-   const current=createChatRecognition(),target=selected;
-   speech=current;
-   current.onresult=event=>{
-    if(speech!==current||selected!==target||blocked)return;
-    const words:string[]=[];
-    for(let i=event.resultIndex;i<event.results.length;i++){
-     if(event.results[i].isFinal)words.push(event.results[i][0].transcript.trim());
-    }
-    if(words.length)draft=[draft.trimEnd(),words.join(' ')].filter(Boolean).join(' ').slice(0,4000);
-   };
-   current.onerror=event=>{
-    if(speech!==current)return;
-    if(event.error!=='aborted')composeError=event.error==='not-allowed'||event.error==='service-not-allowed'
-     ?'Allow microphone access in your browser to use voice typing.'
-     :event.error==='no-speech'?'No speech was detected. Try again.':'Voice typing is unavailable. Check your microphone and try again.';
-   };
-   current.onend=()=>{
-    if(speech===current){speech=undefined;dictating=false;clearTimeout(speechTimer);}
-   };
-   current.start();dictating=true;
-   speechTimer=setTimeout(()=>{if(speech===current)current.stop();},60000);
-  }catch(e){
-   cancelSpeech();composeError=errorText(e);
-  }
+ function openChatLanguages(){
+  const conversation=selected,original=draft;
+  languagePanel.set({mode:'text',text:draft,apply:result=>{
+   if(result.length>4000||disposed||sending||!opened||!conversation||conversation!==selected||draft!==original)return false;
+   draftOriginal=draft;draftTranslation=result;draft=result;
+   return true;
+  }});
  }
 
  function cancelTranslation(){
@@ -369,8 +352,8 @@
   translating=false;translationStatus='';
  }
  async function translate(message?:Message){
-  if(translating||dictating)return;
-  const target=selected,original=draft;
+  if(translating)return;
+  const target=selected,original=draft,language=$languagePreferences.translation,name=languageNames[language];
   let source=message?.body??original;
   if(message){
    const element=messageNodes.get(message.id),selection=window.getSelection();
@@ -380,19 +363,19 @@
   }
   if(!source.trim())return;
   const task=new AbortController();
-  translationTask=task;translating=true;translationStatus='Preparing Kannada translation…';composeError='';
+  translationTask=task;translating=true;translationStatus='Preparing '+name+' translation…';composeError='';
   try{
-   const result=await kannada.translate(source,task.signal,progress=>{
-    if(translationTask===task)translationStatus=progress<100?'Preparing Kannada · '+progress+'%':'Translating to Kannada…';
+   const result=await translateText(source,'en',language,task.signal,progress=>{
+    if(translationTask===task)translationStatus=progress<100?'Preparing '+name+' · '+progress+'%':'Translating to '+name+'…';
    });
    if(disposed||blocked||selected!==target||translationTask!==task)return;
    if(!result)throw new Error('The translation returned no text. Try again.');
-   if(message)translated={...translated,[message.id]:result};
+   if(message)translated={...translated,[message.id]:{text:result,language}};
    else if(draft!==original){
-    translationStatus='Your draft changed. Select Kannada again to translate the latest text.';
+    translationStatus='Your draft changed. Select Translate again to use the latest text.';
     return;
-   }else if(result.length>4000){throw new Error('The Kannada translation is too long. Shorten the draft and try again.');}
-   else{draftOriginal=original;draftKannada=result;draft=result;void tick().then(()=>composer?.focus());}
+   }else if(result.length>4000){throw new Error('The translation is too long. Shorten the draft and try again.');}
+   else{draftOriginal=original;draftTranslation=result;draft=result;void tick().then(()=>composer?.focus());}
    translationStatus='';
   }catch(e){
    if(translationTask===task){composeError=errorText(e);translationStatus='';}
@@ -404,7 +387,7 @@
  async function send(event?:Event){
   event?.preventDefault();
   const id=selected,body=draft.trim(),files=picked;
-  if(!id||(!body&&!files.length)||sending||dictating||translating)return;
+  if(!id||(!body&&!files.length)||sending||translating)return;
   if(pendingMessage?.thread!==id||pendingMessage.body!==body||pendingMessage.files!==files){
    pendingMessage={thread:id,body,files,id:crypto.randomUUID()};
   }
@@ -423,7 +406,7 @@
    if(disposed||selected!==id)return;
    if(draft.trim()===body)draft='';
    if(picked===files)picked=[];
-   draftOriginal='';draftKannada='';
+   draftOriginal='';draftTranslation='';
    pendingMessage=undefined;stopTyping();
    if(sent.message&&details===id){
     if(!messages.some(message=>message.id===sent.id))messages=[...messages,sent.message].sort((left,right)=>left.id-right.id);
@@ -470,11 +453,11 @@
   void tick().then(()=>searchInput?.focus());
  }
  function hide(){
-  opened=false;settings=null;menu=false;cancelSpeech();cancelTranslation();stopTyping();saveWindow();
+  opened=false;settings=null;menu=false;cancelTranslation();stopTyping();saveWindow();
   void tick().then(()=>tray?.focus());
  }
  function backToList(){
-  mobileThread=false;cancelSpeech();cancelTranslation();stopTyping();menu=false;saveWindow();
+  mobileThread=false;cancelTranslation();stopTyping();menu=false;saveWindow();
   void tick().then(()=>searchInput?.focus());
  }
  function showDialog(node:HTMLDialogElement){
@@ -547,6 +530,7 @@
    <header class="chat-top">
     <div><MessageCircle size={19}/><strong>ERP chat</strong>{#if total}<span class="chat-count" aria-label={total+' unread'}>{total>99?'99+':total}</span>{/if}</div>
     <div>
+     <button type="button" class="chat-icon" title="Language tools" aria-label="Open chat language tools" onclick={openChatLanguages}><Languages size={18}/></button>
      <button type="button" class="chat-icon" title="Email notifications" aria-label="Email notifications" onclick={()=>configure('email')}><Bell size={18}/></button>
      <button type="button" class="chat-icon chat-resize" aria-label={expanded?'Use compact size':'Expand chat'} title={expanded?'Use compact size':'Expand chat'} onclick={()=>{expanded=!expanded;saveWindow();}}>{#if expanded}<Minimize2 size={18}/>{:else}<Maximize2 size={18}/>{/if}</button>
      <button type="button" class="chat-icon" aria-label="Collapse chat" title="Collapse chat" onclick={hide}><ChevronDown size={21}/></button>
@@ -618,13 +602,13 @@
            </a>
           {/each}
           {#if translated[message.id]}
-           <div class="chat-translated"><b>ಕನ್ನಡ</b><p lang="kn">{translated[message.id]}</p></div>
+           <div class="chat-translated"><b>{localNames[translated[message.id].language]}</b><p lang={translated[message.id].language}>{translated[message.id].text}</p></div>
           {/if}
           <div class="chat-meta">
            {#if message.body}
-            <button class="chat-message-translate" type="button" aria-label={translated[message.id]?'Hide Kannada translation':'Translate message to Kannada'} title={translated[message.id]?'Hide Kannada translation':'Translate message to Kannada'} disabled={translating||dictating}
+            <button class="chat-message-translate" type="button" aria-label={translated[message.id]?.language===$languagePreferences.translation?'Hide translation':'Translate message to '+languageNames[$languagePreferences.translation]} title={translated[message.id]?.language===$languagePreferences.translation?'Hide translation':'Translate message to '+languageNames[$languagePreferences.translation]} disabled={translating}
              onpointerdown={event=>event.preventDefault()}
-             onclick={()=>{if(translated[message.id]){const rest={...translated};delete rest[message.id];translated=rest;}else void translate(message);}}>
+             onclick={()=>{if(translated[message.id]?.language===$languagePreferences.translation){const rest={...translated};delete rest[message.id];translated=rest;}else void translate(message);}}>
              <Languages size={14}/>
             </button>
            {/if}
@@ -646,11 +630,11 @@
         {/each}
        </div>
       {/if}
-      {#if uploadProgress!==null||dictating||translationStatus||draftOriginal&&draft===draftKannada}
+      {#if uploadProgress!==null||translationStatus||draftOriginal&&draft===draftTranslation}
        <div class="chat-composer-status" aria-live="polite">
         {#if uploadProgress!==null}<span>{uploadProgress<100?'Uploading · '+uploadProgress+'%':'Saving attachment…'}</span>
-        {:else if dictating}<span>Listening…</span>{:else if translationStatus}<span>{translationStatus}</span>
-        {:else}<button type="button" onclick={()=>{draft=draftOriginal;draftOriginal='';draftKannada='';}}>Undo translation</button>{/if}
+        {:else if translationStatus}<span>{translationStatus}</span>
+        {:else}<button type="button" onclick={()=>{draft=draftOriginal;draftOriginal='';draftTranslation='';}}>Undo translation</button>{/if}
        </div>
       {/if}
       <form class="chat-composer" onsubmit={send}>
@@ -658,9 +642,9 @@
        <textarea bind:this={composer} bind:value={draft} rows="1" maxlength="4000" placeholder="Write a message" aria-label="Write a message" onpaste={paste} oninput={onType} onkeydown={(event)=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void send(event);}}></textarea>
        <div class="chat-composer-tools">
         <button type="button" class="chat-icon" title="Attach photos or files" aria-label="Attach photos or files" disabled={sending} onclick={()=>fileInput?.click()}><Paperclip size={18}/></button>
-        <button type="button" class="chat-icon" class:chat-listening={dictating} aria-pressed={dictating} title={dictating?'Stop voice typing':'Voice to text'} aria-label={dictating?'Stop voice typing':'Voice to text'} disabled={sending||translating} onclick={toggleDictation}>{#if dictating}<Square size={16}/>{:else}<Mic size={18}/>{/if}</button>
-        <button type="button" class="chat-icon" title="Translate draft to Kannada" aria-label="Translate draft to Kannada" disabled={!draft.trim()||translating||dictating||sending} onclick={()=>translate()}><Languages size={18}/></button>
-        <button type="submit" class="chat-primary chat-send" aria-label="Send message" disabled={(!draft.trim()&&!picked.length)||sending||dictating||translating||details!==selected}><Send size={18}/></button>
+        <button type="button" class="chat-icon" title="Voice to English" aria-label="Voice to English" disabled={sending||translating} onclick={dictate}><Mic size={18}/></button>
+        <button type="button" class="chat-icon" title={'Translate draft to '+languageNames[$languagePreferences.translation]} aria-label={'Translate draft to '+languageNames[$languagePreferences.translation]} disabled={!draft.trim()||translating||sending} onclick={()=>translate()}><Languages size={18}/></button>
+        <button type="submit" class="chat-primary chat-send" aria-label="Send message" disabled={(!draft.trim()&&!picked.length)||sending||translating||details!==selected}><Send size={18}/></button>
        </div>
       </form>
      {:else}
