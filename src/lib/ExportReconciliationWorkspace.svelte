@@ -43,12 +43,21 @@
   if(busy||!detail||!canManage||uncertain)return;if(!number.trim()){error='Enter the eBRC number.';return}
   await run(async()=>{try{const result=await api(`/exports/${detail!.record.id}/reconciliation/ebrc`,{version:detail!.record.version,ebrc_number:number.trim(),...(previousNumber?{previous_ebrc_number:previousNumber}:{})});detail!.record.version=result.version;detail!.record.ebrcs=result.ebrcs;detail!.record.documentation_cleared=result.documentation_cleared;selectedNumber=canonicalSavedEbrcNumber(detail!.record,number);number='';previousNumber='';dirty=queued.length>0;await refreshDetail();notice='eBRC number saved. Attach its document or submit when the matching saved document is selected.'}catch(e){numberUncertain=uncertainInvoiceWrite(e);throw e}});
  }
- async function attach(event:Event){
-  const input=event.currentTarget as HTMLInputElement,newFiles=Array.from(input.files||[]);input.value='';if(busy||!detail||!canAttach||uncertain)return;
-  const invalid=newFiles.map(invoiceFileError).find(Boolean);if(invalid){error=invalid;return}
-  if((detail.files||[]).length+queued.length+newFiles.length>100){error='An invoice can have at most 100 active documents.';return}
-  for(const file of newFiles){const key=invoiceFileKey(file);if(!queued.some(entry=>entry.key===key))queued.push({file,key,kind:'ebrc',status:'queued'})}dirty=queued.length>0||!!number;
+ async function receiveFiles(newFiles:File[],scan=false){
+  if(busy||!detail||!canAttach||!newFiles.length||uncertain){if(scan)throw new Error('This document field is busy. Try again.');return;}
+  const invalid=newFiles.map(invoiceFileError).find(Boolean);
+  if(invalid){error=invalid;if(scan)throw new Error(invalid);return;}
+  if((detail.files||[]).length+queued.length+newFiles.length>100){error='An invoice can have at most 100 active documents.';if(scan)throw new Error(error);return;}
+  for(const file of newFiles){const key=invoiceFileKey(file);if(!queued.some(entry=>entry.key===key))queued.push({file,key,kind:'ebrc',status:'queued'});}
+  dirty=queued.length>0||!!number;
   await uploadQueued();
+  if(scan&&queued.some(item=>item.file===newFiles[0]&&item.status!=='uploaded'))throw new Error(error||'The scan could not be attached.');
+ }
+ async function attach(event:Event){
+  const input=event.currentTarget as HTMLInputElement;
+  const files=Array.from(input.files||[]);
+  input.value='';
+  await receiveFiles(files);
  }
  async function uploadQueued(){
   if(!detail||busy||!canAttach)return;
@@ -81,7 +90,7 @@
    <section class="rc-number-section"><h2>eBRC number</h2>{#if savedEbrcNumbers(record).length}<label for="reconciliation-number">Saved number<select id="reconciliation-number" bind:value={selectedNumber} disabled={busy}><option value="">Choose saved eBRC number</option>{#each savedEbrcNumbers(record) as value}<option value={value}>{value}</option>{/each}</select></label>{:else}<p>eBRC pending. Add the number when it is available.</p>{/if}
     {#if canManage}{#if selectedNumber&&!previousNumber}<button type="button" class="rc-button secondary" disabled={busy||dirty||uncertain} onclick={()=>{previousNumber=selectedNumber;number=selectedNumber;dirty=true;void focus('reconciliation-new-number')}}>Correct selected number</button>{/if}<div class="rc-number-entry"><label for="reconciliation-new-number">{previousNumber?'Correct eBRC number':savedEbrcNumbers(record).length?'Add another eBRC number':'Enter eBRC number'}<input id="reconciliation-new-number" bind:value={number} oninput={()=>dirty=!!number||queued.length>0} maxlength="160" disabled={busy||uncertain}/></label><button type="button" class="rc-button secondary" disabled={busy||uncertain||!number.trim()} onclick={saveNumber}><Plus size={15}/>{busy?'Saving…':previousNumber?'Save correction':'Save number'}</button>{#if previousNumber}<button type="button" class="rc-button secondary" disabled={busy||uncertain} onclick={()=>{previousNumber='';number='';dirty=queued.length>0}}>Cancel correction</button>{/if}</div>{/if}
    </section>
-   <section class="rc-document-section"><h2>eBRC document</h2><p>Attach the certificate, then select the saved file that matches the eBRC number.</p><ExportDocumentField label="eBRC certificate" inputID="reconciliation-ebrc-document" {files} {queued} {canAttach} {canRemove} canDownload={!!permissions.download} {busy} {uncertain} onattach={attach} onremove={removeFile} onremovequeued={removeQueued}/>
+   <section class="rc-document-section"><h2>eBRC document</h2><p>Attach the certificate, then select the saved file that matches the eBRC number.</p><ExportDocumentField label="eBRC certificate" inputID="reconciliation-ebrc-document" {files} {queued} {canAttach} {canRemove} canDownload={!!permissions.download} {busy} {uncertain} destination={String(record.id)} onattach={attach} onscan={file=>receiveFiles([file],true)} onremove={removeFile} onremovequeued={removeQueued}/>
     {#if queued.length}<button type="button" class="rc-button secondary" disabled={busy} onclick={uploadQueued}>Retry / confirm upload</button>{/if}
     {#if files.length}<label for="reconciliation-file">Document for this eBRC<select id="reconciliation-file" bind:value={selectedFile} disabled={busy}><option value="">Choose saved document</option>{#each files as file}<option value={String(file.id)}>{file.filename}</option>{/each}</select></label>{/if}
    </section>

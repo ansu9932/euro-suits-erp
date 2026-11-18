@@ -1,4 +1,5 @@
 <script lang="ts">
+ import PhoneScanButton from './PhoneScanButton.svelte';
  import {onMount} from 'svelte';import {X,ArrowRight,Check,Plus,Paperclip,Upload,Download,CalendarDays,Layers,ShieldCheck} from '@lucide/svelte';
  import Badge from './Badge.svelte';import {api,upload,fmt,day} from './api';import type {Row,Dataset,FormSpec,Field} from './types';
  import {SkeletonLoader} from './components/loaders';
@@ -23,7 +24,20 @@
  }
 
  function workItem(){const kinds=[...(can('develop')&&order.stage==='Development'?['Style development','CAD / pattern']:[]),...(can('sample')&&order.stage==='Sampling'?['Proto sample','Fit sample','Pre-production sample']:[])];form('Add development record','work_item',[{key:'kind',label:'Record type',type:'select',options:kinds.map(v=>({value:v,label:v}))},{key:'title',label:'Title',value:order.style},{key:'status',label:'Status',type:'select',value:'Open',options:['Open','In progress','Approved','Changes needed'].map(v=>({value:v,label:v}))},{key:'notes',label:'Notes / revision',type:'textarea',required:false}]);}
- async function attach(){if(busy)return;const file=uploadInput.files?.[0];if(!file)return;busy=true;error='';try{await upload(order.id,file);details=await api(`/orders/${order.id}`);await onmutate();}catch(e){error=(e as Error).message;}finally{busy=false;uploadInput.value='';}}
+ async function attachFile(file:File, scan=false){
+  if(busy){if(scan)throw new Error('This order is busy. Try again.');return;}
+  const id=order.id;
+  let attached=false;
+  busy=true;error='';
+  try{await upload(id,file);attached=true;details=await api(`/orders/${id}`);await onmutate();}
+  catch(e){error=(e as Error).message;if(scan&&!attached)throw e;}
+  finally{busy=false;}
+ }
+ async function attach(){
+  const file=uploadInput.files?.[0];
+  if(file)await attachFile(file);
+  uploadInput.value='';
+ }
  const related=(key:keyof Dataset)=>((data[key] as Row[])||[]).filter(x=>x.order_id===order.id);
 </script>
 <dialog bind:this={dialog} class="order-drawer" oncancel={e=>{if(busy)e.preventDefault();else onclose()}}>
@@ -54,7 +68,7 @@
   {#each details.materials||[] as m}<div class="record-line"><strong>{m.item}</strong><span>{fmt(m.quantity_hundredths/100)} {m.unit}</span></div>{:else}<p class="muted">No material requirements recorded.</p>{/each}
   <section class="drawer-section"><h3>Stock movements for this PO</h3>{#each details.movements||[] as m}<div class="record-line"><div><strong>{m.item}</strong><small>{m.reference}</small></div><span>{fmt(m.quantity_hundredths/100)} · {m.kind}</span></div>{:else}<p class="muted">No stock movements for this PO.</p>{/each}</section>
  {:else}
-  <div class="section-title"><h3><Paperclip size={17}/> Order documents</h3>{#if can('documents')}<button class="button secondary small-button" disabled={busy} onclick={()=>uploadInput.click()}><Upload size={15}/>{busy?'Uploading…':'Upload file'}</button><input class="sr-only" bind:this={uploadInput} type="file" aria-label="Upload order document" onchange={attach}/>{/if}</div>
+  <div class="section-title"><h3><Paperclip size={17}/> Order documents</h3>{#if can('documents')}<button class="button secondary small-button" disabled={busy} onclick={()=>uploadInput.click()}><Upload size={15}/>{busy?'Uploading…':'Upload file'}</button><input class="sr-only" bind:this={uploadInput} type="file" aria-label="Upload order document" onchange={attach}/><PhoneScanButton label="order documents" destination={order.id} disabled={busy} onreceive={file=>attachFile(file,true)}/>{/if}</div>
   <p class="muted">PO files, tech packs and CAD revisions. Maximum 20 MB per file.</p>
   {#each details.documents||[] as doc}<a class="document-row" href={'/api/documents/'+doc.id}><Paperclip size={18}/><div><strong>{doc.name}</strong><small>{fmt(doc.size/1024)} KB · {day(doc.created_at)}</small></div><Download size={16}/></a>{:else}<div class="empty"><Paperclip size={30}/><p>No documents attached to this order.</p></div>{/each}
  {/if}

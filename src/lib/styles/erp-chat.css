@@ -202,3 +202,5 @@
  .erp-chat-root .chat-message-translate {opacity:1;}
 }
 @media(hover:none) {.erp-chat-root .chat-message-translate {opacity:1;}}
+
+.chat-phone-upload {padding:4px 10px;background:#fff;}

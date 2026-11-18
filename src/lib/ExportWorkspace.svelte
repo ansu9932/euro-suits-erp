@@ -1,4 +1,5 @@
 <script lang="ts">
+ import PhoneScanButton from './PhoneScanButton.svelte';
  import {holdDashboardLoad} from './signInTransition';
  import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import {onMount,onDestroy,tick} from 'svelte';
@@ -129,20 +130,34 @@
   if(!name||name.length>160||/[\r\n]/.test(name)){companyError='Enter a company name between 1 and 160 characters on one line.';await focus('export-new-company');return}
   await run(async()=>{const item=await api('/exports/parties',{name});options.standalone_parties=[...(options.standalone_parties||[]).filter((choice:Row)=>choice.id!==item.id),item];form.party_name=item.name;addingCompany=false;newCompanyName='';dirty=true;notice=item.created?'Company added to the export invoice list.':'The existing company name is selected.';await focus('export-invoice-company')});
  }
- function queueInvoiceFiles(event:Event,kind:string,receipt_key='',field_key=''){
-  const input=event.currentTarget as HTMLInputElement,files=Array.from(input.files||[]);input.value='';if(busy||!canAttachInvoice)return;
-  const invalid=files.map(file=>invoiceFileError(file)).find(Boolean);if(invalid){error=invalid;return}
-  if((detail?.files||[]).length+invoiceSave.files.length+files.length>100){error=`Each ${recordLabel} can have at most 100 documents.`;return}
+ function queueInvoiceFiles(files:File[],kind:string,receipt_key='',field_key=''){
+  if(busy||!canAttachInvoice||!files.length)return false;
+  const invalid=files.map(file=>invoiceFileError(file)).find(Boolean);if(invalid){error=invalid;return false}
+  if((detail?.files||[]).length+invoiceSave.files.length+files.length>100){error=`Each ${recordLabel} can have at most 100 documents.`;return false}
   for(const file of files){const key=[kind,receipt_key,field_key,invoiceFileKey(file)].join(':');if(!invoiceSave.files.some(item=>item.key===key))invoiceSave.files.push({file,key,kind,...(receipt_key?{receipt_key,field_key}:{}),status:'queued'})}
   dirty=true;error='';notice='Documents queued under their checklist categories. Save the draft to attach them.';
+  return true;
  }
  function removeQueuedInvoiceFile(key:string){if(busy)return;const item=invoiceSave.files.find(file=>file.key===key);if(!item||item.status==='uploaded'||item.path||!window.confirm(`Remove ${item.file.name} from the document queue?`))return;invoiceSave.files=invoiceSave.files.filter(file=>file.key!==key);dirty=editing||invoiceSave.files.length>0}
  async function flushInvoiceDocuments(){
   await run(async()=>{await saveInvoiceFiles(form,invoiceSave,api,uploadTo);detail=await api('/exports/'+form.id);resetInvoiceStaging();dirty=false;notice='Documents attached under their checklist categories.';await loadRegister()});
  }
- async function attachInvoiceFiles(event:Event,kind:string,receipt_key='',field_key=''){
-  if(!invoiceSave.files.length){form=structuredClone($state.snapshot(detail!.record));resetInvoiceStaging(true)}
-  queueInvoiceFiles(event,kind,receipt_key,field_key);if(!error&&invoiceSave.files.length)await flushInvoiceDocuments();
+ async function receiveInvoiceFiles(files:File[],kind:string,readonly:boolean,receipt_key='',field_key='',scan=false){
+  if(readonly&&!invoiceSave.files.length&&detail){form=structuredClone($state.snapshot(detail.record));resetInvoiceStaging(true)}
+  if(!queueInvoiceFiles(files,kind,receipt_key,field_key)){
+   if(scan)throw new Error(error||'This document field is busy. Try again.');
+   return;
+  }
+  if(readonly){
+   await flushInvoiceDocuments();
+   if(scan&&invoiceSave.files.some(item=>item.file===files[0]&&item.status!=='uploaded'))throw new Error(error||'The scan could not be attached.');
+  }
+ }
+ function selectInvoiceFiles(event:Event,kind:string,readonly:boolean,receiptKey='',fieldKey=''){
+  const input=event.currentTarget as HTMLInputElement;
+  const files=Array.from(input.files||[]);
+  input.value='';
+  return receiveInvoiceFiles(files,kind,readonly,receiptKey,fieldKey);
  }
  async function removeSavedDocument(file:Row){
   if(busy||!detail||!actions.remove||uncertainSave)return;
@@ -247,7 +262,8 @@
 {/snippet}
 
 {#snippet documentField(kind:string,label:string,readonly:boolean,receiptKey='',fieldKey='',prefix='inline-document',compact=false)}
- <ExportDocumentField {label} {compact} inputID={prefix+'-'+kind} files={(detail?.files||[]).filter((file:Row)=>documentInSlot(file,kind,receiptKey,fieldKey))} queued={invoiceSave.files.filter(file=>documentInSlot(file,kind,receiptKey,fieldKey))} canAttach={canAttachInvoice} canRemove={!!actions.remove} canDownload={!!permissions.download} {busy} uncertain={uncertainSave} onattach={event=>readonly?attachInvoiceFiles(event,kind,receiptKey,fieldKey):queueInvoiceFiles(event,kind,receiptKey,fieldKey)} onremove={removeSavedDocument} onremovequeued={removeQueuedInvoiceFile}/>
+ <ExportDocumentField {label} {compact} inputID={prefix+'-'+kind} files={(detail?.files||[]).filter((file:Row)=>documentInSlot(file,kind,receiptKey,fieldKey))} queued={invoiceSave.files.filter(file=>documentInSlot(file,kind,receiptKey,fieldKey))} canAttach={canAttachInvoice} canRemove={!!actions.remove} canDownload={!!permissions.download} {busy} uncertain={uncertainSave} destination={String(readonly?detail?.record.id:form.id)+':'+kind+':'+receiptKey+':'+fieldKey}
+ onattach={event=>selectInvoiceFiles(event,kind,readonly,receiptKey,fieldKey)} onscan={file=>receiveInvoiceFiles([file],kind,readonly,receiptKey,fieldKey,true)} onremove={removeSavedDocument} onremovequeued={removeQueuedInvoiceFile}/>
 {/snippet}
 
 {#snippet panels(r:Row,readonly:boolean)}
@@ -298,7 +314,9 @@
   {#if !readonly}<p class="ex-notice">Choose documents here, then save the draft to attach them. Queued files stay on this form until saved.</p>{/if}
   <ul class="ex-checklist">{#each docKinds() as kind}{@const files=(detail?.files||[]).filter((f:Row)=>f.kind===kind.key)}{@const queued=invoiceSave.files.filter(item=>item.kind===kind.key&&!files.some((file:Row)=>file.id===item.id))}<li id={'document-category-'+kind.key} tabindex="-1">
    <div class="ex-document-kind"><span class:attached={files.length>0} class="ex-document-indicator">{#if files.length}<Check size={15}/>{:else}<FileText size={15}/>{/if}</span><strong>{kind.label}{#if kind.key===requiredDocument.kind}<span class="ex-required"> *</span>{/if}</strong>{#if files.length}<small>{files.length} attached</small>{/if}
-    {#if canAttachInvoice}<label class="ex-button secondary ex-upload-label ex-checklist-attach"><Paperclip size={16}/>Attach document<input id={'document-input-'+kind.key} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" aria-label={'Attach '+kind.label+' document'} disabled={busy} onchange={event=>readonly?attachInvoiceFiles(event,kind.key):queueInvoiceFiles(event,kind.key)}/></label>{:else if !files.length}<small>No document attached</small>{/if}
+    {#if canAttachInvoice}<label class="ex-button secondary ex-upload-label ex-checklist-attach"><Paperclip size={16}/>Attach document<input id={'document-input-'+kind.key} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" aria-label={'Attach '+kind.label+' document'} disabled={busy} onchange={event=>selectInvoiceFiles(event,kind.key,readonly)}/></label>
+    <PhoneScanButton label={kind.label} destination={String(readonly?detail?.record.id:form.id)+':'+kind.key}
+     disabled={busy||uncertainSave} onreceive={file=>receiveInvoiceFiles([file],kind.key,readonly,'','',true)}/>{:else if !files.length}<small>No document attached</small>{/if}
    </div>
    {#if files.length||queued.length}<ul class="ex-document-files">{#each files as file}<li><div class="ex-document-info"><strong>{file.filename}</strong><small>{receiptDocumentLabel(file,r.receipts||[])}</small><small>{Math.max(1,Math.round(file.size/1024))} KB · {exportDate(file.created_at)}</small></div><div class="ex-actions">
     {#if permissions.download}{#if exportFileCanPreview(file)}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button quiet" href={'/api/export-files/'+file.id+'?preview=1'} target="_blank" rel="noopener noreferrer" aria-label={'Preview '+file.filename}><Eye size={15}/>Preview</a>{:else}<button type="button" class="ex-button quiet" disabled={busy} onclick={()=>previewFallback=previewFallback===file.id?0:file.id} aria-expanded={previewFallback===file.id}><Eye size={15}/>Download / open</button>{/if}<a data-sveltekit-reload data-sveltekit-preload-data="false" class="ex-button quiet" href={'/api/export-files/'+file.id+'?download=1'} download aria-label={'Download '+file.filename}><Download size={15}/>Download</a>{/if}

@@ -2,7 +2,7 @@
  import CompanyAttachments from './CompanyAttachments.svelte';
  import CompanyExpiry from './CompanyExpiry.svelte';
  import type {Row} from './types';
- let {definitions,profile=$bindable(),files=[],recoveryFiles=[],legacyEmails=[],editable=false,busy=false,onchange=()=>{},onupload}:{definitions:Row[];profile:Row;files?:Row[];recoveryFiles?:Row[];legacyEmails?:string[];editable?:boolean;busy?:boolean;onchange?:()=>void;onupload?:(target:Row,file:File)=>Promise<void>}=$props();
+ let {definitions,profile=$bindable(),files=[],recoveryFiles=[],legacyEmails=[],editable=false,busy=false,destination,onchange=()=>{},onupload}:{definitions:Row[];profile:Row;files?:Row[];recoveryFiles?:Row[];legacyEmails?:string[];editable?:boolean;busy?:boolean;destination?:number;onchange?:()=>void;onupload?:(target:Row,file:File,scan?:boolean)=>Promise<void>}=$props();
  function toggleDoc(f:Row,id:number,checked:boolean){f.documents=checked?[...new Set([...(f.documents||[]),id])]:(f.documents||[]).filter((v:number)=>v!==id);onchange()}
  function markNA(f:Row){if(f.not_applicable){f.value='';f.documents=[];f.expiry=false;f.reminder_enabled=false;f.reminder_emails=[];f.valid_from='';f.expires_on=''}onchange()}
 </script>
@@ -18,7 +18,7 @@
  {:else if def.input_type==='checkbox'}<label class="inline-check"><input type="checkbox" checked={f.value==='true'} onchange={e=>{f.value=e.currentTarget.checked?'true':'false';onchange()}}/>{def.label}</label><label>Recorded answer<select bind:value={f.value}><option value="">Not answered</option><option value="true">Yes</option><option value="false">No</option></select></label>
  {:else}<label>{def.label}{def.input_type==='text'?' number / reference':''}<input type={def.input_type==='number'?'text':def.input_type} inputmode={def.input_type==='number'?'decimal':undefined} bind:value={f.value} maxlength="2000"/></label>{/if}
  <CompanyExpiry target={f} {legacyEmails} {editable} {busy} label={def.label} onpatch={patch=>{Object.assign(f,patch);onchange()}}/>
- <CompanyAttachments target={f} {files} {recoveryFiles} {editable} {busy} label={def.label+' supporting copies'+(def.document_required?' (required)':'')} onselect={(id,checked)=>toggleDoc(f,id,checked)} onupload={onupload?(file)=>onupload!(f,file):undefined}/>
+ <CompanyAttachments target={f} {files} {recoveryFiles} {editable} {busy} label={def.label+' supporting copies'+(def.document_required?' (required)':'')} onselect={(id,checked)=>toggleDoc(f,id,checked)} {destination} onupload={onupload?(file,scan)=>onupload!(f,file,scan):undefined}/>
  {/if}</fieldset>
  {/if}
 {/each}

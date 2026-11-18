@@ -1,4 +1,5 @@
 <script lang="ts">
+ import PhoneScanButton from './PhoneScanButton.svelte';
  import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
  import MerchantMaterialGenerate from "./MerchantMaterialGenerate.svelte";let merchantKind=$state(''),merchantRecord:Row|null=$state(null),materialReview=$state('');
  import {workspaceMotion, enter, referenceFeedback} from "./motion";
@@ -52,7 +53,20 @@
   return{destroy(){motion?.destroy();node.close()}}
  }
  function barcode(node:SVGSVGElement,code:string){JsBarcode(node,code,{format:'CODE128',width:2,height:60,displayValue:true,fontSize:15,margin:12});return{update(code:string){JsBarcode(node,code,{format:'CODE128',width:2,height:60,displayValue:true,fontSize:15,margin:12})}}}
- async function photos(){const files=[...(photoFiles?.files||[])];if(!selected||!files.length)return;await run(async()=>{let uploaded=0;try{for(const f of files){await uploadTo('/materials/'+selected!.id+'/photos',f);uploaded++}}finally{selected=await api('/materials/'+selected!.id);photoFiles.value='';if(uploaded)notice=uploaded+' photo(s) uploaded.'}})}
+ async function attachPhotos(files:File[], scan=false){
+  const id=selected?.id;
+  if(!id||busy||!files.length){if(scan)throw new Error('This material is busy. Try again.');return;}
+  let uploaded=0;
+  await run(async()=>{
+   try{for(const file of files){await uploadTo('/materials/'+id+'/photos',file);uploaded++;}}
+   finally{selected=await api('/materials/'+id);if(uploaded)notice=uploaded+' photo(s) uploaded.';}
+  });
+  if(scan&&!uploaded)throw new Error(error||'The photo could not be attached.');
+ }
+ async function photos(){
+  await attachPhotos(Array.from(photoFiles.files||[]));
+  if(photoFiles)photoFiles.value='';
+ }
  function newOption(o?:Row){optionTarget=null;option=o?structuredClone($state.snapshot(o)):{company_id:companyID||data.companies[0]?.id,kind:'category',label:'',parent_id:'',active:true}}
  async function reviewMaterial(action:string){await run(async()=>{await api('/materials/'+selected!.id+'/workflow',{version:selected!.version,action,note:materialReview});const rid=selected!.id;await load();selected=await api('/materials/'+rid);materialReview='';notice=action==='approve'?'Material approved. Sourcing can complete the supplier details.':'Changes requested. The merchant can correct and resubmit.'})}
  async function saveOption(e:SubmitEvent){e.preventDefault();await run(async()=>{const result=await api('/material-options'+(option?.id?'/'+option.id:''),payload(option,['company_id','kind','label','parent_id','active','version']));const savedLabel=option!.label.trim();await load();if(optionTarget){optionTarget.row[optionTarget.key]=optionTarget.numeric?result.id:savedLabel;if(optionTarget.numeric)resetChildren(optionTarget.key)}option=null;optionTarget=null;notice='Master list updated.'})}
@@ -81,7 +95,7 @@
  {#if data.commercial}
  {#if selected.kind==='trim'}<div class="material-specs">{#each [['trim_type','Trim type'],['size','Size / specification'],['unit','Unit'],['units_per_pack','Units per pack'],['pack_unit','Pack unit']] as [k,l]}<div><small>{l}</small><strong>{selected.profile[k]||'—'}</strong></div>{/each}</div>{/if}
  {#each selected.profile.additional||[] as x}<p><strong>{x.label}</strong>: {x.value}</p>{/each}
- {#if selected.kind==='fabric'}<div class="panel-header"><div><h3>Sample photos</h3><p>Multiple photos · PNG / JPEG · 5 MB each · up to 12 photos.</p></div>{#if data.can_edit_fabric}<label class="button secondary">Upload photos<input class="photo-input" type="file" accept="image/png,image/jpeg" multiple bind:this={photoFiles} disabled={busy} onchange={photos}/></label>{/if}</div><div class="photo-grid">{#each selected.photos||[] as photo}<a href={'/api/material-photos/'+photo.id} target="_blank" rel="noreferrer"><img src={'/api/material-photos/'+photo.id} alt={photo.name}/><small>{photo.name}</small></a>{:else}<p class="muted">No sample photos uploaded.</p>{/each}</div>{/if}
+ {#if selected.kind==='fabric'}<div class="panel-header"><div><h3>Sample photos</h3><p>Multiple photos · PNG / JPEG · 5 MB each · up to 12 photos.</p></div>{#if data.can_edit_fabric}<label class="button secondary">Upload photos<input class="photo-input" type="file" accept="image/png,image/jpeg" multiple bind:this={photoFiles} disabled={busy} onchange={photos}/></label><PhoneScanButton label="fabric sample photos" destination={selected.id} format="jpeg" maxBytes={5*1024*1024} disabled={busy||(selected.photos?.length||0)>=12} onreceive={file=>attachPhotos([file],true)}/>{/if}</div><div class="photo-grid">{#each selected.photos||[] as photo}<a href={'/api/material-photos/'+photo.id} target="_blank" rel="noreferrer"><img src={'/api/material-photos/'+photo.id} alt={photo.name}/><small>{photo.name}</small></a>{:else}<p class="muted">No sample photos uploaded.</p>{/each}</div>{/if}
  <h3>Price & change history</h3><p class="muted">Every saved revision keeps its price, quantity basis, author and timestamp.</p><div class="table-wrap"><table><thead><tr><th>Saved at</th><th>By</th><th>Action</th><th>Price</th><th>MOQ / order</th><th>Price date / note</th></tr></thead><tbody>{#each selected.history||[] as h}<tr><td>{new Date(h.created_at).toLocaleString()}</td><td>{h.actor}</td><td>{h.action}</td><td>{h.snapshot.profile?.price||'—'} {h.snapshot.profile?.currency} / {h.snapshot.profile?.price_unit}</td><td>{h.snapshot.profile?.moq_order} {h.snapshot.profile?.quantity_unit}</td><td>{day(h.snapshot.profile?.price_date)}<small>{h.snapshot.profile?.price_note}</small></td></tr>{/each}</tbody></table></div>{/if}
  </section>{/if}
 </section>

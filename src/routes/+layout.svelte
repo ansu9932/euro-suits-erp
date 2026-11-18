@@ -48,6 +48,6 @@
 <PostLoginTransition/>
 <LoaderHost/>
 
-{#if $sessionUserID&&page.url.pathname!=='/'&&page.url.pathname!=='/privacy'&&page.url.pathname!=='/guide'}
+{#if $sessionUserID&&page.url.pathname!=='/'&&page.url.pathname!=='/privacy'&&page.url.pathname!=='/guide'&&!/^\/scan\/?$/.test(page.url.pathname)}
  {#key $sessionUserID}<ERPLanguage/><ERPChat userId={$sessionUserID}/>{/key}
 {/if}

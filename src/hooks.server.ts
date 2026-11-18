@@ -14,6 +14,12 @@ export const handle: Handle = async ({event, resolve}) => {
  response.headers.set('X-Frame-Options','DENY');
  response.headers.set('Referrer-Policy','same-origin');
  const microphone=allowsWorkspaceMicrophone(event.url.pathname)?'(self)':'()';
- response.headers.set('Permissions-Policy',`camera=(), microphone=${microphone}, geolocation=()`);
+ const scanner = /^\/scan\/?$/.test(event.url.pathname);
+ const camera = scanner ? '(self)' : '()';
+ response.headers.set('Permissions-Policy',`camera=${camera}, microphone=${microphone}, geolocation=()`);
+ if (scanner) {
+  response.headers.set('Cache-Control', 'private, no-store');
+  response.headers.set('Referrer-Policy', 'no-referrer');
+ }
  return response;
 };

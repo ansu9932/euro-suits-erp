@@ -1,4 +1,5 @@
 <script lang="ts">
+ import PhoneScanButton from './PhoneScanButton.svelte';
  import {onMount,tick} from 'svelte';
  import {afterNavigate,replaceState} from '$app/navigation';
  import {page} from '$app/state';
@@ -48,6 +49,7 @@
  let typingTimer:ReturnType<typeof setTimeout>,pendingMessage:{thread:number;body:string;files:File[];id:string}|undefined;
  let initialGroupName='',visibleSince='',lastTyping=0,typingThread:number|null=null,reading=0,latestRead=0;
  const pollController=new AbortController();
+ const availableScanBytes=$derived(Math.min(8*1024*1024,maxMedia-picked.reduce((sum,file)=>sum+file.size,0)));
  const thread=$derived(threads.find(item=>item.id===selected));
  const filtered=$derived(threads.filter(item=>[item.name,item.department].some(value=>value?.toLowerCase().includes(q.trim().toLowerCase()))));
  const visibleMemberResults=$derived(memberResults.filter(person=>!selectedPeople.some(item=>item.id===person.id)&&(settings!=='group'||!members.some(item=>item.id===person.id))));
@@ -705,6 +707,14 @@
         {:else}<button type="button" onclick={undoDraftTranslation}>Undo translation</button>{/if}
        </div>
       {/if}
+      <div class="chat-phone-upload">
+       <PhoneScanButton label="chat attachments" destination={selected??''} maxBytes={availableScanBytes}
+        disabled={sending||details!==selected||picked.length>=maxFiles||availableScanBytes<128*1024} onreceive={file=>{
+         const count=picked.length;
+         addFiles([file]);
+         if(count===picked.length)throw new Error(composeError||'The scan could not be added.');
+        }}/>
+      </div>
       <form class="chat-composer" onsubmit={send}>
        <input type="file" bind:this={fileInput} multiple hidden onchange={event=>{const input=event.currentTarget;addFiles(Array.from(input.files??[]));input.value='';}}/>
        <textarea bind:this={composer} bind:value={draft} rows="1" maxlength={maxMessageLength} placeholder="Write a message" aria-label="Write a message" onpaste={paste} oninput={onType} onkeydown={(event)=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void send(event);}}></textarea>

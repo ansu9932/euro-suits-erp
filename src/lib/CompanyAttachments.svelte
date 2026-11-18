@@ -1,9 +1,10 @@
 <script lang="ts">
+ import PhoneScanButton from './PhoneScanButton.svelte';
  import {FileText,Trash2} from '@lucide/svelte';
  import CompanyFileActions from './CompanyFileActions.svelte';
  import {linkedCompanyFiles,companyFileStorageNote} from './companyDocuments';
  import type {Row} from './types';
- let {target,files=[],recoveryFiles=[],editable=false,busy=false,label='Supporting copies',onselect,onupload}:{target:Row;files?:Row[];recoveryFiles?:Row[];editable?:boolean;busy?:boolean;label?:string;onselect:(id:number,checked:boolean)=>void;onupload?:(file:File)=>Promise<void>}=$props();
+ let {target,files=[],recoveryFiles=[],editable=false,busy=false,destination,label='Supporting copies',onselect,onupload}:{target:Row;files?:Row[];recoveryFiles?:Row[];editable?:boolean;busy?:boolean;destination?:number;label?:string;onselect:(id:number,checked:boolean)=>void;onupload?:(file:File,scan?:boolean)=>Promise<void>}=$props();
  let linked=$derived(linkedCompanyFiles(target,files));
  let removing=$state<number|null>(null),recoverID=$state(''),removed=$state(false);
  function remove(id:number){if(!editable||busy)return;onselect(id,false);removing=null;removed=true;}
@@ -18,6 +19,7 @@
  {#if removed}<small role="status">Document removed from this item. Save the draft to keep the change.</small>{/if}
  {#if editable&&onupload}
   <label class="button secondary">Attach document here<input class="upload-file-input" aria-label={'Upload '+label} type="file" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" disabled={busy} onchange={async e=>{const input=e.currentTarget;const file=input.files?.[0];if(file){await onupload?.(file);input.value='';removed=false}}}/></label>
+  <PhoneScanButton {label} {destination} disabled={busy} onreceive={async file=>{await onupload?.(file,true);removed=false;}}/>
   <small>PDF, images, Word or Excel · up to 20 MB. Save the draft to keep this link.</small>
   <small>New files are compressed automatically when it saves space, without quality loss. Downloads restore the exact original.</small>
  {/if}
