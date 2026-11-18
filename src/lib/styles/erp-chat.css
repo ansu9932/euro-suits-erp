@@ -175,6 +175,7 @@
 .chat-composer-tools .chat-icon {color:#35536b;}
 .chat-composer-tools .chat-listening {color:#a21d3a;background:#ffedf0;}
 .chat-composer-status {padding:3px 12px;color:var(--chat-muted);font-size:12px;background:white;}
+.erp-chat-root .chat-composer-status button {padding:2px 0;color:var(--chat-teal);background:none;border:0;text-decoration:underline;}
 .chat-pending {display:flex;flex-wrap:wrap;gap:5px;padding:6px 11px;background:white;}
 .chat-pending>div {display:flex;align-items:center;gap:5px;min-width:0;max-width:min(100%,220px);padding:0 5px;border:1px solid var(--chat-line);border-radius:7px;font-size:12px;}
 .chat-pending span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
