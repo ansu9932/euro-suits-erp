@@ -1,5 +1,7 @@
+import {writable} from 'svelte/store';
 import {reportClientIssue} from './diagnostics';
 import {trackAction} from './actionLock';
+export const sessionUserID=writable<number|null>(null);
 export let csrf='';
 export function setCSRF(token:string){csrf=token;}
 const pending=new Map<string,Promise<any>>();
@@ -33,6 +35,10 @@ export function api(path:string,body?:unknown,method='POST'):Promise<any>{
   if(response.status<500&&data.code!=='action_already_submitted')uncertain.delete(identity);
   if(!response.ok){if(response.status===401&&path!=='/login'&&path!=='/login/otp'&&typeof window!=='undefined')window.dispatchEvent(new Event('erp:session-expired'));throw Object.assign(new Error(data.error||'Request failed.'),{status:response.status,code:data.code,fields:data.fields});}
   if(data.csrf){if(csrf!==data.csrf)uncertain.clear();setCSRF(data.csrf);}
+  if(typeof window!=='undefined'){
+   if(path==='/session'||path==='/login'||path==='/login/otp')sessionUserID.set(data.user?.id??null);
+   if(path==='/logout')sessionUserID.set(null);
+  }
   if(path==='/logout'){csrf='';uncertain.clear();}
   return data;
  });

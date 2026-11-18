@@ -3,7 +3,6 @@
  import {PageLoader, SpinnerLoader} from '$lib/components/loaders';
  import OperationsAccountMenu from './OperationsAccountMenu.svelte';
  import SignInShell from '$lib/SignInShell.svelte';
- import Spooly from './Spooly.svelte';
  import SidebarToggle from "./SidebarToggle.svelte";
  import {workspaceRedirect} from './workspaceAccess';
  import EnquiryWorkspace from "./EnquiryWorkspace.svelte";
@@ -138,9 +137,6 @@
 {/if}
 {#if form}<FormDialog spec={form} onclose={()=>form=null}/>{/if}
 {#if toast}<div class="toast" role="status"><Check size={18}/>{toast}</div>{/if}
-{#if !loading && data && !blockedUser && !noAccess}
- <Spooly userId={data.user.id} role={data.user.role} {portal} {page}/>
-{/if}
 
 <style>
  .sample-nav{margin:12px 0;border:0}.sample-nav>summary{display:flex;align-items:center;gap:10px;min-height:44px;padding:10px 12px;cursor:pointer;font-size:13px;font-weight:700;color:#111827;list-style:none}.sample-nav>summary::-webkit-details-marker{display:none}.sample-nav>summary:focus-visible{outline:2px solid #0a7a6b;outline-offset:-2px;border-radius:8px}:global(.sample-nav__arrow){margin-left:auto;transition:transform 180ms ease}.sample-nav[open] :global(.sample-nav__arrow){transform:rotate(180deg)}.sample-nav__items{padding:8px 0 8px 8px;display:flex;flex-direction:column;gap:8px}.sample-nav__items button{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:10px 12px!important;margin:0;border:1px solid #dce2e9;background:#fff;border-radius:12px;color:#202a39;text-align:left;font:650 13px/1.4 var(--hig-font,system-ui);cursor:pointer}.sample-nav__items button:hover{background:#f8fafb;border-color:#b7c2ce;box-shadow:0 1px 2px #0f172a0a}.sample-nav__items button.active{background:#f0f9f6;border-color:#a8d0c5;color:#075e54}.sample-nav__items :global(svg){flex-shrink:0}.sample-nav__items .sidebar-label{white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:1.4}.sample-nav>summary:hover{background:#f0f7f5}.sample-nav__items button:focus-visible{outline:2px solid #0a7a6b}

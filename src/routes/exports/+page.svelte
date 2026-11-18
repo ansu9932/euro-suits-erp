@@ -9,7 +9,6 @@
  import type {User, Row} from '$lib/types';
  import ExportWorkspace from '$lib/ExportWorkspace.svelte';
  import SignInForm from '$lib/SignInForm.svelte';
- import Spooly from '$lib/Spooly.svelte';
  import {workspaceRedirect} from '$lib/workspaceAccess';
  import '../../app.css';
  import '../../company.css';
@@ -58,7 +57,6 @@
     {#key user.id}<ExportWorkspace {user} bind:dirty={exportDirty}/>{/key}
    {/if}
   </main>
-  {#if !user.renewal_blocks?.length}<Spooly userId={user.id} role={user.role} portal={user.portal} page="Warehouse & dispatch"/>{/if}
  </div>
 {/if}
 

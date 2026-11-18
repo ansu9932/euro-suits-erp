@@ -6,6 +6,9 @@
  import {installReportDownloads} from '$lib/loading';
  import {PageLoader,PostLoginTransition} from '$lib/components/loaders';
  import {signInPhase} from '$lib/signInTransition';
+ import ERPChat from '$lib/ERPChat.svelte';
+ import {sessionUserID} from '$lib/api';
+ import {page} from '$app/state';
  import LoaderHost from '$lib/LoaderHost.svelte';
  import '../interactions.css';
  import '../readability.css';
@@ -22,9 +25,11 @@
  onMount(()=>{
   const removeActionLocks=installActionLocks();
   const removeReportDownloads=installReportDownloads();
+  const expired=()=>sessionUserID.set(null);
+  window.addEventListener('erp:session-expired',expired);
   const runtime=()=>reportClientIssue('runtime'),promise=()=>reportClientIssue('promise');
   window.addEventListener('error',runtime);window.addEventListener('unhandledrejection',promise);
-  return()=>{removeActionLocks();removeReportDownloads();window.removeEventListener('error',runtime);window.removeEventListener('unhandledrejection',promise)};
+  return()=>{window.removeEventListener('erp:session-expired',expired);removeActionLocks();removeReportDownloads();window.removeEventListener('error',runtime);window.removeEventListener('unhandledrejection',promise)};
  });
 </script>
 <div style="display:contents" inert={routePending}>
@@ -33,3 +38,7 @@
 <PageLoader isLoading={routePending && !$signInPhase} enhanced/>
 <PostLoginTransition/>
 <LoaderHost/>
+
+{#if $sessionUserID&&page.url.pathname!=='/'&&page.url.pathname!=='/privacy'&&page.url.pathname!=='/guide'}
+ {#key $sessionUserID}<ERPChat userId={$sessionUserID}/>{/key}
+{/if}
