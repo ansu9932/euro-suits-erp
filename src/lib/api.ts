@@ -25,16 +25,31 @@ function once<T>(key:string,work:()=>Promise<T>):Promise<T>{
  pending.set(key,request);
  return trackAction(request);
 }
-export function api(path:string,body?:unknown,method='POST'):Promise<any>{
+function uploadForm(url:string,method:string,headers:Record<string,string>,data:FormData,onProgress:(percent:number)=>void){
+ return new Promise<Response>((resolve,reject)=>{
+  const request=new XMLHttpRequest();
+  request.open(method,url);
+  request.timeout=45000;
+  for(const [name,value] of Object.entries(headers))request.setRequestHeader(name,value);
+  request.upload.onprogress=event=>{if(event.lengthComputable)onProgress(Math.round(event.loaded*100/event.total));};
+  request.onload=()=>resolve(new Response(request.responseText,{status:request.status}));
+  request.onerror=request.ontimeout=request.onabort=()=>reject(new Error('The upload was interrupted. Try sending the same files again.'));
+  request.send(data);
+ });
+}
+export function api(path:string,body?:unknown,method='POST',onProgress?:(percent:number)=>void):Promise<any>{
  const verb=body===undefined?'GET':method;
  const form=body instanceof FormData?body:undefined;
  const json=body===undefined||form?undefined:JSON.stringify(body);
  const identity=csrf+':'+verb+':'+path+':'+(form?.get('client_id')||json||'');
  return once(identity,async()=>{
-  const response=await fetch('/api'+path,{method:verb,credentials:'same-origin',headers:body===undefined?{}:{
+  const headers:Record<string,string>=body===undefined?{}:{
    ...(form?{}:{'Content-Type':'application/json'}),
    'X-CSRF-Token':csrf,'Idempotency-Key':actionID(identity)
-  },body:form??json}).catch(e=>{reportClientIssue('network');throw e});
+  };
+  const request=form&&onProgress?uploadForm('/api'+path,verb,headers,form,onProgress)
+   :fetch('/api'+path,{method:verb,credentials:'same-origin',headers,body:form??json});
+  const response=await request.catch(e=>{reportClientIssue('network');throw e});
   const data=await response.json().catch(()=>{throw new Error('The server response was interrupted. Refresh to check whether the action finished.');});
   if(response.status<500&&data.code!=='action_already_submitted')uncertain.delete(identity);
   if(!response.ok){if(response.status===401&&path!=='/login'&&path!=='/login/otp'&&typeof window!=='undefined')window.dispatchEvent(new Event('erp:session-expired'));throw Object.assign(new Error(data.error||'Request failed.'),{status:response.status,code:data.code,fields:data.fields});}

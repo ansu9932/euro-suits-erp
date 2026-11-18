@@ -4,7 +4,7 @@
  import {page} from '$app/state';
  import {ArrowLeft,Bell,Check,CheckCheck,ChevronDown,Download,FileText,Languages,Maximize2,MessageCircle,Mic,Minimize2,MoreHorizontal,Paperclip,Plus,Search,Send,Square,Users,X} from '@lucide/svelte';
  import {api,csrf} from './api';
- import {createChatRecognition,translateKannada,type Recognition} from './chatLanguage';
+ import {createChatRecognition,createKannadaTranslation,type Recognition} from './chatLanguage';
  import './styles/erp-chat.css';
 
  type Person={id:number;name:string;department:string;email?:string;online:boolean};
@@ -15,6 +15,7 @@
  type Settings='new'|'group'|'email'|'clear'|'leave';
  type EmailMode='immediate'|'offline_delay'|'off';
 
+ const kannada=createKannadaTranslation();
  const maxFiles=5,maxMedia=12*1024*1024;
  const blockingSurfaces=[
   'dialog[open]','[aria-modal="true"]','[role="dialog"]',
@@ -29,6 +30,7 @@
  let translating=$state(false),translationStatus=$state(''),translationTask:AbortController|undefined;
  let draftOriginal=$state(''),draftKannada=$state(''),translated=$state<Record<number,string>>({});
  let messageNodes=new Map<number,HTMLElement>();
+ let uploadProgress=$state<number|null>(null);
  let opened=$state(false),expanded=$state(false),mobileThread=$state(false);
  let selected=$state<number|null>(null),details=$state<number|null>(null);
  let threads=$state<Thread[]>([]),messages=$state<Message[]>([]),members=$state<Person[]>([]);
@@ -147,7 +149,7 @@
    disposed=true;
    clearTimeout(typingTimer);
    pollController.abort();
-   cancelSpeech();cancelTranslation();
+   cancelSpeech();cancelTranslation();kannada.destroy();
    window.removeEventListener('focus',attended);
    document.removeEventListener('visibilitychange',attended);
   };
@@ -380,7 +382,7 @@
   const task=new AbortController();
   translationTask=task;translating=true;translationStatus='Preparing Kannada translation…';composeError='';
   try{
-   const result=await translateKannada(source,task.signal,progress=>{
+   const result=await kannada.translate(source,task.signal,progress=>{
     if(translationTask===task)translationStatus=progress<100?'Preparing Kannada · '+progress+'%':'Translating to Kannada…';
    });
    if(disposed||blocked||selected!==target||translationTask!==task)return;
@@ -406,7 +408,7 @@
   if(pendingMessage?.thread!==id||pendingMessage.body!==body||pendingMessage.files!==files){
    pendingMessage={thread:id,body,files,id:crypto.randomUUID()};
   }
-  sending=true;composeError='';
+  sending=true;composeError='';uploadProgress=files.length?0:null;
   try{
    let payload:FormData|{message:string;client_id:string}={message:body,client_id:pendingMessage.id};
    if(files.length){
@@ -415,17 +417,22 @@
     for(const file of files)upload.append('files',file);
     payload=upload;
    }
-   await api(url(id)+'/messages',payload);
+   const sent=await api(url(id)+'/messages',payload,'POST',files.length?progress=>{
+    if(!disposed&&selected===id)uploadProgress=progress;
+   }:undefined);
    if(disposed||selected!==id)return;
    if(draft.trim()===body)draft='';
    if(picked===files)picked=[];
    draftOriginal='';draftKannada='';
    pendingMessage=undefined;stopTyping();
-   await loadThread(id);
+   if(sent.message&&details===id){
+    if(!messages.some(message=>message.id===sent.id))messages=[...messages,sent.message].sort((left,right)=>left.id-right.id);
+    await tick();
+   }else await loadThread(id);
    if(messageArea)messageArea.scrollTop=messageArea.scrollHeight;
    composer?.focus();void refresh(false);
   }catch(e){if(selected===id)composeError=errorText(e);}
-  finally{sending=false;}
+  finally{sending=false;uploadProgress=null;}
  }
 
  function searchPeople(query:string,done:(result:Person[])=>void,onError:(message:string)=>void){
@@ -639,9 +646,10 @@
         {/each}
        </div>
       {/if}
-      {#if dictating||translationStatus||draftOriginal&&draft===draftKannada}
+      {#if uploadProgress!==null||dictating||translationStatus||draftOriginal&&draft===draftKannada}
        <div class="chat-composer-status" aria-live="polite">
-        {#if dictating}<span>Listening…</span>{:else if translationStatus}<span>{translationStatus}</span>
+        {#if uploadProgress!==null}<span>{uploadProgress<100?'Uploading · '+uploadProgress+'%':'Saving attachment…'}</span>
+        {:else if dictating}<span>Listening…</span>{:else if translationStatus}<span>{translationStatus}</span>
         {:else}<button type="button" onclick={()=>{draft=draftOriginal;draftOriginal='';draftKannada='';}}>Undo translation</button>{/if}
        </div>
       {/if}
