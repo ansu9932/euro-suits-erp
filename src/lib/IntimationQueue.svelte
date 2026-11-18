@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {intimationReference} from './intimationReference';
  import {Mail,Paperclip,ArrowRight} from '@lucide/svelte';import {enter} from './motion';import type {Row} from './types';
  let {records,canEdit,busy,onGenerate,onOpen,onMail,onPreview}:{records:Row[];canEdit:boolean;busy:boolean;onGenerate:(r:Row)=>void;onOpen:(id:number)=>void;onMail:(r:Row)=>void;onPreview:(f:Row)=>void}=$props();
  function reveal(node:HTMLElement,index:number){return index<6?enter(node):{destroy(){}}}
@@ -7,8 +8,8 @@
 <section class="intimation-queue" aria-labelledby="pending-intimations-title">
  <div class="queue-heading"><div><h3 id="pending-intimations-title">Pending intimations <span>{records.length}</span></h3><p>Review the buyer’s instructions, then prepare the sample indent.</p></div><p>Requests leave this list after MD approval.</p></div>
  <div class="queue-scroll"><div class="queue-columns" aria-hidden="true"><span>Request details</span><span>Specifications</span><span>Required date</span><span>Status & files</span><span>Action</span></div>
- <div class="queue-list">{#each records as r,i (r.id)}<article class="intimation-row" use:reveal={i} aria-label={'Intimation SR-'+r.id}>
-  <div class="intimation-row__identity"><span class="buyer">{r.buyer||r.profile.brand}</span><h4>#{r.profile.buyer_style||'Style not entered'}</h4><small>Submitted by {r.created_by_name||'Not recorded'} · SR-{r.id}</small></div>
+ <div class="queue-list">{#each records as r,i (r.id)}<article class="intimation-row" use:reveal={i} aria-label={'Intimation '+intimationReference(r)}>
+  <div class="intimation-row__identity"><span class="buyer">{r.buyer||r.profile.brand}</span><h4>#{r.profile.buyer_style||'Style not entered'}</h4><small>Submitted by {r.created_by_name||'Not recorded'} · {intimationReference(r)}</small></div>
   <div class="intimation-row__specs"><strong>{r.profile.sample_type||'Sample type not entered'}</strong><div>{#each r.variants||[] as v}<span>{v.size||'Size pending'} · {v.colour||'Colour pending'} · × {v.quantity}</span>{/each}</div></div>
   <div class="intimation-row__date"><span class="sr-only">Required date: </span>{date(r.profile.buyer_required_date)}</div>
   <div class="intimation-row__files"><span class="status"><i aria-hidden="true"></i>Pending · {r.status==='Draft'?'Ready to prepare':r.status==='Submitted'?'Awaiting MD approval':r.status}</span><button type="button" class="attachment mail-button" aria-label={'Read buyer mail: '+(r.profile.email_subject||'No subject provided')} disabled={busy||!r.profile.email_message} title={r.profile.email_subject||'No pasted buyer message'} onclick={()=>onMail(r)}><Mail size={15}/><span>{r.profile.email_subject||'No subject provided'}</span></button>{#each r.files||[] as file}<button type="button" class="attachment" disabled={busy} title={file.name} onclick={()=>onPreview(file)}><Paperclip size={15}/><span>Preview {file.name}</span></button>{/each}</div>

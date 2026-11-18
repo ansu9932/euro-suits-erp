@@ -1,17 +1,27 @@
 <script lang="ts">
  import {holdDashboardLoad} from './signInTransition';
- import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
- import {withFullScreen} from '$lib/loading';
+ import {ButtonLoader,SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
+ import {downloadReport,withFullScreen} from '$lib/loading';
  import {indentReference} from './sampleProcess';
  import {ClipboardCheck,Copy,FileText,Pencil,Printer,Search,X} from '@lucide/svelte';
  import SampleProcessBoard from './SampleProcessBoard.svelte';
  import SampleCommentField from './SampleCommentField.svelte';
+ import IntimationReminder from './IntimationReminder.svelte';
+ import {intimationReference} from './intimationReference';
  import IntimationQueue from './IntimationQueue.svelte';
  import SampleUploads from './SampleUploads.svelte';import SampleFilePreview from './SampleFilePreview.svelte';let previewFile:any=$state(null),mailReader:any=$state(null);
  import {createSampleForm,type SampleFormKind} from './sampleFormPdf';
  import {enter, workspaceMotion} from "./motion";
  import {onMount,tick,untrack} from 'svelte';import SampleCapacity from './SampleCapacity.svelte';import SamplePlanning from './SamplePlanning.svelte';import SamplePlanLedger from './SamplePlanLedger.svelte';import SamplePiece from './SamplePiece.svelte';import SampleReports from './SampleReports.svelte';import {api,uploadTo} from './api';import type {Row} from './types';
  let {companies,company,orders=[],intimationOnly=false,initialView='requests',processView='all',indentProgress=false}:{companies:Row[];company:string;orders:Row[];intimationOnly?:boolean;initialView?:string;processView?:string;indentProgress?:boolean}=$props();
+ let reminderOpen=$state(false), downloadingIntimations=$state(false);
+ async function downloadIntimations(){
+  if(downloadingIntimations)return;
+  downloadingIntimations=true;error='';
+  try {await downloadReport('/api/sample-intimations/report.xlsx'+(company?'?company_id='+encodeURIComponent(company):''),'pending-intimations.xlsx')}
+  catch(e){error=(e as Error).message}
+  finally{downloadingIntimations=false}
+ }
  let fieldErrors:Record<string,string>=$state({});
  let editor:HTMLDivElement|undefined=$state();
  let assignedMerchant=$state('');
@@ -108,8 +118,8 @@
    }finally{uploadingFile=null}
   }
  }
- await api('/sample-requests/'+form.id,{...payload(),version:form.version,action:intake?'save':form.completion?'complete':action})
- const rid=form.id;form=null;await load();if(!intake)detail=await api('/sample-requests/'+rid);notice=action==='complete'&&!data.can_approve?'Detail changes sent to MD or Super Admin for approval.':intake?'Intimation submitted. It stays pending until MD approval generates the indents.':action==='complete'?'Registered indent details saved.':action==='submit'?'Sent to MD or Super Admin for approval.':'Draft and files saved.';intake=false;
+ const savedRequest=await api('/sample-requests/'+form.id,{...payload(),version:form.version,action:intake?'save':form.completion?'complete':action})
+ const rid=form.id;form=null;await load();if(!intake)detail=await api('/sample-requests/'+rid);notice=action==='complete'&&!data.can_approve?'Detail changes sent to MD or Super Admin for approval.':intake?intimationReference(savedRequest)+' submitted. It stays pending until MD approval generates the indents.':action==='complete'?'Registered indent details saved.':action==='submit'?'Sent to MD or Super Admin for approval.':'Draft and files saved.';intake=false;
  })}
  async function generateIntimation(record:any){await run(async()=>{const saved=await api('/sample-requests/'+record.id);form={...structuredClone(saved.record),files:saved.files};queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intake=false;detail=null})}
  function newIntimation(){fresh();if(form){intake=true;form.variants=[{size:'',colour:'',quantity:1}]}}
@@ -126,7 +136,7 @@
 {#if formPreview}{#key formPreview.name}<SampleFilePreview file={formPreview} name={formPreview.name} downloadLabel="Download PDF" onclose={()=>formPreview=null}/>{/key}{/if}
 {#if previewFile}{#key previewFile.id}<SampleFilePreview id={previewFile.id} name={previewFile.name} onclose={()=>previewFile=null}/>{/key}{/if}
 <section class="samples" use:workspaceMotion={view}>
-{#if view!=='process'} <header><div><h2>{intimationOnly?'INTIMATION':view==='process'?'Sample process':'Sample indents'}</h2><p>{intimationOnly?'Buyer instructions waiting for sample indents.':'One indent per garment. Numbers are assigned after MD approval.'}</p></div><div class="actions"><button class="button secondary" disabled={busy} onclick={()=>run(load)}>Refresh</button>{#if data?.can_edit}<button class="button primary" disabled={busy} onclick={intimationOnly?newIntimation:fresh}>{intimationOnly?'New intimation':'New sample request'}</button>{/if}{#if data?.can_stock&&!intimationOnly}<button class="button secondary" onclick={()=>stockForm={company_id:Number(company||companies[0]?.id),material_id:'',metres:'',reference:''}}>Receive sample fabric</button>{/if}</div></header>{/if}
+{#if view!=='process'} <header><div><h2>{intimationOnly?'INTIMATION':view==='process'?'Sample process':'Sample indents'}</h2><p>{intimationOnly?'Buyer instructions waiting for sample indents.':'One indent per garment. Numbers are assigned after MD approval.'}</p></div><div class="actions"><button class="button secondary" disabled={busy} onclick={()=>run(load)}>Refresh</button>{#if intimationOnly&&(data?.can_edit||data?.can_approve)}<ButtonLoader class="button secondary" label="Download Excel" loadingLabel="Downloading…" loading={downloadingIntimations} disabled={busy} onclick={downloadIntimations}/><button class="button secondary" disabled={busy} onclick={()=>reminderOpen=true}>Send reminder</button>{/if}{#if data?.can_edit}<button class="button primary" disabled={busy} onclick={intimationOnly?newIntimation:fresh}>{intimationOnly?'New intimation':'New sample request'}</button>{/if}{#if data?.can_stock&&!intimationOnly}<button class="button secondary" onclick={()=>stockForm={company_id:Number(company||companies[0]?.id),material_id:'',metres:'',reference:''}}>Receive sample fabric</button>{/if}</div></header>{/if}
  {#if error}<div class="form-error" role="alert">{error}</div>{/if}{#if notice}<p role="status">{notice}</p>{/if}
  {#if !intimationOnly&&view!=='process'}<nav class="sample-tabs" aria-label="Sampling views">{#each [['requests','Requests & approval'],['plan','Planning'],['freezing','Freezing'],['freeze-master','Freeze Master'],['progress','Process progress'],['capacity','Capacity'],['master','Master register'],['sop','How to work']] as [key,title]}<button class="button" aria-current={view===key?'page':undefined} class:primary={view===key} class:secondary={view!==key} onclick={()=>view=key}>{title}</button>{/each}{#if ['capacity','plan','freezing','freeze-master'].includes(view)}<button class="button secondary" data-inline-spooly type="button" aria-label="Open Spooly task help" onclick={()=>document.querySelector('garment-erp-mascot')?.dispatchEvent(new Event('spooly:help'))}>Spooly help</button>{/if}</nav>{/if}
  {#if busy&&data&&!opening}<SpinnerLoader label="Updating samples…"/>{/if}
@@ -143,6 +153,9 @@
  {/if}
 </section>
 {#if opening}<dialog class="sample-detail-loading" use:showMail aria-label="Loading sample request details" oncancel={cancelDetailLoad}><header><h2>Sample request details</h2><button class="button secondary" type="button" onclick={cancelDetailLoad}>Close</button></header><div class="sample-detail-loading__body"><SkeletonLoader variant="detail" rows={6} columns={3} label="Loading sample request details…"/></div></dialog>{/if}
+{#if intimationOnly&&reminderOpen}
+ {#key company}<IntimationReminder {company} close={()=>reminderOpen=false}/>{/key}
+{/if}
 {#if form}
  <div class="sample-overlay" class:intimation-overlay={intake}>
  <div role="dialog" aria-modal="true" aria-labelledby="sample-editor-title" tabindex="-1" class="sample-dialog ux-dialog" bind:this={editor} oninput={clearField} onchange={clearField} class:intimation-dialog={intake}>
@@ -199,7 +212,7 @@
  {/if}</div><footer><p class="indent-form-summary">{pieceCount} {pieceCount===1?'piece':'pieces'} · {queuedFileCount} {queuedFileCount===1?'file':'files'} ready to attach</p>{#if form.completion}<button class="button primary" disabled={busy||remarkDictating} onclick={()=>save('complete')}>{data.can_approve?'Save indent details':'Submit detail changes'}</button>{:else if intake}<button type="button" class="button secondary" disabled={busy} onclick={()=>{form=null;option=null}}>Cancel</button><button type="button" class="button primary" disabled={busy} onclick={()=>save('intimation')}>{busy?'Submitting…':'Submit intimation'}</button>{:else}<button class="button secondary" disabled={busy||remarkDictating} onclick={()=>save('save')}>{busy?'Saving…':'Save draft'}</button><button class="button primary" disabled={busy||remarkDictating} onclick={()=>save('submit')}>Submit for approval</button>{/if}</footer></div></div>
 {/if}
 {#if detail}
- <div class="sample-overlay"><div role="dialog" aria-modal="true" aria-label="Sample request details" tabindex="-1" class="sample-dialog sample-detail-dialog"><header><h2>{#if focusIndent}Indent {indentReference(detail.pieces.find((p:any)=>p.id===focusIndent)??{id:focusIndent})}{:else}Request SR-{detail.record.id}{/if} · {detail.record.profile.buyer_style||'Sample request'}{#if detail.record.profile.est} · EST {detail.record.profile.est}{/if}</h2><div class="detail-header-actions">{#if data.can_edit}<button class="button secondary" disabled={busy} onclick={copyRequest}><Copy size={14}/>Copy as new request</button>{/if}{#if ['Draft','Changes requested'].includes(detail.record.status)&&data.can_edit}<button class="button primary" disabled={busy} onclick={edit}><Pencil size={14}/>Edit / submit</button>{/if}{#if detail.record.status==='Approved'&&detail.can_complete}<button class="button primary" disabled={busy||!!detail.record.profile.pending_completion} onclick={completeDetails}><Pencil size={14}/>Complete / edit details</button>{/if}<span class="header-divider" aria-hidden="true"></span><button class="button secondary" disabled={busy} onclick={()=>{detail=null;production=null}}><X size={14}/>Close</button></div></header><div class="sample-detail-body" use:enter>
+ <div class="sample-overlay"><div role="dialog" aria-modal="true" aria-label="Sample request details" tabindex="-1" class="sample-dialog sample-detail-dialog"><header><h2>{#if focusIndent}Indent {indentReference(detail.pieces.find((p:any)=>p.id===focusIndent)??{id:focusIndent})}{:else}{detail.record.profile.intimation==='true'?'Intimation '+intimationReference(detail.record):'Request SR-'+detail.record.id}{/if} · {detail.record.profile.buyer_style||'Sample request'}{#if detail.record.profile.est} · EST {detail.record.profile.est}{/if}</h2><div class="detail-header-actions">{#if data.can_edit}<button class="button secondary" disabled={busy} onclick={copyRequest}><Copy size={14}/>Copy as new request</button>{/if}{#if ['Draft','Changes requested'].includes(detail.record.status)&&data.can_edit}<button class="button primary" disabled={busy} onclick={edit}><Pencil size={14}/>Edit / submit</button>{/if}{#if detail.record.status==='Approved'&&detail.can_complete}<button class="button primary" disabled={busy||!!detail.record.profile.pending_completion} onclick={completeDetails}><Pencil size={14}/>Complete / edit details</button>{/if}<span class="header-divider" aria-hidden="true"></span><button class="button secondary" disabled={busy} onclick={()=>{detail=null;production=null}}><X size={14}/>Close</button></div></header><div class="sample-detail-body" use:enter>
  {#if error}<div class="form-error" role="alert">{error}</div>{/if}
  <div class="sample-detail-toolbar"><p>Created by: <strong>{detail.record.created_by_name||detail.record.merchant||'—'}</strong> · Submitted by: <strong>{detail.record.submitted_by||'Not submitted'}</strong></p>{#if detail.pieces.length}<div class="actions"><button class="button secondary" onclick={()=>print('indent')}><Printer size={15} aria-hidden="true"/>Print all indents</button><button class="button secondary" onclick={()=>print('layout')}><Printer size={15} aria-hidden="true"/>Print swatch layout</button></div>{/if}</div>
  {#if detail.pieces.length}<div class="sample-form-actions"><label>Registered sample<select bind:value={focusIndent}><option value={0}>All {detail.pieces.length} indents</option>{#each detail.pieces as piece}<option value={piece.id}>{indentReference(piece)} · {piece.size||'Size not recorded'} · {piece.colour||'Colour not recorded'}</option>{/each}</select></label><button class="button secondary" onclick={showStages}>Update stages</button><button class="button secondary" disabled={reportBusy||!focusIndent} onclick={()=>previewForm('indent')}><FileText size={15} aria-hidden="true"/>{reportBusy?'Preparing PDF…':'Sample Indent Form'}</button><button class="button secondary" disabled={reportBusy||!focusIndent} onclick={()=>previewForm('audit')}><ClipboardCheck size={15} aria-hidden="true"/>Sample Audit Form</button></div><p class="sample-form-help">Preview and download the selected indent’s saved details. Missing fields stay blank.</p>{/if}
