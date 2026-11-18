@@ -2,7 +2,7 @@ import type {Handle} from '@sveltejs/kit';
 import {proxyApi} from '$lib/server/edge-proxy.mjs';
 
 function allowsWorkspaceMicrophone(path:string){
- return /^\/(?:operations|(?:admin|md|finance)\/operations|(?:management|accounts|merchandising|planning|cad|sourcing|stores|sampling|cutting|sewing|finishing|quality|warehouse)(?:\/(?:companies|reminders|fields|users|operations))?)\/?$/.test(path);
+ return /^\/(?:operations|signin|exports|(?:developer|admin|md|finance|management|accounts|merchandising|planning|cad|sourcing|stores|sampling|cutting|sewing|finishing|quality|warehouse)(?:\/(?:companies|reminders|fields|users|operations))?)\/?$/.test(path);
 }
 
 export const handle: Handle = async ({event, resolve}) => {

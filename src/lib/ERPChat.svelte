@@ -2,18 +2,27 @@
  import {onMount,tick} from 'svelte';
  import {afterNavigate,replaceState} from '$app/navigation';
  import {page} from '$app/state';
- import {ArrowLeft,Bell,Check,CheckCheck,ChevronDown,Maximize2,MessageCircle,Minimize2,MoreHorizontal,Plus,Search,Send,Users,X} from '@lucide/svelte';
+ import {ArrowLeft,Bell,Check,CheckCheck,ChevronDown,Download,FileText,Languages,Maximize2,MessageCircle,Mic,Minimize2,MoreHorizontal,Paperclip,Plus,Search,Send,Square,Users,X} from '@lucide/svelte';
  import {api,csrf} from './api';
+ import {createChatRecognition,translateKannada,type Recognition} from './chatLanguage';
  import './styles/erp-chat.css';
 
  type Person={id:number;name:string;department:string;email?:string;online:boolean};
  type Thread={id:number;kind:'direct'|'group';name:string;peer_id:number;department:string;online:boolean;preview:string;created_at:string|null;unread:number;member_count:number};
- type Message={id:number;sender_id:number;name:string;department:string;kind:'text'|'system';body:string;created_at:string;read_count:number};
+ type Attachment={id:number;name:string;kind:'image'|'video'|'audio'|'file';size:number};
+ type Message={id:number;sender_id:number;name:string;department:string;kind:'text'|'system';body:string;created_at:string;read_count:number;attachments?:Attachment[]};
  type Typing={id:number;name:string;remaining_ms:number};
  type Settings='new'|'group'|'email'|'clear'|'leave';
  type EmailMode='immediate'|'offline_delay'|'off';
 
+ const maxFiles=5,maxMedia=12*1024*1024;
+ const blockingSurfaces='dialog[open],[aria-modal="true"],[role="dialog"],.drawer-backdrop,.sample-overlay,.company-modal-backdrop,.company-editor,.enquiry-editor,.ex-editor,.sp-editor,.wa-editor,.capacity-editor';
  let {userId}:{userId:number}=$props();
+ let blocked=$state(false),picked=$state<File[]>([]),fileInput=$state<HTMLInputElement>();
+ let dictating=$state(false),speech:Recognition|undefined,speechTimer:ReturnType<typeof setTimeout>;
+ let translating=$state(false),translationStatus=$state(''),translationTask:AbortController|undefined;
+ let draftOriginal=$state(''),draftKannada=$state(''),translated=$state<Record<number,string>>({});
+ let messageNodes=new Map<number,HTMLElement>();
  let opened=$state(false),expanded=$state(false),mobileThread=$state(false);
  let selected=$state<number|null>(null),details=$state<number|null>(null);
  let threads=$state<Thread[]>([]),messages=$state<Message[]>([]),members=$state<Person[]>([]);
@@ -25,7 +34,7 @@
  let mode=$state<EmailMode>('offline_delay'),delay=$state(40),saving=$state(false),settingsReady=$state(false),settingsError=$state('');
  let tray=$state<HTMLButtonElement>(),searchInput=$state<HTMLInputElement>(),composer=$state<HTMLTextAreaElement>(),messageArea=$state<HTMLDivElement>();
  let disposed=false,revision='',refreshing=false,refreshQueued=false,threadGeneration=0,settingsGeneration=0;
- let typingTimer:ReturnType<typeof setTimeout>,pendingMessage:{thread:number;body:string;id:string}|undefined;
+ let typingTimer:ReturnType<typeof setTimeout>,pendingMessage:{thread:number;body:string;files:File[];id:string}|undefined;
  let initialGroupName='',visibleSince='',lastTyping=0,typingThread:number|null=null,reading=0,latestRead=0;
  const pollController=new AbortController();
  const thread=$derived(threads.find(item=>item.id===selected));
@@ -41,8 +50,21 @@
  const url=(id:number)=>'/chat/conversations/'+id;
  const time=(value:string)=>timeFormat.format(new Date(value));
  const date=(value:string)=>dayFormat.format(new Date(value));
- const dateLabel=(value:string)=>date(value)===date(new Date().toISOString())?'Today':date(value);
- const previewTime=(value:string)=>dateLabel(value)==='Today'?time(value):listDayFormat.format(new Date(value));
+ const calendarDay=(value:Date)=>Date.UTC(value.getFullYear(),value.getMonth(),value.getDate());
+ const age=(value:string)=>Math.round((calendarDay(new Date())-calendarDay(new Date(value)))/86400000);
+ const dateLabel=(value:string)=>{
+  const days=age(value);
+  if(days===0)return 'Today';
+  if(days===1)return 'Yesterday';
+  return date(value)+(days>1?' · '+days+' days ago':'');
+ };
+ const previewTime=(value:string)=>{
+  const days=age(value);
+  return days===0?time(value):days===1?'Yesterday':days>1?days+' days ago':listDayFormat.format(new Date(value));
+ };
+ const fullTime=(value:string)=>date(value)+' · '+time(value);
+ const mediaURL=(id:number)=>'/api/chat/attachments/'+id;
+ const fileSize=(size:number)=>size>=1024*1024?(size/(1024*1024)).toFixed(1)+' MB':Math.max(1,Math.ceil(size/1024))+' KB';
  const initial=(name:string)=>name.trim().split(/\s+/).filter(Boolean).slice(0,2).map(part=>Array.from(part)[0]).join('').toUpperCase();
 
  function fitViewport(node:HTMLElement){
@@ -66,6 +88,25 @@
    viewport.removeEventListener('scroll',resize);
    window.removeEventListener('resize',resize);
   }};
+ }
+
+ function watchForms(node:HTMLElement){
+  let frame=0;
+  const check=()=>{
+   frame=0;
+   const covered=Array.from(document.querySelectorAll<HTMLElement>(blockingSurfaces)).some(element=>
+    !node.contains(element)&&!!element.getClientRects().length&&getComputedStyle(element).visibility!=='hidden'
+   );
+   if(covered===blocked)return;
+   blocked=covered;
+   if(covered){settings=null;menu=false;cancelSpeech();cancelTranslation();stopTyping();}
+   else if(opened&&selected)void loadThread(selected,true);
+  };
+  const schedule=()=>{if(!frame)frame=requestAnimationFrame(check);};
+  const changes=new MutationObserver(schedule);
+  changes.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['open','hidden','aria-modal','aria-hidden','role','class','style']});
+  check();
+  return {destroy(){changes.disconnect();cancelAnimationFrame(frame);}};
  }
 
  function saveWindow(){
@@ -100,6 +141,7 @@
    disposed=true;
    clearTimeout(typingTimer);
    pollController.abort();
+   cancelSpeech();cancelTranslation();
    window.removeEventListener('focus',attended);
    document.removeEventListener('visibilitychange',attended);
   };
@@ -118,7 +160,7 @@
     disconnected=false;wait=1000;
     // A periodic reconciliation also covers presence expiration and Redis restarts.
     if(update.event==='chat:typing_indicator'&&!recovered){
-     if(opened&&selected)void loadTyping(selected);
+     if(opened&&!blocked&&selected)void loadTyping(selected);
     }else void refresh(true);
    }catch{
     if(disposed)return;
@@ -137,7 +179,7 @@
    if(disposed)return;
    threads=response.conversations;
    total=response.unread;
-   if(withThread&&opened&&selected)await loadThread(selected,true);
+   if(withThread&&opened&&!blocked&&selected)await loadThread(selected,true);
   }catch(e){
    if(!disposed){error=errorText(e);disconnected=true;}
   }finally{
@@ -148,7 +190,8 @@
 
  function selectThread(id:number){
   if(selected!==id){
-   stopTyping();
+   stopTyping();cancelSpeech();cancelTranslation();
+   picked=[];translated={};draftOriginal='';draftKannada='';
    threadGeneration++;details=null;messages=[];members=[];typing=[];draft='';menu=false;
    latestRead=0;reading=0;visibleSince='';selected=id;composeError='';
   }
@@ -203,7 +246,7 @@
 
  async function readVisible(){
   const id=selected;const last=messages.at(-1)?.id;
-  if(!id||details!==id||!last||last<=Math.max(latestRead,reading)||!opened||!mobileThread||document.hidden||!document.hasFocus()||
+  if(!id||details!==id||!last||last<=Math.max(latestRead,reading)||!opened||blocked||!mobileThread||document.hidden||!document.hasFocus()||
     !messageArea||messageArea.scrollHeight-messageArea.scrollTop-messageArea.clientHeight>80)return;
   reading=last;
   try{
@@ -247,16 +290,130 @@
   typingThread=null;lastTyping=0;
  }
 
+ function addFiles(files:File[]){
+  const total=(entries:File[])=>entries.reduce((sum,file)=>sum+file.size,0);
+  const valid=files.filter(file=>file.size>0);
+  if(valid.length!==files.length)composeError='Empty files cannot be sent.';
+  const next=[...picked,...valid];
+  if(next.length>maxFiles||total(next)>maxMedia){
+   composeError='Attach up to five files and 12 MB total.';
+   return;
+  }
+  picked=next;
+  if(valid.length===files.length)composeError='';
+ }
+ function paste(event:ClipboardEvent){
+  const files=Array.from(event.clipboardData?.files??[]);
+  if(!files.length||sending)return;
+  event.preventDefault();
+  addFiles(files);
+  const text=event.clipboardData?.getData('text/plain');
+  if(text&&composer){
+   const start=composer.selectionStart,end=composer.selectionEnd;
+   const insertion=text.slice(0,Math.max(0,4000-draft.length+end-start));
+   draft=draft.slice(0,start)+insertion+draft.slice(end);
+   void tick().then(()=>composer?.setSelectionRange(start+insertion.length,start+insertion.length));
+  }
+ }
+ function registerMessage(node:HTMLElement,id:number){
+  messageNodes.set(id,node);
+  return {destroy(){messageNodes.delete(id);}};
+ }
+
+ function cancelSpeech(){
+  clearTimeout(speechTimer);
+  const current=speech;
+  speech=undefined;dictating=false;
+  current?.abort();
+ }
+ function toggleDictation(){
+  if(speech){speech.stop();return;}
+  composeError='';
+  try{
+   const current=createChatRecognition(),target=selected;
+   speech=current;
+   current.onresult=event=>{
+    if(speech!==current||selected!==target||blocked)return;
+    const words:string[]=[];
+    for(let i=event.resultIndex;i<event.results.length;i++){
+     if(event.results[i].isFinal)words.push(event.results[i][0].transcript.trim());
+    }
+    if(words.length)draft=[draft.trimEnd(),words.join(' ')].filter(Boolean).join(' ').slice(0,4000);
+   };
+   current.onerror=event=>{
+    if(speech!==current)return;
+    if(event.error!=='aborted')composeError=event.error==='not-allowed'||event.error==='service-not-allowed'
+     ?'Allow microphone access in your browser to use voice typing.'
+     :event.error==='no-speech'?'No speech was detected. Try again.':'Voice typing is unavailable. Check your microphone and try again.';
+   };
+   current.onend=()=>{
+    if(speech===current){speech=undefined;dictating=false;clearTimeout(speechTimer);}
+   };
+   current.start();dictating=true;
+   speechTimer=setTimeout(()=>{if(speech===current)current.stop();},60000);
+  }catch(e){
+   cancelSpeech();composeError=errorText(e);
+  }
+ }
+
+ function cancelTranslation(){
+  translationTask?.abort();translationTask=undefined;
+  translating=false;translationStatus='';
+ }
+ async function translate(message?:Message){
+  if(translating||dictating)return;
+  const target=selected,original=draft;
+  let source=message?.body??original;
+  if(message){
+   const element=messageNodes.get(message.id),selection=window.getSelection();
+   if(element&&selection?.anchorNode&&selection.focusNode&&element.contains(selection.anchorNode)&&element.contains(selection.focusNode)){
+    source=selection.toString().trim()||source;
+   }
+  }
+  if(!source.trim())return;
+  const task=new AbortController();
+  translationTask=task;translating=true;translationStatus='Preparing Kannada translation…';composeError='';
+  try{
+   const result=await translateKannada(source,task.signal,progress=>{
+    if(translationTask===task)translationStatus=progress<100?'Preparing Kannada · '+progress+'%':'Translating to Kannada…';
+   });
+   if(disposed||blocked||selected!==target||translationTask!==task)return;
+   if(!result)throw new Error('The translation returned no text. Try again.');
+   if(message)translated={...translated,[message.id]:result};
+   else if(draft!==original){
+    translationStatus='Your draft changed. Select Kannada again to translate the latest text.';
+    return;
+   }else if(result.length>4000){throw new Error('The Kannada translation is too long. Shorten the draft and try again.');}
+   else{draftOriginal=original;draftKannada=result;draft=result;void tick().then(()=>composer?.focus());}
+   translationStatus='';
+  }catch(e){
+   if(translationTask===task){composeError=errorText(e);translationStatus='';}
+  }finally{
+   if(translationTask===task){translating=false;translationTask=undefined;}
+  }
+ }
+
  async function send(event?:Event){
   event?.preventDefault();
-  const id=selected,body=draft.trim();
-  if(!id||!body||sending)return;
-  if(pendingMessage?.thread!==id||pendingMessage.body!==body)pendingMessage={thread:id,body,id:crypto.randomUUID()};
+  const id=selected,body=draft.trim(),files=picked;
+  if(!id||(!body&&!files.length)||sending||dictating||translating)return;
+  if(pendingMessage?.thread!==id||pendingMessage.body!==body||pendingMessage.files!==files){
+   pendingMessage={thread:id,body,files,id:crypto.randomUUID()};
+  }
   sending=true;composeError='';
   try{
-   await api(url(id)+'/messages',{message:body,client_id:pendingMessage.id});
+   let payload:FormData|{message:string;client_id:string}={message:body,client_id:pendingMessage.id};
+   if(files.length){
+    const upload=new FormData();
+    upload.set('client_id',pendingMessage.id);upload.set('message',body);
+    for(const file of files)upload.append('files',file);
+    payload=upload;
+   }
+   await api(url(id)+'/messages',payload);
    if(disposed||selected!==id)return;
    if(draft.trim()===body)draft='';
+   if(picked===files)picked=[];
+   draftOriginal='';draftKannada='';
    pendingMessage=undefined;stopTyping();
    await loadThread(id);
    if(messageArea)messageArea.scrollTop=messageArea.scrollHeight;
@@ -300,11 +457,11 @@
   void tick().then(()=>searchInput?.focus());
  }
  function hide(){
-  opened=false;settings=null;menu=false;stopTyping();saveWindow();
+  opened=false;settings=null;menu=false;cancelSpeech();cancelTranslation();stopTyping();saveWindow();
   void tick().then(()=>tray?.focus());
  }
  function backToList(){
-  mobileThread=false;stopTyping();menu=false;saveWindow();
+  mobileThread=false;cancelSpeech();cancelTranslation();stopTyping();menu=false;saveWindow();
   void tick().then(()=>searchInput?.focus());
  }
  function showDialog(node:HTMLDialogElement){
@@ -365,9 +522,9 @@
  const dialogTitle=$derived(settings==='new'?'New group':settings==='group'?'Group settings':settings==='email'?'Email notifications':settings==='clear'?'Clear chat from your view?':thread?.kind==='group'?'Leave this group?':'Hide this conversation?');
 </script>
 
-<svelte:window onkeydown={(event)=>{if(event.key==='Escape'&&opened&&!settings)menu?menu=false:hide();}}/>
+<svelte:window onkeydown={(event)=>{if(event.key==='Escape'&&opened&&!blocked&&!settings)menu?menu=false:hide();}}/>
 
-<div class="erp-chat-root" use:fitViewport>
+<div class="erp-chat-root" use:fitViewport use:watchForms hidden={blocked} inert={blocked}>
  {#if !opened}
   <button class="chat-launch" type="button" bind:this={tray} onclick={show} aria-label={total?'Open ERP chat, '+total+' unread':'Open ERP chat'} title="ERP chat">
    <MessageCircle size={22}/><span>Chat</span>{#if total}<b class="chat-count">{total>99?'99+':total}</b>{/if}
@@ -396,7 +553,7 @@
        <button type="button" class="chat-thread" class:active={selected===item.id&&mobileThread} aria-current={selected===item.id&&mobileThread?'true':undefined} onclick={()=>selectThread(item.id)}>
         <span class="chat-avatar" class:group={item.kind==='group'} aria-hidden="true">{#if item.kind==='group'}<Users size={17}/>{:else}{initial(item.name)}<i class:online={item.online}></i>{/if}</span>
         <span class="chat-thread-text"><strong>{item.name}</strong><span>{item.preview||item.department||'Group conversation'}</span></span>
-        <span class="chat-thread-meta">{#if item.created_at}<time datetime={item.created_at}>{previewTime(item.created_at)}</time>{/if}{#if item.unread}<b class="chat-count" aria-label={item.unread+' unread'}>{item.unread>99?'99+':item.unread}</b>{/if}</span>
+        <span class="chat-thread-meta">{#if item.created_at}<time datetime={item.created_at} title={fullTime(item.created_at)} aria-label={fullTime(item.created_at)}>{previewTime(item.created_at)}</time>{/if}{#if item.unread}<b class="chat-count" aria-label={item.unread+' unread'}>{item.unread>99?'99+':item.unread}</b>{/if}</span>
        </button>
       {/each}
       {#if q.trim()}
@@ -425,14 +582,40 @@
       <div class="chat-feed" bind:this={messageArea} onscroll={()=>void readVisible()} aria-label="Messages">
        {#if hasOlder}<button class="chat-older" type="button" onclick={loadOlder} disabled={loadingOlder}>{loadingOlder?'Loading…':'Load older messages'}</button>{/if}
        {#each messages as message,index (message.id)}
-        {#if index===0||date(messages[index-1].created_at)!==date(message.created_at)}<div class="chat-day">{dateLabel(message.created_at)}</div>{/if}
+        {#if index===0||date(messages[index-1].created_at)!==date(message.created_at)}<div class="chat-day" title={date(message.created_at)}>{dateLabel(message.created_at)}</div>{/if}
         {#if message.kind==='system'}
          <p class="chat-system">{message.body}</p>
         {:else}
          <article class="chat-message" class:mine={message.sender_id===userId}>
           {#if message.sender_id!==userId&&thread.kind==='group'}<div class="chat-sender"><b>{message.name}</b> · {message.department}</div>{/if}
-          <p>{message.body}</p>
-          <div class="chat-meta"><time datetime={message.created_at}>{time(message.created_at)}</time>
+          {#if message.body}<p use:registerMessage={message.id}>{message.body}</p>{/if}
+          {#each message.attachments??[] as attachment (attachment.id)}
+           {#if attachment.kind==='image'}
+            <a class="chat-image" href={mediaURL(attachment.id)} target="_blank" rel="noopener" title={'Open '+attachment.name}>
+             <img src={mediaURL(attachment.id)} alt={attachment.name} loading="lazy" decoding="async"/>
+            </a>
+           {:else if attachment.kind==='video'}
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video class="chat-video" controls playsinline preload="none" src={mediaURL(attachment.id)} aria-label={attachment.name}></video>
+           {:else if attachment.kind==='audio'}
+            <audio class="chat-audio" controls preload="none" src={mediaURL(attachment.id)} aria-label={attachment.name}></audio>
+           {/if}
+           <a class="chat-file" href={mediaURL(attachment.id)+'?download=1'} download={attachment.name} data-sveltekit-preload-data="off" aria-label={'Download '+attachment.name} title={attachment.name}>
+            <FileText size={16}/><span>{attachment.name}<small>{fileSize(attachment.size)}</small></span><Download size={15}/>
+           </a>
+          {/each}
+          {#if translated[message.id]}
+           <div class="chat-translated"><b>ಕನ್ನಡ</b><p lang="kn">{translated[message.id]}</p></div>
+          {/if}
+          <div class="chat-meta">
+           {#if message.body}
+            <button class="chat-message-translate" type="button" aria-label={translated[message.id]?'Hide Kannada translation':'Translate message to Kannada'} title={translated[message.id]?'Hide Kannada translation':'Translate message to Kannada'} disabled={translating||dictating}
+             onpointerdown={event=>event.preventDefault()}
+             onclick={()=>{if(translated[message.id]){const rest={...translated};delete rest[message.id];translated=rest;}else void translate(message);}}>
+             <Languages size={14}/>
+            </button>
+           {/if}
+           <time datetime={message.created_at} title={fullTime(message.created_at)}>{time(message.created_at)}</time>
            {#if message.sender_id===userId}
             <span class:chat-read={message.read_count>0} title={message.read_count?(thread.kind==='group'?'Read by '+message.read_count:'Read'):'Sent'} aria-label={message.read_count?'Read':'Sent'}>{#if message.read_count}<CheckCheck size={14}/>{:else}<Check size={14}/>{/if}</span>
            {/if}
@@ -443,9 +626,28 @@
       </div>
       <div class="chat-typing" aria-live="polite">{#if typing.length}{typing.map(person=>person.name).join(', ')} {typing.length===1?'is':'are'} typing…{/if}</div>
       {#if composeError}<p class="chat-compose-error" role="alert">{composeError}</p>{/if}
+      {#if picked.length}
+       <div class="chat-pending" aria-label="Files to send">
+        {#each picked as file,index}
+         <div><FileText size={14}/><span title={file.name}>{file.name}</span><button class="chat-icon" type="button" aria-label={'Remove '+file.name} disabled={sending} onclick={()=>picked=picked.filter((_,i)=>i!==index)}><X size={14}/></button></div>
+        {/each}
+       </div>
+      {/if}
+      {#if dictating||translationStatus||draftOriginal&&draft===draftKannada}
+       <div class="chat-composer-status" aria-live="polite">
+        {#if dictating}<span>Listening…</span>{:else if translationStatus}<span>{translationStatus}</span>
+        {:else}<button type="button" onclick={()=>{draft=draftOriginal;draftOriginal='';draftKannada='';}}>Undo translation</button>{/if}
+       </div>
+      {/if}
       <form class="chat-composer" onsubmit={send}>
-       <textarea bind:this={composer} bind:value={draft} rows="1" maxlength="4000" placeholder="Write a message" aria-label="Write a message" oninput={onType} onkeydown={(event)=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void send(event);}}></textarea>
-       <button type="submit" class="chat-primary chat-send" aria-label="Send message" disabled={!draft.trim()||sending||details!==selected}><Send size={18}/></button>
+       <input type="file" bind:this={fileInput} multiple hidden onchange={event=>{const input=event.currentTarget;addFiles(Array.from(input.files??[]));input.value='';}}/>
+       <textarea bind:this={composer} bind:value={draft} rows="1" maxlength="4000" placeholder="Write a message" aria-label="Write a message" onpaste={paste} oninput={onType} onkeydown={(event)=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void send(event);}}></textarea>
+       <div class="chat-composer-tools">
+        <button type="button" class="chat-icon" title="Attach photos or files" aria-label="Attach photos or files" disabled={sending} onclick={()=>fileInput?.click()}><Paperclip size={18}/></button>
+        <button type="button" class="chat-icon" class:chat-listening={dictating} aria-pressed={dictating} title={dictating?'Stop voice typing':'Voice to text'} aria-label={dictating?'Stop voice typing':'Voice to text'} disabled={sending||translating} onclick={toggleDictation}>{#if dictating}<Square size={16}/>{:else}<Mic size={18}/>{/if}</button>
+        <button type="button" class="chat-icon" title="Translate draft to Kannada" aria-label="Translate draft to Kannada" disabled={!draft.trim()||translating||dictating||sending} onclick={()=>translate()}><Languages size={18}/></button>
+        <button type="submit" class="chat-primary chat-send" aria-label="Send message" disabled={(!draft.trim()&&!picked.length)||sending||dictating||translating||details!==selected}><Send size={18}/></button>
+       </div>
       </form>
      {:else}
       <div class="chat-empty chat-start"><MessageCircle size={30}/><h2>{loadingMessage?'Opening conversation…':'Select a conversation'}</h2></div>

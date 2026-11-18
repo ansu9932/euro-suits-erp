@@ -27,10 +27,14 @@ function once<T>(key:string,work:()=>Promise<T>):Promise<T>{
 }
 export function api(path:string,body?:unknown,method='POST'):Promise<any>{
  const verb=body===undefined?'GET':method;
- const json=body===undefined?undefined:JSON.stringify(body);
- const identity=csrf+':'+verb+':'+path+':'+(json||'');
+ const form=body instanceof FormData?body:undefined;
+ const json=body===undefined||form?undefined:JSON.stringify(body);
+ const identity=csrf+':'+verb+':'+path+':'+(form?.get('client_id')||json||'');
  return once(identity,async()=>{
-  const response=await fetch('/api'+path,{method:verb,credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':actionID(identity)},body:json}).catch(e=>{reportClientIssue('network');throw e});
+  const response=await fetch('/api'+path,{method:verb,credentials:'same-origin',headers:body===undefined?{}:{
+   ...(form?{}:{'Content-Type':'application/json'}),
+   'X-CSRF-Token':csrf,'Idempotency-Key':actionID(identity)
+  },body:form??json}).catch(e=>{reportClientIssue('network');throw e});
   const data=await response.json().catch(()=>{throw new Error('The server response was interrupted. Refresh to check whether the action finished.');});
   if(response.status<500&&data.code!=='action_already_submitted')uncertain.delete(identity);
   if(!response.ok){if(response.status===401&&path!=='/login'&&path!=='/login/otp'&&typeof window!=='undefined')window.dispatchEvent(new Event('erp:session-expired'));throw Object.assign(new Error(data.error||'Request failed.'),{status:response.status,code:data.code,fields:data.fields});}
