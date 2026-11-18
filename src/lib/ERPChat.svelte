@@ -16,7 +16,13 @@
  type EmailMode='immediate'|'offline_delay'|'off';
 
  const maxFiles=5,maxMedia=12*1024*1024;
- const blockingSurfaces='dialog[open],[aria-modal="true"],[role="dialog"],.drawer-backdrop,.sample-overlay,.company-modal-backdrop,.company-editor,.enquiry-editor,.ex-editor,.sp-editor,.wa-editor,.capacity-editor';
+ const blockingSurfaces=[
+  'dialog[open]','[aria-modal="true"]','[role="dialog"]',
+  '.drawer-backdrop','.sample-overlay','.company-modal-backdrop',
+  '.company-editor','.material-detail','#enquiry-detail-title','#export-task-title',
+  '.enquiry-editor','.ex-editor','.sp-editor','.wa-editor','.capacity-editor',
+  '.cancel-plan','.wa-replies__recipient'
+ ].join(',');
  let {userId}:{userId:number}=$props();
  let blocked=$state(false),picked=$state<File[]>([]),fileInput=$state<HTMLInputElement>();
  let dictating=$state(false),speech:Recognition|undefined,speechTimer:ReturnType<typeof setTimeout>;
