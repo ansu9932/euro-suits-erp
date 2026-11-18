@@ -28,7 +28,7 @@
  let {userId}:{userId:number}=$props();
  let blocked=$state(false),picked=$state<File[]>([]),fileInput=$state<HTMLInputElement>();
  let translating=$state(false),translationStatus=$state(''),translationTask:AbortController|undefined;
- let draftOriginal=$state(''),draftTranslation=$state(''),translated=$state<Record<number,{text:string;language:LocalLanguage}>>({});
+ let translated=$state<Record<number,{text:string;language:LocalLanguage}>>({});
  let messageNodes=new Map<number,HTMLElement>();
  let uploadProgress=$state<number|null>(null);
  let opened=$state(false),expanded=$state(false),mobileThread=$state(false);
@@ -199,7 +199,7 @@
  function selectThread(id:number){
   if(selected!==id){
    stopTyping();cancelTranslation();
-   picked=[];translated={};draftOriginal='';draftTranslation='';
+   picked=[];translated={};
    threadGeneration++;details=null;messages=[];members=[];typing=[];draft='';menu=false;
    latestRead=0;reading=0;visibleSince='';selected=id;composeError='';
   }
@@ -338,28 +338,17 @@
    return true;
   }});
  }
- function openChatLanguages(){
-  const conversation=selected,original=draft;
-  languagePanel.set({mode:'text',text:draft,apply:result=>{
-   if(result.length>4000||disposed||sending||!opened||!conversation||conversation!==selected||draft!==original)return false;
-   draftOriginal=draft;draftTranslation=result;draft=result;
-   return true;
-  }});
- }
-
  function cancelTranslation(){
   translationTask?.abort();translationTask=undefined;
   translating=false;translationStatus='';
  }
- async function translate(message?:Message){
+ async function translate(message:Message){
   if(translating)return;
-  const target=selected,original=draft,language=$languagePreferences.translation,name=languageNames[language];
-  let source=message?.body??original;
-  if(message){
-   const element=messageNodes.get(message.id),selection=window.getSelection();
-   if(element&&selection?.anchorNode&&selection.focusNode&&element.contains(selection.anchorNode)&&element.contains(selection.focusNode)){
-    source=selection.toString().trim()||source;
-   }
+  const target=selected,language=$languagePreferences.translation,name=languageNames[language];
+  let source=message.body;
+  const element=messageNodes.get(message.id),selection=window.getSelection();
+  if(element&&selection?.anchorNode&&selection.focusNode&&element.contains(selection.anchorNode)&&element.contains(selection.focusNode)){
+   source=selection.toString().trim()||source;
   }
   if(!source.trim())return;
   const task=new AbortController();
@@ -370,12 +359,7 @@
    });
    if(disposed||blocked||selected!==target||translationTask!==task)return;
    if(!result)throw new Error('The translation returned no text. Try again.');
-   if(message)translated={...translated,[message.id]:{text:result,language}};
-   else if(draft!==original){
-    translationStatus='Your draft changed. Select Translate again to use the latest text.';
-    return;
-   }else if(result.length>4000){throw new Error('The translation is too long. Shorten the draft and try again.');}
-   else{draftOriginal=original;draftTranslation=result;draft=result;void tick().then(()=>composer?.focus());}
+   translated={...translated,[message.id]:{text:result,language}};
    translationStatus='';
   }catch(e){
    if(translationTask===task){composeError=errorText(e);translationStatus='';}
@@ -406,7 +390,6 @@
    if(disposed||selected!==id)return;
    if(draft.trim()===body)draft='';
    if(picked===files)picked=[];
-   draftOriginal='';draftTranslation='';
    pendingMessage=undefined;stopTyping();
    if(sent.message&&details===id){
     if(!messages.some(message=>message.id===sent.id))messages=[...messages,sent.message].sort((left,right)=>left.id-right.id);
@@ -530,7 +513,6 @@
    <header class="chat-top">
     <div><MessageCircle size={19}/><strong>ERP chat</strong>{#if total}<span class="chat-count" aria-label={total+' unread'}>{total>99?'99+':total}</span>{/if}</div>
     <div>
-     <button type="button" class="chat-icon" title="Language tools" aria-label="Open chat language tools" onclick={openChatLanguages}><Languages size={18}/></button>
      <button type="button" class="chat-icon" title="Email notifications" aria-label="Email notifications" onclick={()=>configure('email')}><Bell size={18}/></button>
      <button type="button" class="chat-icon chat-resize" aria-label={expanded?'Use compact size':'Expand chat'} title={expanded?'Use compact size':'Expand chat'} onclick={()=>{expanded=!expanded;saveWindow();}}>{#if expanded}<Minimize2 size={18}/>{:else}<Maximize2 size={18}/>{/if}</button>
      <button type="button" class="chat-icon" aria-label="Collapse chat" title="Collapse chat" onclick={hide}><ChevronDown size={21}/></button>
@@ -630,11 +612,10 @@
         {/each}
        </div>
       {/if}
-      {#if uploadProgress!==null||translationStatus||draftOriginal&&draft===draftTranslation}
+      {#if uploadProgress!==null||translationStatus}
        <div class="chat-composer-status" aria-live="polite">
         {#if uploadProgress!==null}<span>{uploadProgress<100?'Uploading · '+uploadProgress+'%':'Saving attachment…'}</span>
-        {:else if translationStatus}<span>{translationStatus}</span>
-        {:else}<button type="button" onclick={()=>{draft=draftOriginal;draftOriginal='';draftTranslation='';}}>Undo translation</button>{/if}
+        {:else}<span>{translationStatus}</span>{/if}
        </div>
       {/if}
       <form class="chat-composer" onsubmit={send}>
@@ -643,7 +624,6 @@
        <div class="chat-composer-tools">
         <button type="button" class="chat-icon" title="Attach photos or files" aria-label="Attach photos or files" disabled={sending} onclick={()=>fileInput?.click()}><Paperclip size={18}/></button>
         <button type="button" class="chat-icon" title="Voice to English" aria-label="Voice to English" disabled={sending||translating} onclick={dictate}><Mic size={18}/></button>
-        <button type="button" class="chat-icon" title={'Translate draft to '+languageNames[$languagePreferences.translation]} aria-label={'Translate draft to '+languageNames[$languagePreferences.translation]} disabled={!draft.trim()||translating||sending} onclick={()=>translate()}><Languages size={18}/></button>
         <button type="submit" class="chat-primary chat-send" aria-label="Send message" disabled={(!draft.trim()&&!picked.length)||sending||translating||details!==selected}><Send size={18}/></button>
        </div>
       </form>

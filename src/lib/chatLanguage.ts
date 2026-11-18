@@ -1,12 +1,12 @@
-export type Language='en'|'kn'|'ta';
+export type Language='en'|'kn'|'te';
 export type LocalLanguage=Exclude<Language,'en'>;
-export const languageNames={en:'English',kn:'Kannada',ta:'Tamil'} as const;
-export const localNames={kn:'ಕನ್ನಡ',ta:'தமிழ்'} as const;
-export const localLanguages=['kn','ta'] as const;
+export const languageNames={en:'English',kn:'Kannada',te:'Telugu'} as const;
+export const localNames={kn:'ಕನ್ನಡ',te:'తెలుగు'} as const;
+export const localLanguages=['kn','te'] as const;
 export const speechLanguages=['en',...localLanguages] as const;
-export const isLocalLanguage=(value:unknown):value is LocalLanguage=>value==='kn'||value==='ta';
+export const isLocalLanguage=(value:unknown):value is LocalLanguage=>value==='kn'||value==='te';
 export const isSpeechLanguage=(value:unknown):value is Language=>value==='en'||isLocalLanguage(value);
-const speechTags={en:'en-IN',kn:'kn-IN',ta:'ta-IN'} as const;
+const speechTags={en:'en-IN',kn:'kn-IN',te:'te-IN'} as const;
 
 type TranslationProgress=Event&{loaded:number};
 type TranslatorEngine={

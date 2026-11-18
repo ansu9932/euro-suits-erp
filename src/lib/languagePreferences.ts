@@ -10,7 +10,9 @@ let active=0,revision=0,sequence=Promise.resolve();
 
 function read(value:unknown):Preferences|null{
  if(!value||typeof value!=='object')return null;
- const {translation,speech}=value as Record<string,unknown>;
+ const saved=value as Record<string,unknown>;
+ const translation=saved.translation==='ta'?'te':saved.translation;
+ const speech=saved.speech==='ta'?'te':saved.speech;
  return isLocalLanguage(translation)&&isSpeechLanguage(speech)?{translation,speech}:null;
 }
 
