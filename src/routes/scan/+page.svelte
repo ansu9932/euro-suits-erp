@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount, tick} from 'svelte';
- import {Camera, Check, Clock3, ScanLine} from '@lucide/svelte';
+ import {Camera, Check, Clock3, ScanLine, X} from '@lucide/svelte';
  import DocumentScanCrop from '$lib/DocumentScanCrop.svelte';
  import {applyDocumentCrop} from '$lib/applyDocumentCrop';
  import {fitDocumentPhoto, jpeg, pageBudgets, reviewPhoto} from '$lib/documentScanImage';
@@ -16,6 +16,8 @@
  let interval: ReturnType<typeof setInterval>;
  let stream: MediaStream | undefined;
  let video = $state<HTMLVideoElement>(null!), nativeInput = $state<HTMLInputElement>(null!), photoInput = $state<HTMLInputElement>(null!);
+ let cameraDialog = $state<HTMLDialogElement>();
+ let cameraReady = $state(false);
  let work: XMLHttpRequest | undefined;
  let disposed = false;
  let cropController: AbortController | undefined;
@@ -26,10 +28,21 @@
  let remaining = $state(0), camera = $state(false), requesting = $state(false);
  let cameraFallback = $state(false);
  let processing = $state(false), submitting = $state(false), sent = $state(false), closed = $state(false);
- let progress = $state(0), status = $state(''), error = $state(''), previewRatio = $state('4 / 3');
+ let progress = $state(0), status = $state(''), error = $state(''), previewRatio = $state(4 / 3);
  let pages = $state.raw<PagePhoto[]>([]);
  const limit = $derived(session?.format === 'jpeg' ? 1 : 50);
  const canCapture = $derived(!review && !processing && !submitting && !closed && pages.length < limit);
+
+ $effect(() => {
+  const dialog = cameraDialog;
+  if (!dialog) return;
+  if (review) {
+   if (dialog.open) dialog.close();
+  } else if (!dialog.open) {
+   dialog.showModal();
+   if (video?.srcObject) void video.play().catch(() => {});
+  }
+ });
 
  function updateClock() {
   remaining = expires - Date.now();
@@ -78,6 +91,7 @@
  function stopCamera() {
   for (const track of stream?.getTracks() ?? []) track.stop();
   stream = undefined;
+  cameraReady = false;
   camera = false;
  }
  async function enableCamera() {
@@ -87,8 +101,11 @@
   cameraFallback = false;
   error = '';
   try {
+   const portrait = documents && matchMedia('(orientation: portrait)').matches;
    const feed = await navigator.mediaDevices.getUserMedia({
-    audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: documents ? 3840 : 1920}, height: {ideal: documents ? 2880 : 1440}}
+    audio: false,
+    video: {facingMode: {ideal: 'environment'}, width: {ideal: documents ? portrait ? 2880 : 3840 : 1920},
+     height: {ideal: documents ? portrait ? 3840 : 2880 : 1440}}
    });
    if (disposed || closed || document.hidden) {feed.getTracks().forEach(track => track.stop()); return;}
    stream = feed;
@@ -97,6 +114,7 @@
    if (stream !== feed || !video) return;
    video.srcObject = feed;
    await video.play();
+   if (stream === feed) cameraReady = true;
   } catch {
    stopCamera();
    cameraFallback = true;
@@ -104,6 +122,10 @@
   } finally {
    requesting = false;
   }
+ }
+
+ function sizePreview() {
+  if (video.videoWidth && video.videoHeight) previewRatio = video.videoWidth / video.videoHeight;
  }
 
  async function compress(source: CanvasImageSource, width: number, height: number, target: number) {
@@ -197,6 +219,7 @@
     const result = await applyDocumentCrop(current.blob, corners, controller.signal);
     controller.signal.throwIfAborted();
     add(result.photo, result.thumbnail);
+    if (pages.length === limit) stopCamera();
    }
    releaseReview();
    await nextPhoto();
@@ -334,10 +357,36 @@
       busy={processing} onkeep={reviewAction} onretake={() => void reviewAction()}/>
     {/key}
    {/if}
-   {#if camera}
+   {#if camera && documents}
+    <dialog class="document-camera" bind:this={cameraDialog} aria-label="Full-screen document camera"
+     oncancel={event => {event.preventDefault(); if (!processing) stopCamera();}}>
+     <div class="camera-header">
+      <button class="camera-close" type="button" aria-label="Close camera" disabled={processing} onclick={stopCamera}><X size={22}/></button>
+      <div class="camera-timer" class:urgent={remaining < 60000} role="timer" aria-label={'Time remaining ' + scanCountdown(remaining)}>
+       <Clock3 size={16} aria-hidden="true"/><strong aria-hidden="true">{scanCountdown(remaining)}</strong>
+      </div>
+     </div>
+     <div class="guide-area" style:--feed-ratio={previewRatio} aria-hidden="true">
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <video bind:this={video} autoplay playsinline muted onloadedmetadata={sizePreview} onresize={sizePreview}></video>
+      {#if cameraReady}<div class="page-guide"><i></i><i></i><i></i><i></i></div>{/if}
+     </div>
+     <div class="camera-controls">
+      {#if error}<p class="camera-error" role="alert">{error}</p>{/if}
+      <button class="shutter" type="button" disabled={!cameraReady || !canCapture} onclick={capture}>
+       <Camera size={20} aria-hidden="true"/>{processing ? 'Preparing photo…' : 'Capture page'}
+      </button>
+      {#if pages.length}
+       <button class="camera-review" type="button" disabled={processing} onclick={stopCamera}>
+        Review pages <span aria-label={pages.length + ' captured'}>{pages.length}</span>
+       </button>
+      {/if}
+     </div>
+    </dialog>
+   {:else if camera}
     <div class="viewfinder" hidden={!!review} style:aspect-ratio={previewRatio}>
      <!-- svelte-ignore a11y_media_has_caption -->
-     <video bind:this={video} autoplay playsinline muted onloadedmetadata={() => {if (video.videoWidth && video.videoHeight) previewRatio = video.videoWidth + ' / ' + video.videoHeight;}}></video>
+     <video bind:this={video} autoplay playsinline muted onloadedmetadata={sizePreview} onresize={sizePreview}></video>
      <div class="frame" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     </div>
     {#if !review && pages.length < limit}<button class="primary capture" type="button" disabled={!canCapture} onclick={capture}><Camera size={20}/>{processing ? 'Preparing photo…' : limit === 1 ? 'Capture photo' : 'Capture page'}</button>{/if}
@@ -346,7 +395,7 @@
      {#if cameraFallback}
       <button class="primary" type="button" disabled={!canCapture} onclick={() => nativeInput.click()}><Camera size={20}/>Take photo</button>
      {:else}
-      <button class="primary" type="button" disabled={!canCapture || requesting} onclick={enableCamera}><Camera size={20}/>{requesting ? 'Waiting for permission…' : 'Enable camera'}</button>
+      <button class="primary" type="button" disabled={!canCapture || requesting} onclick={enableCamera}><Camera size={20}/>{requesting ? 'Waiting for permission…' : documents && pages.length ? 'Scan another page' : 'Enable camera'}</button>
      {/if}
      <div class="camera-options">
       {#if documents && !cameraFallback}<button class="quiet" type="button" disabled={!canCapture || requesting} onclick={() => nativeInput.click()}>Use phone camera</button>{/if}
@@ -398,7 +447,71 @@
  .capture {width:100%;margin-top:8px}
  .viewfinder {position:relative;display:grid;place-items:center;width:100%;max-height:min(49dvh,460px);min-height:180px;background:#102436;border-radius:14px;overflow:hidden}
  .viewfinder[hidden] {display:none}
- video {width:100%;height:100%;object-fit:contain}
+ .viewfinder video {width:100%;height:100%;object-fit:contain}
+ .document-camera:not([open]) {display:none}
+ .document-camera {
+  position:fixed;inset:0;box-sizing:border-box;width:100%;height:100dvh;max-width:none;max-height:none;
+  margin:0;padding:0;border:0;border-radius:0;overflow:hidden;background:#102436;color:#fff;
+  display:grid;grid-template-rows:auto minmax(0,1fr) auto;isolation:isolate;
+ }
+ .document-camera::backdrop {background:#102436}
+ .document-camera video {position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+ .camera-header,.camera-controls {position:relative;z-index:1}
+ .camera-header {
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) 5px max(12px,env(safe-area-inset-left));
+  background:linear-gradient(#071723a6,transparent);
+ }
+ .camera-close,.camera-timer,.camera-review {
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 10px;
+  border:1px solid #ffffff70;border-radius:10px;background:#102436eb;color:#fff;
+ }
+ .camera-close {width:44px;padding:0}
+ .camera-timer {font-variant-numeric:tabular-nums}
+ .camera-timer.urgent {background:#79361b}
+ .guide-area {
+  position:relative;display:grid;place-items:center;min-height:0;overflow:hidden;
+  margin:0 env(safe-area-inset-right) 0 env(safe-area-inset-left);container-type:size;
+ }
+ .page-guide {
+  --page-ratio:210 / 297;position:relative;box-sizing:border-box;
+  /* Size the guide from the visible camera image, including when its aspect
+     ratio differs from the phone. Keep the full lens view available. */
+  width:min(calc(100cqw - 12px),calc((100cqh - 12px) * var(--page-ratio)),
+   calc(100cqh * var(--feed-ratio) - 12px),calc((100cqw / var(--feed-ratio) - 12px) * var(--page-ratio)));
+  aspect-ratio:var(--page-ratio);
+  border:1px solid #f2fff68c;border-radius:4px;outline:1px solid #0b252a88;
+ }
+ .page-guide i {position:absolute;width:18px;height:18px;border:3px solid #f6fffc;border-radius:4px}
+ .page-guide i:nth-child(1) {top:-1px;left:-1px;border-right:0;border-bottom:0}
+ .page-guide i:nth-child(2) {top:-1px;right:-1px;border-left:0;border-bottom:0}
+ .page-guide i:nth-child(3) {bottom:-1px;left:-1px;border-right:0;border-top:0}
+ .page-guide i:nth-child(4) {bottom:-1px;right:-1px;border-left:0;border-top:0}
+ .camera-controls {
+  display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;
+  padding:7px max(10px,env(safe-area-inset-right)) max(9px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));
+  background:linear-gradient(transparent,#071723c9);
+ }
+ .shutter {
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
+  padding:7px 14px;border:2px solid #fff;border-radius:24px;background:#fff;color:#102436;
+  font-size:15px;font-weight:800;
+ }
+ .camera-review {padding:0 8px;font-size:13px;font-weight:750}
+ .camera-review span {color:#b6f5e8}
+ .camera-controls button:disabled,.camera-close:disabled {opacity:.64}
+ .camera-controls button:focus-visible,.camera-close:focus-visible {outline:2px solid #b6f5e8;outline-offset:2px}
+ .camera-error {flex-basis:100%;margin:0 auto;text-align:center;color:#fff;font-size:13px;background:#72251f;border-radius:7px;padding:4px}
+ @media (orientation:landscape) {
+  .page-guide {--page-ratio:297 / 210}
+ }
+ @media (orientation:landscape) and (max-height:550px) {
+  .document-camera {grid-template-rows:minmax(0,1fr);grid-template-columns:auto minmax(0,1fr) auto}
+  .camera-header {flex-direction:column;justify-content:space-between;padding:8px 0 8px max(8px,env(safe-area-inset-left));background:none}
+  .camera-controls {flex-direction:column;align-items:stretch;max-width:140px;padding:8px max(8px,env(safe-area-inset-right)) 8px 0;background:none}
+  .shutter {padding:6px 8px;font-size:13px}
+  .guide-area {margin:0}
+ }
  .frame {position:absolute;inset:9% 15%;pointer-events:none}
  .frame i {position:absolute;width:23px;height:23px;border:2px solid #f4fffd;border-radius:5px}
  .frame i:nth-child(1) {left:0;top:0;border-right:0;border-bottom:0}
