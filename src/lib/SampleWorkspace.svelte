@@ -16,7 +16,7 @@
  import {createSampleForm,type SampleFormKind} from './sampleFormPdf';
  import {enter, workspaceMotion} from "./motion";
  import {onMount,tick,untrack} from 'svelte';import SampleCapacity from './SampleCapacity.svelte';import SamplePlanning from './SamplePlanning.svelte';import SamplePlanLedger from './SamplePlanLedger.svelte';import SamplePiece from './SamplePiece.svelte';import SampleReports from './SampleReports.svelte';import {api,uploadTo} from './api';import type {Row} from './types';
- let {companies,company,orders=[],intimationOnly=false,initialView='requests',processView='all',indentProgress=false,initialRequest}:{companies:Row[];company:string;orders:Row[];intimationOnly?:boolean;initialView?:string;processView?:string;indentProgress?:boolean;initialRequest?:number}=$props();
+ let {companies,company,orders=[],intimationOnly=false,initialView='requests',processView='all',indentProgress=false}:{companies:Row[];company:string;orders:Row[];intimationOnly?:boolean;initialView?:string;processView?:string;indentProgress?:boolean}=$props();
  let reminderOpen=$state(false), downloadingIntimations=$state(false);
  async function downloadIntimations(){
   if(downloadingIntimations)return;
@@ -80,7 +80,7 @@
  async function run(work:()=>Promise<void>){if(busy)return;busy=true;error='';notice='';try{await work()}catch(e){error=(e as Error).message;fieldErrors=(e as any).fields||{};await revealErrors()}finally{busy=false}}
  onMount(()=>{
   const finishSignIn=holdDashboardLoad();
-  void run(load).then(()=>{if(initialRequest&&data) return open(initialRequest)}).finally(finishSignIn);
+  void run(load).finally(finishSignIn);
   return finishSignIn;
  });
  function fresh(){fieldErrors={};uploadFailure=null;intake=false;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};if(!company&&companies.length>1){error='Select a workspace company before creating a request.';return}form={company_id:Number(company||companies[0]?.id),buyer_id:'',profile:Object.fromEntries(fields.map(f=>[f[0],f[2]==='date'&&f[0]==='request_date'?new Date().toLocaleDateString('en-CA'):''])),variants:[{size:'',colour:'',quantity:1}],bom:[]}}
