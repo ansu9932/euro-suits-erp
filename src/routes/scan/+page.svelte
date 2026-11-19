@@ -1,9 +1,15 @@
 <script lang="ts">
  import {onMount, tick} from 'svelte';
  import {Camera, Check, Clock3, ScanLine} from '@lucide/svelte';
+ import DocumentScanCrop from '$lib/DocumentScanCrop.svelte';
+ import {applyDocumentCrop} from '$lib/applyDocumentCrop';
+ import {fitDocumentPhoto, jpeg, pageBudgets, reviewPhoto} from '$lib/documentScanImage';
+ import type {Corners} from '$lib/documentScanGeometry';
  import {scanCountdown, scanHeaders, scanResponse, type ScanStatus} from '$lib/phoneScan';
 
  type PagePhoto = {blob: Blob; preview: string};
+ type CropReview = {blob: Blob; url: string; width: number; height: number; corners: Corners | null};
+ type StillCamera = new (track: MediaStreamTrack) => {takePhoto: () => Promise<Blob>};
  const endpoint = '/api/phone-scan/mobile';
  let token = '';
  let expires = 0;
@@ -12,20 +18,26 @@
  let video = $state<HTMLVideoElement>(null!), nativeInput = $state<HTMLInputElement>(null!), photoInput = $state<HTMLInputElement>(null!);
  let work: XMLHttpRequest | undefined;
  let disposed = false;
+ let cropController: AbortController | undefined;
+ let pendingPhotos: File[] = [];
+ let review = $state.raw<CropReview>();
  let session = $state<ScanStatus>();
+ const documents = $derived(session?.format === 'pdf');
  let remaining = $state(0), camera = $state(false), requesting = $state(false);
  let cameraFallback = $state(false);
  let processing = $state(false), submitting = $state(false), sent = $state(false), closed = $state(false);
  let progress = $state(0), status = $state(''), error = $state(''), previewRatio = $state('4 / 3');
  let pages = $state.raw<PagePhoto[]>([]);
  const limit = $derived(session?.format === 'jpeg' ? 1 : 50);
- const canCapture = $derived(!processing && !submitting && !closed && pages.length < limit);
+ const canCapture = $derived(!review && !processing && !submitting && !closed && pages.length < limit);
 
  function updateClock() {
   remaining = expires - Date.now();
   if (remaining <= 0 && !submitting && !sent) {
    closed = true;
    stopCamera();
+   releaseReview();
+   pendingPhotos = [];
   }
  }
 
@@ -56,6 +68,8 @@
    clearInterval(interval);
    document.removeEventListener('visibilitychange', pause);
    stopCamera();
+   releaseReview();
+   pendingPhotos = [];
    work?.abort();
    for (const page of pages) URL.revokeObjectURL(page.preview);
   };
@@ -73,11 +87,14 @@
   cameraFallback = false;
   error = '';
   try {
-   const feed = await navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 1920}, height: {ideal: 1440}}});
+   const feed = await navigator.mediaDevices.getUserMedia({
+    audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: documents ? 3840 : 1920}, height: {ideal: documents ? 2880 : 1440}}
+   });
    if (disposed || closed || document.hidden) {feed.getTracks().forEach(track => track.stop()); return;}
    stream = feed;
    camera = true;
    await tick();
+   if (stream !== feed || !video) return;
    video.srcObject = feed;
    await video.play();
   } catch {
@@ -89,11 +106,6 @@
   }
  }
 
- function encode(canvas: HTMLCanvasElement, quality: number) {
-  return new Promise<Blob>((resolve, reject) => {
-   canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('The photo could not be prepared. Take it again.')), 'image/jpeg', quality);
-  });
- }
  async function compress(source: CanvasImageSource, width: number, height: number, target: number) {
   const canvas = document.createElement('canvas'), context = canvas.getContext('2d', {alpha: false});
   if (!context || !width || !height) throw new Error('The photo could not be opened. Take it again.');
@@ -106,7 +118,7 @@
     context.fillStyle = '#fff';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(source, 0, 0, canvas.width, canvas.height);
-    const blob = await encode(canvas, attempt === 0 ? 0.82 : 0.72);
+    const blob = await jpeg(canvas, attempt === 0 ? 0.82 : 0.72);
     if (blob.size <= target) return blob;
     edge *= 0.78;
    }
@@ -126,15 +138,84 @@
    URL.revokeObjectURL(url);
   }
  }
- function add(blob: Blob) {
+ function add(blob: Blob, thumbnail = blob) {
   if (disposed || closed || pages.length >= limit) return;
-  pages = [...pages, {blob, preview: URL.createObjectURL(blob)}];
+  pages = [...pages, {blob, preview: URL.createObjectURL(thumbnail)}];
  }
+
+ function releaseReview() {
+  cropController?.abort();
+  if (review) URL.revokeObjectURL(review.url);
+  review = undefined;
+ }
+
+ async function openReview(blob: Blob) {
+  const info = await reviewPhoto(blob);
+  if (disposed || closed) return;
+  review = {blob, url: URL.createObjectURL(blob), ...info};
+ }
+
+ async function cameraPhoto(frame: HTMLVideoElement) {
+  const feed = stream?.getVideoTracks()[0];
+  const Still = (window as Window & {ImageCapture?: StillCamera}).ImageCapture;
+  if (Still && feed) {
+   try {return await new Still(feed).takePhoto();}
+   catch { /* The camera stream still supplies a frame. */ }
+  }
+  const canvas = document.createElement('canvas');
+  const scale = Math.min(1, 3600 / Math.max(frame.videoWidth, frame.videoHeight));
+  canvas.width = Math.round(frame.videoWidth * scale);
+  canvas.height = Math.round(frame.videoHeight * scale);
+  const context = canvas.getContext('2d');
+  if (!context || !canvas.width || !canvas.height) throw new Error('Camera is starting. Try again.');
+  try {
+   context.drawImage(frame, 0, 0, canvas.width, canvas.height);
+   return await jpeg(canvas, 0.97);
+  } finally {canvas.width = canvas.height = 0;}
+ }
+
+ async function nextPhoto() {
+  while (!disposed && !closed && pendingPhotos.length && pages.length < limit) {
+   try {
+    await openReview(pendingPhotos.shift()!);
+    return;
+   } catch {
+    error = 'A photo could not be opened. Try taking it with the camera.';
+   }
+  }
+ }
+
+ async function reviewAction(corners?: Corners) {
+  const current = review;
+  if (!current || processing || closed) return;
+  error = '';
+  processing = true;
+  try {
+   if (corners) {
+    const controller = new AbortController();
+    cropController = controller;
+    const result = await applyDocumentCrop(current.blob, corners, controller.signal);
+    controller.signal.throwIfAborted();
+    add(result.photo, result.thumbnail);
+   }
+   releaseReview();
+   await nextPhoto();
+  } catch (reason) {
+   if (!disposed && !closed) error = (reason as Error).message;
+  } finally {
+   cropController = undefined;
+   processing = false;
+  }
+ }
+
  async function capture() {
   if (!canCapture || !video?.videoWidth) return;
   processing = true;
   error = '';
-  try {add(await compress(video, video.videoWidth, video.videoHeight, 280 * 1024));}
+  try {
+   if (documents) await openReview(await cameraPhoto(video));
+   else add(await compress(video, video.videoWidth, video.videoHeight, 280 * 1024));
+  }
   catch (reason) {error = (reason as Error).message;}
   finally {processing = false;}
  }
@@ -147,10 +228,10 @@
   error = '';
   try {
    const capacity = limit - pages.length;
-   for (const photo of files.slice(0, capacity)) {
-    if (disposed || closed) break;
-    add(await fromPhoto(photo, 280 * 1024));
-   }
+   if (documents) {
+    pendingPhotos = files.slice(0, capacity);
+    await nextPhoto();
+   } else add(await fromPhoto(files[0], 280 * 1024));
    if (files.length > capacity) error = 'This scan has reached its photo limit.';
   } catch (reason) {
    error = (reason as Error).message || 'This photo format could not be opened. Take the photo again with the camera.';
@@ -179,7 +260,7 @@
   });
  }
  async function submit() {
-  if (!session || !pages.length || processing || submitting || closed || remaining <= 0) return;
+  if (!session || !pages.length || review || processing || submitting || closed || remaining <= 0) return;
   submitting = true;
   progress = 0;
   error = '';
@@ -188,11 +269,11 @@
   try {
    const form = new FormData();
    const budget = session.maxBytes - (session.format === 'pdf' ? 48 * 1024 : 0);
-   const resize = pages.reduce((total, page) => total + page.blob.size, 0) > budget;
-   const target = Math.floor(budget / pages.length);
-   for (const page of pages) {
+   const targets = pageBudgets(pages.map(page => page.blob.size), budget);
+   for (const [index, page] of pages.entries()) {
     if (disposed) return;
-    const blob = resize && page.blob.size > target ? await fromPhoto(page.blob, target) : page.blob;
+    if (page.blob.size > targets[index]) status = `Preparing page ${index + 1} of ${pages.length}…`;
+    const blob = await fitDocumentPhoto(page.blob, targets[index]);
     form.append('page', blob, 'page.jpg');
    }
    status = 'Sending scan…';
@@ -241,32 +322,41 @@
  {:else}
   <section class="content">
    <div class="intro">
-    <h1>{limit === 1 ? 'Take a photo' : 'Scan documents'}</h1>
+    <h1>{review ? 'Adjust page' : limit === 1 ? 'Take a photo' : 'Scan documents'}</h1>
     <span class="page-count"><span aria-live="polite">{pages.length} of {limit}</span> {limit === 1 ? 'photo' : 'pages'}</span>
    </div>
    <input type="file" accept="image/*" capture="environment" bind:this={nativeInput} onchange={pick} hidden/>
    <input type="file" accept="image/*" multiple={limit > 1} bind:this={photoInput} onchange={pick} hidden/>
 
+   {#if review}
+    {#key review.url}
+     <DocumentScanCrop src={review.url} width={review.width} height={review.height} detected={review.corners}
+      busy={processing} onkeep={reviewAction} onretake={() => void reviewAction()}/>
+    {/key}
+   {/if}
    {#if camera}
-    <div class="viewfinder" style:aspect-ratio={previewRatio}>
+    <div class="viewfinder" hidden={!!review} style:aspect-ratio={previewRatio}>
      <!-- svelte-ignore a11y_media_has_caption -->
      <video bind:this={video} autoplay playsinline muted onloadedmetadata={() => {if (video.videoWidth && video.videoHeight) previewRatio = video.videoWidth + ' / ' + video.videoHeight;}}></video>
      <div class="frame" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     </div>
-    {#if pages.length < limit}<button class="primary capture" type="button" disabled={!canCapture} onclick={capture}><Camera size={20}/>{processing ? 'Preparing photo…' : limit === 1 ? 'Capture photo' : 'Capture page'}</button>{/if}
-   {:else if !submitting && pages.length < limit}
+    {#if !review && pages.length < limit}<button class="primary capture" type="button" disabled={!canCapture} onclick={capture}><Camera size={20}/>{processing ? 'Preparing photo…' : limit === 1 ? 'Capture photo' : 'Capture page'}</button>{/if}
+   {:else if !review && !submitting && pages.length < limit}
     <div class="camera-card">
      {#if cameraFallback}
       <button class="primary" type="button" disabled={!canCapture} onclick={() => nativeInput.click()}><Camera size={20}/>Take photo</button>
      {:else}
       <button class="primary" type="button" disabled={!canCapture || requesting} onclick={enableCamera}><Camera size={20}/>{requesting ? 'Waiting for permission…' : 'Enable camera'}</button>
      {/if}
-     <button class="secondary" type="button" disabled={!canCapture} onclick={() => photoInput.click()}>Choose photos</button>
+     <div class="camera-options">
+      {#if documents && !cameraFallback}<button class="quiet" type="button" disabled={!canCapture || requesting} onclick={() => nativeInput.click()}>Use phone camera</button>{/if}
+      <button class="quiet" type="button" disabled={!canCapture || requesting} onclick={() => photoInput.click()}>Choose photos</button>
+     </div>
     </div>
    {/if}
 
    {#if error}<p class="error" role="alert">{error}</p>{/if}
-   {#if pages.length}
+   {#if pages.length && !review}
     <ol class="pages" aria-label="Captured photos">
      {#each pages as page, index (page.preview)}
       <li><img src={page.preview} alt={'Captured page ' + (index + 1)} loading="lazy" width="110" height="110"/>
@@ -276,7 +366,7 @@
     </ol>
    {/if}
   </section>
-  {#if pages.length}<footer>
+  {#if pages.length && !review}<footer>
    {#if submitting}<div class="progress" role="status"><span>{status}</span>{#if progress > 0}<progress max="100" value={progress} aria-label="Upload progress"></progress>{/if}</div>{/if}
    <button class="primary submit" type="button" disabled={!pages.length || processing || submitting || remaining <= 0} onclick={submit}>{submitting ? 'Submitting…' : limit === 1 ? 'Submit photo' : 'Submit PDF'}</button>
   </footer>{/if}
@@ -297,15 +387,17 @@
  h1 {font-family:Manrope,system-ui,sans-serif;font-size:clamp(26px,6vw,36px);line-height:1.15;letter-spacing:-.035em}
  p {margin-top:8px;color:var(--muted);font-size:16px;line-height:1.45}
  button {touch-action:manipulation}
- .primary,.secondary {display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:9px 13px;border:1px solid transparent;border-radius:10px;font-size:15px;font-weight:750;line-height:1.2}
+ .primary {display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:9px 13px;border:1px solid transparent;border-radius:10px;font-size:15px;font-weight:750;line-height:1.2}
  .primary {background:var(--teal);color:#fff}
  .primary:active:not(:disabled) {background:#07554d}
- .secondary {background:#fff;color:var(--ink);border-color:#c7d9e3}
- .primary:disabled,.secondary:disabled {background:#e6eef2;color:#526b7d;border-color:#d8e5ec;cursor:default}
+ .camera-options {display:flex;justify-content:center;flex-wrap:wrap;gap:8px}
+ .quiet {min-height:44px;padding:6px 10px;background:none;border:0;color:var(--teal);font-size:13px;font-weight:750}
+ .primary:disabled {background:#e6eef2;color:#526b7d;border-color:#d8e5ec;cursor:default}
  .camera-card {display:grid;justify-items:center;gap:8px;padding:16px 12px;background:var(--surface);border:1px solid var(--line);border-radius:15px}
  .state-icon {display:grid;place-items:center;width:58px;height:58px;border-radius:16px;background:#dcefe9;color:var(--teal)}
  .capture {width:100%;margin-top:8px}
  .viewfinder {position:relative;display:grid;place-items:center;width:100%;max-height:min(49dvh,460px);min-height:180px;background:#102436;border-radius:14px;overflow:hidden}
+ .viewfinder[hidden] {display:none}
  video {width:100%;height:100%;object-fit:contain}
  .frame {position:absolute;inset:9% 15%;pointer-events:none}
  .frame i {position:absolute;width:23px;height:23px;border:2px solid #f4fffd;border-radius:5px}
