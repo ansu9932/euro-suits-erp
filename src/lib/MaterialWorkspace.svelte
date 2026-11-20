@@ -1,6 +1,6 @@
 <script lang="ts">
  import PhoneScanButton from './PhoneScanButton.svelte';
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import MerchantMaterialGenerate from "./MerchantMaterialGenerate.svelte";let merchantKind=$state(''),merchantRecord:Row|null=$state(null),materialReview=$state('');
  import {workspaceMotion, enter, referenceFeedback} from "./motion";
  import '../materials.css';

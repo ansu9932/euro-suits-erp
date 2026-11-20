@@ -1,7 +1,7 @@
 <script lang="ts">
  import {onMount, tick} from 'svelte';
  import {ChevronRight, MessageCircle, QrCode, RefreshCw} from '@lucide/svelte';
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {api} from './api';
  import {enter} from './motion';
 

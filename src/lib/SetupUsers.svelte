@@ -1,6 +1,6 @@
 <script lang="ts">
  import {holdDashboardLoad} from './signInTransition';
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {reportingManagerIds,reportingManagerAllowed} from "./reporting";
  import OrganizationTree from "./OrganizationTree.svelte";
  import {Eye,EyeOff} from "@lucide/svelte";

@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {onMount} from 'svelte';import {api} from './api';import type {Row} from './types';
  let {companyID,materials,companies}:{companyID:number;materials:Row[];companies:Row[]}=$props();
  let data:Row=$state({records:[],buyers:[],types:[]}),form:Row|null=$state(null),review:Row|null=$state(null),busy=$state(false),error=$state(''),notice=$state(''),search=$state('');

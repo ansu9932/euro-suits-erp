@@ -1,6 +1,6 @@
 <script lang="ts">
- import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
- import {withFullScreen} from '$lib/loading';
+ import {SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
+ import {withFullScreen} from '#lib/loading.ts';
  import {untrack,onMount} from 'svelte';
  import {api} from './api';
  import {indentReference} from './sampleProcess';

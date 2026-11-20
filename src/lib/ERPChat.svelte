@@ -1,7 +1,7 @@
 <script lang="ts">
  import PhoneScanButton from './PhoneScanButton.svelte';
  import {onMount,tick} from 'svelte';
- import {afterNavigate,replaceState} from '$app/navigation';
+ import {afterNavigate,goto} from '$app/navigation';
  import {page} from '$app/state';
  import {ArrowLeft,Bell,Check,CheckCheck,ChevronDown,Download,FileText,Languages,Maximize2,MessageCircle,Mic,Minimize2,MoreHorizontal,Paperclip,Plus,Search,Send,Square,Users,X} from '@lucide/svelte';
  import {api,csrf} from './api';
@@ -132,7 +132,7 @@
   selectThread(Number(requested));
   const cleaned=new URL(location.href);
   cleaned.searchParams.delete('chat');
-  replaceState(cleaned,page.state);
+  void goto(cleaned, {shallow:true, replace:true, state:page.state});
  }
  afterNavigate(({from,to})=>{
   if(disposed)return;

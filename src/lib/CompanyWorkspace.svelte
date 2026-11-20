@@ -1,8 +1,8 @@
 <script lang="ts">
  import PhoneScanButton from './PhoneScanButton.svelte';
  import {redirectToWorkspace,resumeSignIn} from './signInTransition';
- import {PageLoader, SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
- import SignInShell from '$lib/SignInShell.svelte';
+ import {PageLoader, SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
+ import SignInShell from '#lib/SignInShell.svelte';
  import {companyPortDefaultGroup,setCompanyPortDefault,changeCompanyPort} from './companyPorts';
  import CompanyAddressFields from './CompanyAddressFields.svelte';
  import BusinessFlowSelect from './BusinessFlowSelect.svelte';
@@ -35,8 +35,8 @@
   await goto(path);
  }
  import {Building2,ShieldCheck,FileText,Landmark,Plane,Clock,Plus,ArrowLeft,ArrowRight,Check,LogOut,Download,Upload,Search,Settings,Mail,LockKeyhole,RefreshCw,X,ClipboardCheck} from '@lucide/svelte';
- import {api,uploadTo,day} from '$lib/api';
- import type {Row} from '$lib/types';
+ import {api,uploadTo,day} from '#lib/api.ts';
+ import type {Row} from '#lib/types.ts';
  import '../app.css';import '../company.css';
  let user:Row|null=$state(null),data:Row=$state({companies:[],fields:[],ports:[],reminders:[],types:{}}),selected:Row|null=$state(null),profile:Row=$state({});
  let ready=$state(false),busy=$state(false),error=$state(''),notice=$state(''),username=$state(''),password=$state(''),section=$state('Overview'),search=$state(''),status=$state('All'),local=$state(false),dirty=$state(false);

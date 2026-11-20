@@ -1,6 +1,6 @@
 <script lang="ts">
  import {holdDashboardLoad} from './signInTransition';
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {onMount,tick} from 'svelte';
  import {ArrowLeft,Plus,RefreshCw,Search} from '@lucide/svelte';
  import {api,uploadTo} from './api';

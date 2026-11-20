@@ -1,15 +1,15 @@
 <script lang="ts">
- import {PageLoader} from '$lib/components/loaders';
- import SignInShell from '$lib/SignInShell.svelte';
+ import {PageLoader} from '#lib/components/loaders/index.ts';
+ import SignInShell from '#lib/SignInShell.svelte';
  import {onMount,tick} from 'svelte';
- import {resumeSignIn} from '$lib/signInTransition';
+ import {resumeSignIn} from '#lib/signInTransition.ts';
  import {ArrowLeft, LockKeyhole, LogOut} from '@lucide/svelte';
- import {api} from '$lib/api';
- import {enter} from '$lib/motion';
- import type {User, Row} from '$lib/types';
- import ExportWorkspace from '$lib/ExportWorkspace.svelte';
- import SignInForm from '$lib/SignInForm.svelte';
- import {workspaceRedirect} from '$lib/workspaceAccess';
+ import {api} from '#lib/api.ts';
+ import {enter} from '#lib/motion.ts';
+ import type {User, Row} from '#lib/types.ts';
+ import ExportWorkspace from '#lib/ExportWorkspace.svelte';
+ import SignInForm from '#lib/SignInForm.svelte';
+ import {workspaceRedirect} from '#lib/workspaceAccess.ts';
  import '../../app.css';
  import '../../company.css';
  import '../../dashboard.css';

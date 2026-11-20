@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SpinnerLoader} from '$lib/components/loaders';
+ import {SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {onDestroy} from 'svelte';
  import {enter} from './motion';
  import {indianPIN,lookupPostalAddress,postalSuggestions,type AddressPatch,type PostalLocation} from './postalAddress';

@@ -1,7 +1,7 @@
 <script lang="ts">
  import {redirectToWorkspace,resumeSignIn} from './signInTransition';
- import {PageLoader, SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
- import SignInShell from '$lib/SignInShell.svelte';
+ import {PageLoader, SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
+ import SignInShell from '#lib/SignInShell.svelte';
  import PerformanceWorkspace from "./PerformanceWorkspace.svelte";
  import WhatsAppWorkspace from "./WhatsAppWorkspace.svelte";
  import SidebarToggle from "./SidebarToggle.svelte";

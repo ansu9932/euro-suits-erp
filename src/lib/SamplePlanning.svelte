@@ -1,6 +1,6 @@
 <script lang="ts">
- import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
- import {withFullScreen} from '$lib/loading';
+ import {SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
+ import {withFullScreen} from '#lib/loading.ts';
  import SamplePlanLedger from './SamplePlanLedger.svelte';
  import {indentReference} from './sampleProcess';
  import {untrack} from 'svelte';

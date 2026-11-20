@@ -1,7 +1,7 @@
 <script lang="ts">
  import {onMount} from 'svelte';
  import {RotateCcw, Construction} from '@lucide/svelte';
- import {constructionAnnouncement} from '$lib/motion';
+ import {constructionAnnouncement} from '#lib/motion.ts';
 
  let {paused = false}: {paused?: boolean} = $props();
  let replay = $state(0), reduced = $state(false);

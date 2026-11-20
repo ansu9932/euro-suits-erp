@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import Badge from './Badge.svelte';import {fmt,day} from './api';import type {Row} from './types';import {ChevronRight,Inbox} from '@lucide/svelte';
  let {rows,columns,onopen,empty='No records to show.',loading=false}:{rows:Row[];columns:{key:string;label:string;format?:string}[];onopen?:(r:Row)=>void;empty?:string;loading?:boolean}=$props();
 </script>

@@ -1,7 +1,7 @@
 <script lang="ts">
  import PhoneScanButton from './PhoneScanButton.svelte';
  import {holdDashboardLoad} from './signInTransition';
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {onMount,onDestroy,tick} from 'svelte';
  import {beforeNavigate} from '$app/navigation';
  import {Plus,ArrowLeft,Download,FileText,Search,RefreshCw,Trash2,Paperclip,Check,ChevronRight,Eye} from '@lucide/svelte';

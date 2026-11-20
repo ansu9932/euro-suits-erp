@@ -1,8 +1,8 @@
 <script lang="ts">
  import {redirectToWorkspace,resumeSignIn} from './signInTransition';
- import {PageLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {PageLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import OperationsAccountMenu from './OperationsAccountMenu.svelte';
- import SignInShell from '$lib/SignInShell.svelte';
+ import SignInShell from '#lib/SignInShell.svelte';
  import SidebarToggle from "./SidebarToggle.svelte";
  import {workspaceRedirect} from './workspaceAccess';
  import EnquiryWorkspace from "./EnquiryWorkspace.svelte";
@@ -17,8 +17,8 @@
  let {portal=''}:{portal?:string}=$props();
  import {onMount,tick} from 'svelte';
  import {LayoutDashboard,ClipboardList,CalendarDays,PenTool,Scissors,Factory,PackageCheck,Truck,Warehouse,Users,Building2,ShieldCheck,Settings,Search,Plus,ArrowUpRight,ArrowRight,ChevronDown,LogOut,Download,RefreshCw,Menu,X,Activity,Boxes,ShoppingCart,Layers,Check,Clock,AlertCircle,SlidersHorizontal,LockKeyhole,FileCheck,Shirt} from '@lucide/svelte';
- import {api,fmt,day} from '$lib/api';import type {Dataset,Row,FormSpec,Field,Option} from '$lib/types';
- import FormDialog from '$lib/FormDialog.svelte';import OrderDrawer from '$lib/OrderDrawer.svelte';import Badge from '$lib/Badge.svelte';import DataTable from '$lib/DataTable.svelte';import '../app.css';
+ import {api,fmt,day} from '#lib/api.ts';import type {Dataset,Row,FormSpec,Field,Option} from '#lib/types.ts';
+ import FormDialog from '#lib/FormDialog.svelte';import OrderDrawer from '#lib/OrderDrawer.svelte';import Badge from '#lib/Badge.svelte';import DataTable from '#lib/DataTable.svelte';import '../app.css';
  let blockedUser:Row|null=$state(null);let noAccess=$state(false);
  let enquiryDirty=$state(false);
  let data:Dataset|null=$state(null);let loading=$state(true);let error=$state('');let loginBusy=$state(false);let username=$state('');let password=$state('');let page=$state('Overview');let company=$state('');let search=$state('');let stageFilter=$state('');let form:FormSpec|null=$state(null);let selectedId:number|null=$state(null);let toast=$state('');let mobileNav=$state(false);let refreshing=$state(false);let local=$state(true);

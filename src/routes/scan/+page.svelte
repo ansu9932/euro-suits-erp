@@ -1,11 +1,11 @@
 <script lang="ts">
  import {onMount, tick} from 'svelte';
  import {Camera, Check, Clock3, ScanLine, X} from '@lucide/svelte';
- import DocumentScanCrop from '$lib/DocumentScanCrop.svelte';
- import {applyDocumentCrop} from '$lib/applyDocumentCrop';
- import {fitDocumentPhoto, jpeg, pageBudgets, reviewPhoto} from '$lib/documentScanImage';
- import type {Corners} from '$lib/documentScanGeometry';
- import {scanCountdown, scanHeaders, scanResponse, type ScanStatus} from '$lib/phoneScan';
+ import DocumentScanCrop from '#lib/DocumentScanCrop.svelte';
+ import {applyDocumentCrop} from '#lib/applyDocumentCrop.ts';
+ import {fitDocumentPhoto, jpeg, pageBudgets, reviewPhoto} from '#lib/documentScanImage.ts';
+ import type {Corners} from '#lib/documentScanGeometry.ts';
+ import {scanCountdown, scanHeaders, scanResponse, type ScanStatus} from '#lib/phoneScan.ts';
 
  type PagePhoto = {blob: Blob; preview: string};
  type CropReview = {blob: Blob; url: string; width: number; height: number; corners: Corners | null};

@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {onMount} from 'svelte';
  import {api} from './api';
  import WhatsAppRepliesWorkspace from './WhatsAppRepliesWorkspace.svelte';

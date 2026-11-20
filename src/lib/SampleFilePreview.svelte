@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader} from '$lib/components/loaders';
+ import {SkeletonLoader} from '#lib/components/loaders/index.ts';
  import {onMount,onDestroy} from 'svelte';import SamplePdfCanvas from './SamplePdfCanvas.svelte';import {uploadTo} from './api';
  let {file,id,name,downloadLabel='Download original',onclose}:{file?:File;id?:number;name:string;downloadLabel?:string;onclose:()=>void}=$props();
  let pdfBlob:Blob|null=$state(null);let dialog:HTMLDialogElement,kind=$state(''),url=$state(''),text=$state(''),error=$state(''),loading=$state(true);let alive=true;const controller=new AbortController();

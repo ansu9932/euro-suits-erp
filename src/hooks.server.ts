@@ -1,13 +1,14 @@
-import type {Handle} from '@sveltejs/kit';
-import {proxyApi} from '$lib/server/edge-proxy.mjs';
+import type {Handle} from '@sveltejs/kit/hooks';
+import * as bindings from '$app/env/private';
+import {proxyApi} from '#lib/server/edge-proxy.mjs';
 
 function allowsWorkspaceMicrophone(path:string){
  return /^\/(?:operations|signin|exports|(?:developer|admin|md|finance|management|accounts|merchandising|planning|cad|sourcing|stores|sampling|cutting|sewing|finishing|quality|warehouse)(?:\/(?:companies|reminders|fields|users|operations))?)\/?$/.test(path);
 }
 
 export const handle: Handle = async ({event, resolve}) => {
- if (event.platform?.env && event.url.pathname.startsWith('/api/')) {
-  return proxyApi(event.request,event.platform.env,event.getClientAddress());
+ if (import.meta.env.ERP_PAGES_BUILD && event.url.pathname.startsWith('/api/')) {
+  return proxyApi(event.request,bindings,event.getClientAddress());
  }
  const response = await resolve(event);
  response.headers.set('X-Content-Type-Options','nosniff');

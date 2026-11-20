@@ -1,6 +1,6 @@
 <script lang="ts">
- import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
- import {withFullScreen} from '$lib/loading';
+ import {SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
+ import {withFullScreen} from '#lib/loading.ts';
  import {uploadTo} from './api';
  let {indent,onsave}:{indent:number;onsave:(rows:any[])=>void}=$props();
  let busy=$state(false),error=$state(''),data:any=$state(null),sheet=$state(0),first=$state(2),last=$state(20),point=$state(0),required=$state(1),unit=$state('cm');

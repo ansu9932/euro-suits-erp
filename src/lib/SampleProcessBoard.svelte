@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {Check,ChevronRight,Clock3,RefreshCw,Search} from '@lucide/svelte';
  import {tick,untrack} from 'svelte';
  import {api} from './api';

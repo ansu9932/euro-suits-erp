@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {ChevronRight} from '@lucide/svelte';
  import SampleStageDialog from './SampleStageDialog.svelte';
  import SampleCommentField from './SampleCommentField.svelte';

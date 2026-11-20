@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount} from 'svelte';
- import LandingPage from '$lib/landing/LandingPage.svelte';
+ import LandingPage from '#lib/landing/LandingPage.svelte';
 
  onMount(()=>{
   const chat=new URL(location.href).searchParams.get('chat');

@@ -1,26 +1,26 @@
 <script lang="ts">
  import {onMount} from 'svelte';
- import {reportClientIssue} from '$lib/diagnostics';
- import {installActionLocks} from '$lib/actionLock';
+ import {reportClientIssue} from '#lib/diagnostics.ts';
+ import {installActionLocks} from '#lib/actionLock.ts';
  import {navigating} from '$app/state';
- import {installReportDownloads} from '$lib/loading';
- import {PageLoader,PostLoginTransition} from '$lib/components/loaders';
- import {signInPhase} from '$lib/signInTransition';
- import ERPLanguage from '$lib/ERPLanguage.svelte';
- import {loadLanguagePreferences} from '$lib/languagePreferences';
- import {languagePanel} from '$lib/languagePanel';
- import {resetTranslationSession} from '$lib/chatLanguage';
- import ERPChat from '$lib/ERPChat.svelte';
- import {sessionUserID} from '$lib/api';
+ import {installReportDownloads} from '#lib/loading.ts';
+ import {PageLoader,PostLoginTransition} from '#lib/components/loaders/index.ts';
+ import {signInPhase} from '#lib/signInTransition.ts';
+ import ERPLanguage from '#lib/ERPLanguage.svelte';
+ import {loadLanguagePreferences} from '#lib/languagePreferences.ts';
+ import {languagePanel} from '#lib/languagePanel.ts';
+ import {resetTranslationSession} from '#lib/chatLanguage.ts';
+ import ERPChat from '#lib/ERPChat.svelte';
+ import {sessionUserID} from '#lib/api.ts';
  import {page} from '$app/state';
- import LoaderHost from '$lib/LoaderHost.svelte';
+ import LoaderHost from '#lib/LoaderHost.svelte';
  import '../interactions.css';
  import '../readability.css';
- import '$lib/styles/enterprise-forms/index.css';
- import '$lib/styles/clean-workspace.css';
- import '$lib/styles/sky.css';
- import '$lib/styles/hig-dashboard.css';
- import '$lib/components/loaders/loader-integration.css';
+ import '#lib/styles/enterprise-forms/index.css';
+ import '#lib/styles/clean-workspace.css';
+ import '#lib/styles/sky.css';
+ import '#lib/styles/hig-dashboard.css';
+ import '#lib/components/loaders/loader-integration.css';
  let {children}=$props();
  const routePending=$derived(!!navigating.to && (
   navigating.from?.url.pathname !== navigating.to.url.pathname ||

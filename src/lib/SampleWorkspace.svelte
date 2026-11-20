@@ -3,8 +3,8 @@
  import SpoolyHelp from './SpoolyHelp.svelte';
  let inlineHelp=$state(false);
  import {holdDashboardLoad} from './signInTransition';
- import {ButtonLoader,SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
- import {downloadReport,withFullScreen} from '$lib/loading';
+ import {ButtonLoader,SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
+ import {downloadReport,withFullScreen} from '#lib/loading.ts';
  import {indentReference} from './sampleProcess';
  import {ChevronDown,ClipboardCheck,Copy,FileText,Pencil,Printer,Search,X} from '@lucide/svelte';
  import SampleProcessBoard from './SampleProcessBoard.svelte';

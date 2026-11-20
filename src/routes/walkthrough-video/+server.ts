@@ -1,5 +1,5 @@
 import {read} from '$app/server';
-import video from '$lib/assets/euro-suits-erp-walkthrough-v1.mp4?url';
+import video from '#lib/assets/euro-suits-erp-walkthrough-v1.mp4?url';
 import type {RequestHandler} from './$types';
 
 export const GET: RequestHandler = async ({request}) => {

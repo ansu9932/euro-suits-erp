@@ -1,6 +1,6 @@
 <script lang="ts">
  import PhoneScanButton from './PhoneScanButton.svelte';
- import {SkeletonLoader, SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader, SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {onMount,tick} from 'svelte';
  import {Plus,ArrowLeft,Download,FileText,Search,RefreshCw,Trash2} from '@lucide/svelte';
  import {api,uploadTo,dateISO} from './api';

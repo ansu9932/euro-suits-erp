@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {onMount,onDestroy,tick} from 'svelte';import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
  let {blob}:{blob:Blob}=$props();let canvas:HTMLCanvasElement;let pageNumber=$state(1),pages=$state(0),busy=$state(true),rendered=$state(false),error=$state('');let alive=true,document:any,task:any,renderTask:any;
  async function render(number:number){

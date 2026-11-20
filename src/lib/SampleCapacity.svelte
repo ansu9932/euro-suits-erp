@@ -1,5 +1,5 @@
 <script lang="ts">
- import {SkeletonLoader,SpinnerLoader} from '$lib/components/loaders';
+ import {SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {api} from './api';
  import {untrack} from 'svelte';
  import {enter} from './motion';
