@@ -12,7 +12,9 @@
  import IntimationReminder from './IntimationReminder.svelte';
  import {intimationReference} from './intimationReference';
  import IntimationQueue from './IntimationQueue.svelte';
- import SampleUploads from './SampleUploads.svelte';import SampleFilePreview from './SampleFilePreview.svelte';let previewFile:any=$state(null),mailReader:any=$state(null);
+ import SampleUploads from './SampleUploads.svelte';import SampleFilePreview from './SampleFilePreview.svelte';
+ import SampleDocumentList from './SampleDocumentList.svelte';
+ let previewFile:any=$state(null),mailReader:any=$state(null),fileNotice=$state('');
  import {createSampleForm,type SampleFormKind} from './sampleFormPdf';
  import {enter, workspaceMotion} from "./motion";
  import {onMount,tick,untrack} from 'svelte';import SampleCapacity from './SampleCapacity.svelte';import SamplePlanning from './SamplePlanning.svelte';import SamplePlanLedger from './SamplePlanLedger.svelte';import SamplePiece from './SamplePiece.svelte';import SampleReports from './SampleReports.svelte';import {api,uploadTo} from './api';import type {Row} from './types';
@@ -112,7 +114,7 @@
   },30000):undefined;
   return ()=>{clearInterval(timer);listLoad++;finishSignIn();};
  });
- function fresh(){fieldErrors={};uploadFailure=null;intake=false;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};if(!company&&companies.length>1){error='Select a workspace company before creating a request.';return}form={company_id:Number(company||companies[0]?.id),buyer_id:'',profile:Object.fromEntries(fields.map(f=>[f[0],f[2]==='date'&&f[0]==='request_date'?new Date().toLocaleDateString('en-CA'):''])),variants:[{size:'',colour:'',quantity:1}],bom:[]}}
+ function fresh(){fieldErrors={};uploadFailure=null;fileNotice='';intake=false;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};if(!company&&companies.length>1){error='Select a workspace company before creating a request.';return}form={company_id:Number(company||companies[0]?.id),buyer_id:'',profile:Object.fromEntries(fields.map(f=>[f[0],f[2]==='date'&&f[0]==='request_date'?new Date().toLocaleDateString('en-CA'):''])),variants:[{size:'',colour:'',quantity:1}],bom:[]}}
  async function open(id:number,indent=0,number=''){
   if(busy)return;
   const request=++detailLoad;
@@ -123,7 +125,7 @@
    detail=loaded;assignedMerchant='';
    focusIndent=detail.pieces.find((p:{id:number;indent_number?:string})=>p.id===indent||indentReference(p)===number)?.id??detail.pieces[0]?.id??0;
    reservedIndent=number||requestIndentNumbers(detail.record)[0]||'';
-   review='';fileIndent='';production=null;form=null;category=data.can_audit?'Audit sheet':!data.can_edit&&data.can_pattern?'CAD':'Buyer email';
+   review='';fileIndent='';fileNotice='';production=null;form=null;category=data.can_audit?'Audit sheet':!data.can_edit&&data.can_pattern?'CAD':'Buyer email';
   })}finally{if(request===detailLoad)opening=false}
  }
  async function showStages(){
@@ -134,8 +136,8 @@
   stageSection?.querySelector('summary')?.focus();
  }
  function copyRequest(){fieldErrors={};uploadFailure=null;intake=false;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};const source=structuredClone($state.snapshot(detail.record));form={company_id:source.company_id,buyer_id:source.buyer_id,profile:{...source.profile,historical_registered:'',legacy_indent_number:'',copy_sample_id:String(detail.pieces[0]?.id||''),remake_indent_id:''},variants:source.variants,bom:source.bom};detail=null}
- function edit(){fieldErrors={};uploadFailure=null;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intake=false;form={...structuredClone($state.snapshot(detail.record)),files:detail.files};detail=null}
- function completeDetails(){fieldErrors={};uploadFailure=null;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intake=false;form={...structuredClone($state.snapshot(detail.record)),indent_numbers:detail.pieces.map((p:any)=>p.indent_number).filter(Boolean),completion:true,variants:detail.pieces.map((p:any)=>({id:p.id,version:p.version,size:p.size,colour:p.colour,quantity:1})),files:detail.files};detail=null}
+ function edit(){fieldErrors={};uploadFailure=null;fileNotice='';queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intake=false;form={...structuredClone($state.snapshot(detail.record)),files:detail.files};detail=null}
+ function completeDetails(){fieldErrors={};uploadFailure=null;fileNotice='';queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intake=false;form={...structuredClone($state.snapshot(detail.record)),indent_numbers:detail.pieces.map((p:any)=>p.indent_number).filter(Boolean),completion:true,variants:detail.pieces.map((p:any)=>({id:p.id,version:p.version,size:p.size,colour:p.colour,quantity:1})),files:detail.files};detail=null}
  async function save(action:string){if(remarkDictating)return;fieldErrors={};uploadFailure=null;await run(async()=>{
  const payload=()=>({company_id:Number(form.company_id),buyer_id:Number(form.buyer_id),profile:form.profile,variants:form.variants,bom:form.bom,version:form.version});
  if(!form.id){
@@ -160,7 +162,7 @@
    uploadingFile=file;
    try{
     const uploaded=await uploadTo('/sample-requests/'+form.id+'/files?category='+encodeURIComponent(group),file);
-    form.files=[...(form.files||[]),{id:uploaded.id,name:file.name,category:group}];
+    form.files=[...(form.files||[]),{...uploaded,name:file.name,category:group}];
     queued[group]=queued[group].filter((queuedFile:File)=>queuedFile!==file);
    }catch(cause){
     const message='Could not upload '+file.name+'. '+(cause as Error).message;
@@ -180,6 +182,7 @@
  })}
  async function generateIntimation(record:Row){await run(async()=>{
   const saved=await api('/sample-requests/'+record.id);
+  fileNotice='';
   if(saved.record.indent_linked){await load();throw new Error('This intimation is linked. Open its indent from Intimation status.');}
   form={...structuredClone(saved.record),files:saved.files};queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intimationMatch=null;intake=false;detail=null;
  })}
@@ -205,6 +208,23 @@
   const input=event.currentTarget as HTMLInputElement;
   await attachFiles(Array.from(input.files||[]));
   input.value='';
+ }
+ async function removeDocument(file:Row){
+  const requestID=form?.id??detail?.record.id;
+  if(!requestID||busy||file.can_remove!==true)return;
+  if(!window.confirm(`Remove "${file.name}" from this request? The removal will be recorded in History.`))return;
+  fileNotice='';
+  await run(async()=>{
+   await api('/sample-requests/'+requestID+'/files/'+file.id+'/remove',{});
+   const remaining=(files:Row[])=>files.filter(entry=>entry.id!==file.id);
+   if(form?.id===requestID)form.files=remaining(form.files||[]);
+   if(detail?.record.id===requestID)detail.files=remaining(detail.files);
+   const listed=data?.records.find((r:Row)=>r.id===requestID);
+   if(listed)listed.files=remaining(listed.files||[]);
+   if(previewFile?.id===file.id)previewFile=null;
+   fileNotice=file.name+' removed.';
+   if(detail?.record.id===requestID)detail=await api('/sample-requests/'+requestID);
+  });
  }
  async function stockSave(){await run(async()=>{await api('/sample-stock',stockForm);stockForm=null;await load();if(detail)detail=await api('/sample-requests/'+detail.record.id);notice='Stock movement recorded.'})}
  async function previewForm(kind:SampleFormKind,id=0){if(reportBusy||!detail)return;const piece=detail.pieces.find((p:any)=>p.id===(id||focusIndent))||(!id&&!focusIndent?detail.pieces[0]:null);if(!piece)return;reportBusy=true;error='';try{formPreview=await withFullScreen('Preparing '+(kind==='audit'?'sample audit':'sample indent')+' PDF…',()=>createSampleForm(kind,$state.snapshot(detail),$state.snapshot(piece),(key:any)=>data.materials.find((m:any)=>String(m.id)===String(key))?.code||''))}catch(e){error=(e as Error).message}finally{reportBusy=false}}
@@ -332,14 +352,13 @@
   <div class="wide" data-field="email_message" class:field-error={!!fieldErrors.email_message}>
    <SampleCommentField label="Special remark" bind:value={form.profile.email_message} bind:dictating={remarkDictating} disabled={busy} action="special_remark" requestId={form.id} companyId={Number(form.company_id)} buyerId={Number(form.buyer_id)} maxLength={20000}/>
    {#if fieldErrors.email_message}<small class="field-error-message">{fieldErrors.email_message}</small>{/if}
-   {#each (form.files||[]).filter((f:any)=>f.category==='Buyer email') as file}<button type="button" class="text-button" onclick={()=>previewFile=file}>Preview {file.name}</button>{/each}
   </div>
  {/if}</div>
  {#snippet uploads()}
  <div class="sample-upload-grid">{#each (intake?['Buyer email']:['Trims','Mail','Files']) as group}<div class="sample-upload-group"><SampleUploads destination={form.id||0} existing={(form.files||[]).filter((f:any)=>(f.category===group||group==='Mail'&&f.category==='EST')).length} title={group==='Buyer email'?'Mail attachment':group}
  files={queued[group]} disabled={busy} canUpload={intake ? data?.can_documents === true : (data?.can_upload_indent_files ?? data?.can_documents) === true} uploading={uploadingFile}
  uploadError={uploadFailure?.group===group?uploadFailure.message:''}
- onfiles={files=>{queued[group]=files;if(uploadFailure?.group===group)uploadFailure=null}}/>{#each (form.files||[]).filter((f:any)=>(f.category===group||group==='Mail'&&f.category==='EST')) as file}<button type="button" class="text-button" onclick={()=>previewFile=file}>Preview {file.name}</button>{/each}</div>{/each}</div>
+ onfiles={files=>{queued[group]=files;if(uploadFailure?.group===group)uploadFailure=null}}/></div>{/each}</div>
  {/snippet}
  {#if intake}
   <section class="intimation-communication" aria-label="Buyer email and attachments">
@@ -348,6 +367,13 @@
   </section>
  {:else}
   {@render uploads()}
+ {/if}
+ {#if form.id&&(form.files?.length||fileNotice)}
+  <section class="saved-sample-files" aria-labelledby="saved-sample-files-title">
+   <h3 id="saved-sample-files-title">Saved attachments</h3>
+   {#if fileNotice}<p role="status" class="file-notice">{fileNotice}</p>{/if}
+   <SampleDocumentList files={form.files||[]} disabled={busy} onpreview={file=>previewFile=file} onremove={removeDocument}/>
+  </section>
  {/if}
  </div>
  {#if intake&&intimationMatch}
@@ -406,7 +432,10 @@
  <details class="sample-support-section"><summary>Review sample BOM ({detail.record.bom.length} components)</summary><div class="table-scroll"><table><thead><tr><th>Group / component</th><th>Reference</th><th>Quantity / unit</th><th>Details</th></tr></thead><tbody>{#each detail.record.bom as b}<tr><td>{b.group} · {b.component}</td><td>{b.reference||'—'}</td><td>{b.quantity||'—'} {b.unit||''}</td><td>{[b.colour,b.size,b.ticket,b.thread_position,b.shade,b.placement,b.remarks].filter(Boolean).join(' · ')}</td></tr>{/each}</tbody></table></div></details>
  {#if detail.record.profile.pending_completion}{@const correction=detail.record.profile.pending_completion}<section class="review" aria-label="Proposed detail correction"><h3>Detail correction awaiting approval</h3><p>Submitted by {correction.submitter} · {new Date(correction.submitted_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})} IST</p>{#if Number(correction.payload.buyer_id)!==detail.record.buyer_id}<p>Buyer: {detail.record.buyer_name} → <strong>{data.buyers.find((b:any)=>b.id===Number(correction.payload.buyer_id))?.name||correction.payload.buyer_id}</strong></p>{/if}<dl class="detail-grid">{#each [...fields.map(f=>f[0]),'source_quantity','email_message'] as key}{#if (correction.payload.profile[key]??'')!==(detail.record.profile[key]??'')}<div><dt>{key==='source_quantity'?'Historical quantity':label(key)}</dt><dd>{detail.record.profile[key]||'Blank'} → <strong>{correction.payload.profile[key]||'Blank'}</strong></dd></div>{/if}{/each}</dl><div class="table-scroll"><table><thead><tr><th>Existing indent</th><th>Proposed size</th><th>Proposed colour</th></tr></thead><tbody>{#each correction.payload.variants as row}<tr><td>{indentReference(detail.pieces.find((p:any)=>p.id===row.id)??row)}</td><td>{row.size||'Blank'}</td><td>{row.colour||'Blank'}</td></tr>{/each}</tbody></table></div>{#if JSON.stringify(correction.payload.bom)!==JSON.stringify(detail.record.bom)}<details><summary>Proposed BOM</summary><div class="table-scroll"><table><thead><tr><th>Group</th><th>Component / reference</th><th>Quantity</th><th>Colour / size</th><th>Thread / shade / placement</th><th>Remarks</th></tr></thead><tbody>{#each correction.payload.bom as b}<tr><td>{b.group}</td><td>{b.component} · {b.reference||''}</td><td>{b.quantity||''}</td><td>{b.colour||''} · {b.size||''}</td><td>{b.ticket||''} · {b.thread_position||''} · {b.shade||''} · {b.placement||''}</td><td>{b.remarks||''}</td></tr>{/each}</tbody></table></div></details>{/if}{#if data.can_approve}<label>Review comment<textarea bind:value={review}></textarea></label><div class="indent-review-actions"><button class="button indent-approve" disabled={busy} onclick={()=>decide('approve_completion')}>Approve detail changes</button><button class="button indent-return" disabled={busy||!review.trim()} onclick={()=>decide('return_completion')}>Return for rework</button></div>{/if}</section>{/if}
  {#if detail.record.status==='Submitted'&&data.can_approve}<div class="review"><label>MD / Super Admin review note<textarea bind:value={review}></textarea></label><div class="indent-review-actions"><button class="button indent-approve" disabled={busy} onclick={()=>decide('approve')}>{detail.record.profile.intimation==='true'&&!requestIndentNumbers(detail.record).length?'Approve and generate indents':'Approve indents'}</button><button class="button indent-return" disabled={busy||!review.trim()} onclick={()=>decide('return')}>Return for rework</button></div></div>{/if}
- <details class="sample-support-section"><summary>Documents and images</summary><p>Files remain private to users with access to this request.</p><ul class="sample-document-list">{#each detail.files as f}<li><button type="button" class="text-button" onclick={()=>previewFile=f}>Preview {f.category}: {f.name}</button></li>{:else}<li>No documents uploaded.</li>{/each}</ul>
+ <details class="sample-support-section sample-documents" open={detail.record.status==='Changes requested'||detail.record.status==='Approved'&&detail.files.some((f:Row)=>f.can_remove)}>
+  <summary>Documents and images <span class="attachment-count">{detail.files.length}</span></summary>
+  {#if fileNotice}<p role="status" class="file-notice">{fileNotice}</p>{/if}
+  <SampleDocumentList files={detail.files} disabled={busy} onpreview={file=>previewFile=file} onremove={removeDocument}/>
  {#if detail.record.status!=='Submitted'&&((data.can_edit&&detail.record.status!=='Approved')||detail.record.status==='Approved'&&(data.can_produce||data.can_audit||data.can_pattern||data.can_handover))}<div class="document-upload-row"><label>Document category<select bind:value={category}>{#each ['Buyer email','Buyer specification','Sample to copy','CAD','Labels','Audit sheet','Fabric swatch','Trim card','Sample images','Dispatch','Buyer feedback','Other'] as c}<option>{c}</option>{/each}</select></label><label>Link to indent<select bind:value={fileIndent}><option value="">Whole request</option>{#each detail.pieces as p}<option value={String(p.id)}>{indentReference(p)} · {p.size} · {p.colour}</option>{/each}</select></label><label>Upload files (10 MB each)<input type="file" multiple disabled={busy||data.can_documents===false} onchange={upload} accept=".eml,.pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.dxf,.zip"/></label><PhoneScanButton label="sample request documents" destination={detail.record.id+':'+category+':'+fileIndent} disabled={busy||data.can_documents===false} onreceive={file=>attachFiles([file],true)}/></div>{/if}
  </details>
 {#if view!=='process'} <details class="sample-support-section" bind:this={stageSection} open={view==='process'}><summary>Individual indents · production and actions</summary>{#each detail.pieces.filter((p:any)=>!focusIndent||p.id===focusIndent) as piece (piece.id)}<SamplePiece {piece} {data} merchant={detail.record.merchant_id?detail.record.merchant:''} onchange={refreshDetail} onprint={print} onform={previewForm} onissue={()=>stockForm={company_id:detail.record.company_id,material_id:detail.record.profile.alternate_material_id||detail.record.profile.material_id,indent_id:piece.id,metres:'',reference:''}}/>{:else}<p>{detail.record.profile.intimation==='true'?'Indent numbers are generated after MD approval.':'Production actions are available after approval.'}</p>{/each}
@@ -431,6 +460,13 @@
  .indent-match-choice input[type="radio"]{width:18px;height:18px;min-height:0;flex:none;accent-color:#087f83}
  .indent-match-choice small{display:inline;margin-left:8px}
  .indent-match ul{margin:4px 0 4px 18px;padding:0}
+ .saved-sample-files{min-width:0}
+ .saved-sample-files h3{font-size:16px;margin:4px 0 6px}
+ .attachment-count{margin-inline-start:6px;border-radius:9px;padding:2px 7px;background:#edf3f7;color:#42586c;font-size:12px}
+ .file-notice{color:#14664a;overflow-wrap:anywhere}
+ .sample-documents .document-upload-row{flex-wrap:wrap}
+ .sample-documents .document-upload-row label{flex:1 1 140px}
+ .sample-documents .document-upload-row label:nth-child(3){flex:1.5 1 220px}
  .sample-dialog.ux-dialog>footer .indent-form-summary{margin:0 auto 0 0;align-self:center;font-size:13px;color:#42566a}
 
 
@@ -449,7 +485,7 @@
  .sample-dialog.ux-dialog :is(input,select,textarea,button),.sample-dialog.ux-dialog h2,.sample-dialog.sample-detail-dialog :is(h2,h3,input,select,textarea,button){font-family:inherit}
 
  /* Compact desktop request surfaces, using the system SF face on Apple platforms. */
- .sample-dialog.ux-dialog .request-field-section{grid-column:1/-1;margin:0;padding-top:8px;border-top:1px solid #e2e8ee}.request-field-section>summary{margin:0;min-height:36px;padding:4px 0;font-size:15px;color:#203d50}.request-field-section[open]>.request-section-grid{padding-top:8px}.request-section-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px}.form-grid:has(>.request-field-section){grid-template-columns:repeat(2,minmax(0,1fr))!important}.sample-dialog.ux-dialog{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;border:1px solid #dce3e9;border-radius:16px!important}.sample-dialog.ux-dialog .form-grid{gap:12px 16px}.sample-dialog.ux-dialog .sample-upload-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}.sample-dialog.sample-detail-dialog{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;background:#fff;border:1px solid #dce3e9;border-radius:16px;padding:16px;max-width:1400px;max-height:calc(100dvh - 32px)}.sample-dialog.sample-detail-dialog>header{top:-16px;margin:-16px -16px 12px;padding:10px 16px}.sample-dialog.sample-detail-dialog p{margin:6px 0;font-size:13px}.sample-detail-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 12px}.sample-detail-toolbar>p{color:#435568;font-size:12px}.sample-detail-toolbar .actions{justify-content:flex-end;gap:8px;flex-shrink:0}.sample-detail-toolbar button{min-height:44px;padding:8px 12px;font-size:12px;white-space:nowrap}.sample-dialog.sample-detail-dialog .details-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px;margin:10px 0}.sample-dialog.sample-detail-dialog .details-grid strong{font-size:11px;line-height:1.4;font-weight:500;letter-spacing:.04em;color:#526170;margin-bottom:3px;text-transform:uppercase}.sample-dialog.sample-detail-dialog .details-grid span{font-size:13px;line-height:1.5;font-weight:600;color:#172f40}.sample-dialog.sample-detail-dialog th,.sample-dialog.sample-detail-dialog td{padding:7px 10px;font-size:13px}.sample-dialog.sample-detail-dialog details{margin:10px 0}.sample-dialog.sample-detail-dialog summary{min-height:36px;padding:7px 0;font-size:13px}.document-upload-row{display:flex;align-items:flex-end;gap:12px;margin:10px 0}.document-upload-row label{flex:1;min-width:0;font-size:12px;gap:5px}.document-upload-row label:last-child{flex:1.4}.document-upload-row input,.document-upload-row select{font:inherit;min-height:44px;padding:8px}.sample-document-list{display:flex;flex-wrap:wrap;gap:6px 12px;list-style:none;padding:0;margin:8px 0}.sample-document-list button{padding:6px 0;min-height:44px}.sample-dialog.sample-detail-dialog .review{margin:12px 0;padding:12px}.sample-dialog.sample-detail-dialog .review button{margin-top:8px}
+ .sample-dialog.ux-dialog .request-field-section{grid-column:1/-1;margin:0;padding-top:8px;border-top:1px solid #e2e8ee}.request-field-section>summary{margin:0;min-height:36px;padding:4px 0;font-size:15px;color:#203d50}.request-field-section[open]>.request-section-grid{padding-top:8px}.request-section-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px}.form-grid:has(>.request-field-section){grid-template-columns:repeat(2,minmax(0,1fr))!important}.sample-dialog.ux-dialog{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;border:1px solid #dce3e9;border-radius:16px!important}.sample-dialog.ux-dialog .form-grid{gap:12px 16px}.sample-dialog.ux-dialog .sample-upload-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}.sample-dialog.sample-detail-dialog{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;background:#fff;border:1px solid #dce3e9;border-radius:16px;padding:16px;max-width:1400px;max-height:calc(100dvh - 32px)}.sample-dialog.sample-detail-dialog>header{top:-16px;margin:-16px -16px 12px;padding:10px 16px}.sample-dialog.sample-detail-dialog p{margin:6px 0;font-size:13px}.sample-detail-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 12px}.sample-detail-toolbar>p{color:#435568;font-size:12px}.sample-detail-toolbar .actions{justify-content:flex-end;gap:8px;flex-shrink:0}.sample-detail-toolbar button{min-height:44px;padding:8px 12px;font-size:12px;white-space:nowrap}.sample-dialog.sample-detail-dialog .details-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px;margin:10px 0}.sample-dialog.sample-detail-dialog .details-grid strong{font-size:11px;line-height:1.4;font-weight:500;letter-spacing:.04em;color:#526170;margin-bottom:3px;text-transform:uppercase}.sample-dialog.sample-detail-dialog .details-grid span{font-size:13px;line-height:1.5;font-weight:600;color:#172f40}.sample-dialog.sample-detail-dialog th,.sample-dialog.sample-detail-dialog td{padding:7px 10px;font-size:13px}.sample-dialog.sample-detail-dialog details{margin:10px 0}.sample-dialog.sample-detail-dialog summary{min-height:36px;padding:7px 0;font-size:13px}.document-upload-row{display:flex;align-items:flex-end;gap:12px;margin:10px 0}.document-upload-row label{flex:1;min-width:0;font-size:12px;gap:5px}.document-upload-row label:last-child{flex:1.4}.document-upload-row input,.document-upload-row select{font:inherit;min-height:44px;padding:8px}.sample-dialog.sample-detail-dialog .review{margin:12px 0;padding:12px}.sample-dialog.sample-detail-dialog .review button{margin-top:8px}
 
  .mail-reader{padding:0;border:1px solid #b9c8d1;border-radius:10px;width:min(1100px,calc(100vw - 48px));max-height:calc(100dvh - 48px);background:#fff;color:#111}.mail-reader::backdrop{background:#102636aa}.mail-reader header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 20px;background:#132b40;color:#fff;position:sticky;top:0}.mail-reader h2{margin:0;color:white;overflow-wrap:anywhere}.mail-reader pre{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:15px;line-height:1.65;margin:0;padding:20px;min-height:220px}
 
