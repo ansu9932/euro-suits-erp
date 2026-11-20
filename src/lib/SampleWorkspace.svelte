@@ -18,6 +18,10 @@
  import {onMount,tick,untrack} from 'svelte';import SampleCapacity from './SampleCapacity.svelte';import SamplePlanning from './SamplePlanning.svelte';import SamplePlanLedger from './SamplePlanLedger.svelte';import SamplePiece from './SamplePiece.svelte';import SampleReports from './SampleReports.svelte';import {api,uploadTo} from './api';import type {Row} from './types';
  let {companies,company,orders=[],intimationOnly=false,initialView='requests',processView='all',indentProgress=false}:{companies:Row[];company:string;orders:Row[];intimationOnly?:boolean;initialView?:string;processView?:string;indentProgress?:boolean}=$props();
  let reminderOpen=$state(false), downloadingIntimations=$state(false);
+ let trackedIntimations:Row[]=$state([]);
+ let intimationMatch=$state<{choices:Row[];restricted:boolean}|null>(null);
+ let matchedIndentID=$state(0);
+ let matchHeading:HTMLHeadingElement|undefined=$state();
  async function downloadIntimations(){
   if(downloadingIntimations)return;
   downloadingIntimations=true;error='';
@@ -50,7 +54,8 @@
  const label=(key:string)=>key==='email_message'?(intimationOnly?'Buyer email message':'Special remark'):key==='legacy_indent_number'?'Old indent no. (Excel)':key==='source_process_status'?'Excel process status':fields.find(f=>f[0]===key)?.[1]||productionFields.find(f=>f[0]===key)?.[1]||key.replaceAll('_',' ');
  function detailEntries(profile:any){const order=['brand','buyer_style','description','request_date','sample_type','legacy_indent_number'];return Object.entries(profile).filter(([key])=>key!=='source_quantity'&&key!=='historical_registered'&&key!=='pending_completion'&&!key.startsWith('import_')).sort(([a],[b])=>{const rank=(k:string)=>['special_remarks','finishing_remarks'].includes(k)?999:order.includes(k)?order.indexOf(k):99;return rank(a)-rank(b)})}
  const material=(id:any)=>data?.materials.find((m:any)=>String(m.id)===String(id))?.code||id;
- let records=$derived((data?.records||[]).filter((r:any)=>!(r.profile.intimation==='true'&&r.status!=='Approved')&&(!company||String(r.company_id)===company)&&(!search||JSON.stringify(r).toLowerCase().includes(search.toLowerCase()))));
+ const pendingIntimation=(r:Row)=>r.profile.intimation==='true'&&r.status==='Draft'&&!r.indent_linked&&!r.intimation_indent_started;
+ let records=$derived((data?.records||[]).filter((r:Row)=>(r.profile.intimation!=='true'||r.intimation_indent_started||r.status==='Approved')&&(!company||String(r.company_id)===company)&&(!search||JSON.stringify(r).toLowerCase().includes(search.toLowerCase()))));
  const requestIndentNumbers=(r:Row):string[]=>r.indent_numbers??r.reserved_indent_numbers??[];
  const requestStatus=(r:Row)=>r.profile.pending_completion?'Pending detail approval':
   r.status==='Submitted'?'Pending approval':r.status==='Changes requested'?'Rework needed':
@@ -75,7 +80,15 @@
  let printPieces=$derived(detail?.pieces.filter((p:any)=>!printPiece||p.id===printPiece)||[]);
  let layoutPages=$derived.by(()=>{const list=[{group:'Fabric',component:'Primary fabric',reference:material(detail?.record.profile.material_id)},...(detail?.record.bom||[])];const pages=[];for(let i=0;i<Math.max(1,list.length);i+=6)pages.push(list.slice(i,i+6));return pages});
  function showMail(node:HTMLDialogElement){node.showModal()}
- async function load(){data=await api('/sample-requests');revision++}
+ let listLoad=0;
+ async function load(){
+  const request=++listLoad;
+  const next=await api('/sample-requests');
+  const tracked=intimationOnly&&(next.can_edit||next.can_approve)?(await api('/sample-intimations?view=tracked')).records:[];
+  if(request!==listLoad)return;
+  trackedIntimations=tracked;
+  data=next;revision++;
+ }
  async function refreshDetail(){detail=await api('/sample-requests/'+detail.record.id);await load()}
  async function revealErrors(){
   await tick();
@@ -89,12 +102,15 @@
   first.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
   control?.focus({preventScroll:true});
  }
- function clearField(event:Event){const node=(event.target as HTMLElement).closest<HTMLElement>('[data-field]');const key=node?.dataset.field;if(key&&fieldErrors[key]){delete fieldErrors[key];(event.target as HTMLElement).removeAttribute('aria-invalid')}}
+ function clearField(event:Event){const node=(event.target as HTMLElement).closest<HTMLElement>('[data-field]');const key=node?.dataset.field;if(intake&&(key==='buyer_id'||key==='buyer_style')){intimationMatch=null;matchedIndentID=0;}if(key&&fieldErrors[key]){delete fieldErrors[key];(event.target as HTMLElement).removeAttribute('aria-invalid')}}
  async function run(work:()=>Promise<void>){if(busy)return;busy=true;error='';notice='';try{await work()}catch(e){error=(e as Error).message;fieldErrors=(e as any).fields||{};await revealErrors()}finally{busy=false}}
  onMount(()=>{
   const finishSignIn=holdDashboardLoad();
   void run(load).finally(finishSignIn);
-  return finishSignIn;
+  const timer=intimationOnly?setInterval(()=>{
+   if(data&&!busy&&!form&&!detail&&!reminderOpen&&!document.hidden)void load().catch(()=>{});
+  },30000):undefined;
+  return ()=>{clearInterval(timer);listLoad++;finishSignIn();};
  });
  function fresh(){fieldErrors={};uploadFailure=null;intake=false;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};if(!company&&companies.length>1){error='Select a workspace company before creating a request.';return}form={company_id:Number(company||companies[0]?.id),buyer_id:'',profile:Object.fromEntries(fields.map(f=>[f[0],f[2]==='date'&&f[0]==='request_date'?new Date().toLocaleDateString('en-CA'):''])),variants:[{size:'',colour:'',quantity:1}],bom:[]}}
  async function open(id:number,indent=0,number=''){
@@ -121,8 +137,24 @@
  function edit(){fieldErrors={};uploadFailure=null;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intake=false;form={...structuredClone($state.snapshot(detail.record)),files:detail.files};detail=null}
  function completeDetails(){fieldErrors={};uploadFailure=null;queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intake=false;form={...structuredClone($state.snapshot(detail.record)),indent_numbers:detail.pieces.map((p:any)=>p.indent_number).filter(Boolean),completion:true,variants:detail.pieces.map((p:any)=>({id:p.id,version:p.version,size:p.size,colour:p.colour,quantity:1})),files:detail.files};detail=null}
  async function save(action:string){if(remarkDictating)return;fieldErrors={};uploadFailure=null;await run(async()=>{
- const payload=()=>({company_id:Number(form.company_id),buyer_id:Number(form.buyer_id),profile:form.profile,variants:form.variants,bom:form.bom,version:form.version,action:intake?'intimation':form.completion?'complete':'save'});
- if(!form.id){const result=await api('/sample-requests',payload());const saved=await api('/sample-requests/'+result.id);form={...saved.record,files:saved.files};}
+ const payload=()=>({company_id:Number(form.company_id),buyer_id:Number(form.buyer_id),profile:form.profile,variants:form.variants,bom:form.bom,version:form.version});
+ if(!form.id){
+  try{
+   const result=await api('/sample-requests',{...payload(),action:intake?'intimation':'save',
+    ...(intimationMatch?{link_indent_id:matchedIndentID,confirm_restricted_match:intimationMatch.restricted}:{})});
+   form={...result,files:[]};intimationMatch=null;
+  }catch(cause){
+   const match=cause as {code?:string;matches?:Row[];restrictedMatch?:boolean};
+   if(!intake||match.code!=='intimation_indent_match')throw cause;
+   const choices=match.matches??[];
+   if(!choices.length&&!match.restrictedMatch){
+    intimationMatch=null;matchedIndentID=0;throw new Error('The matching indent changed. Submit again to check the latest matches.');
+   }
+   intimationMatch={choices,restricted:!!match.restrictedMatch};
+   matchedIndentID=choices.length===1?choices[0].id:0;
+   await tick();matchHeading?.focus();matchHeading?.scrollIntoView({block:'nearest'});return;
+  }
+ }
  for(const group of Object.keys(queued)){
   for(const file of [...queued[group]]){
    uploadingFile=file;
@@ -137,11 +169,21 @@
    }finally{uploadingFile=null}
   }
  }
- const savedRequest=await api('/sample-requests/'+form.id,{...payload(),version:form.version,action:intake?'save':form.completion?'complete':action})
- const rid=form.id;form=null;await load();if(!intake){detail=await api('/sample-requests/'+rid);focusIndent=detail.pieces[0]?.id??0;reservedIndent=requestIndentNumbers(detail.record)[0]||'';}notice=action==='complete'&&!data.can_approve?'Detail changes sent to MD or Super Admin for approval.':intake?intimationReference(savedRequest)+' submitted. It stays pending until MD approval generates the indents.':action==='complete'?'Registered indent details saved.':action==='submit'?'Sent to MD or Super Admin for approval.':'Draft and files saved.';intake=false;
+ const savedRequest=intake?form:await api('/sample-requests/'+form.id,{...payload(),
+  action:form.completion?'complete':action==='save'&&form.profile.intimation==='true'?'prepare_indent':action});
+ const rid=form.id;form=null;await load();
+ if(!intake){detail=await api('/sample-requests/'+rid);focusIndent=detail.pieces[0]?.id??0;reservedIndent=requestIndentNumbers(detail.record)[0]||'';}
+ notice=action==='complete'&&!data.can_approve?'Detail changes sent to MD or Super Admin for approval.':
+  intake?intimationReference(savedRequest)+(savedRequest.indent_linked?' linked to the existing indent.':' submitted.'):
+  action==='complete'?'Registered indent details saved.':action==='submit'?'Sent to MD or Super Admin for approval.':'Draft and files saved.';
+ intake=false;
  })}
- async function generateIntimation(record:any){await run(async()=>{const saved=await api('/sample-requests/'+record.id);form={...structuredClone(saved.record),files:saved.files};queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intake=false;detail=null})}
- function newIntimation(){fresh();if(form){intake=true;form.variants=[{size:'',colour:'',quantity:1}]}}
+ async function generateIntimation(record:Row){await run(async()=>{
+  const saved=await api('/sample-requests/'+record.id);
+  if(saved.record.indent_linked){await load();throw new Error('This intimation is linked. Open its indent from Intimation status.');}
+  form={...structuredClone(saved.record),files:saved.files};queued={Trims:[],Mail:[],Files:[],'Buyer email':[]};intimationMatch=null;intake=false;detail=null;
+ })}
+ function newIntimation(){fresh();intimationMatch=null;matchedIndentID=0;if(form){intake=true;form.variants=[{size:'',colour:'',quantity:1}]}}
 
  async function decide(action:string){await run(async()=>{await api('/sample-requests/'+detail.record.id,{version:detail.record.version,action,note:review});detail=await api('/sample-requests/'+detail.record.id);if(action==='approve')focusIndent=detail.pieces.find((p:{id:number;indent_number?:string})=>indentReference(p)===reservedIndent)?.id??detail.pieces[0]?.id??0;review='';await load()})}
  async function pieceAction(piece:any,action:string,result=''){await run(async()=>{await api('/sample-indents/'+piece.id,{version:piece.version,action,result,note:review,production:production?.values});detail=await api('/sample-requests/'+detail.record.id);production=null;await load()})}
@@ -200,7 +242,12 @@
  {#if !intimationOnly&&view!=='process'}<nav class="sample-tabs" aria-label="Sampling views">{#each [['requests','Requests & approval'],['plan','Planning'],['freezing','Freezing'],['freeze-master','Freeze Master'],['progress','Process progress'],['capacity','Capacity'],['master','Master register'],['sop','How to work']] as [key,title]}<button class="button" aria-current={view===key?'page':undefined} class:primary={view===key} class:secondary={view!==key} onclick={()=>view=key}>{title}</button>{/each}{#if ['capacity','plan','freezing','freeze-master'].includes(view)}<button class="button secondary" data-inline-spooly type="button" aria-label="Open Spooly task help" onclick={()=>inlineHelp=true}>Spooly help</button>{/if}</nav>{/if}
  {#if busy&&data&&!opening}<SpinnerLoader label="Updating samples…"/>{/if}
  {#if !data&&!error}<SkeletonLoader variant={intimationOnly?'list':'table'} rows={5} columns={7} label={intimationOnly?'Loading pending intimations…':'Loading sample requests…'}/>{:else}
- {#if view==='intimation'}<IntimationQueue records={(data?.records||[]).filter((r:any)=>r.profile.intimation==='true'&&r.status!=='Approved'&&(!company||String(r.company_id)===company))} canEdit={!!data?.can_edit} {busy} onGenerate={generateIntimation} onOpen={open} onMail={r=>mailReader={subject:r.profile.email_subject,message:r.profile.email_message}} onPreview={file=>previewFile=file}/>{/if}
+ {#if view==='intimation'}
+  <IntimationQueue records={(data?.records||[]).filter((r:Row)=>pendingIntimation(r)&&(!company||String(r.company_id)===company))}
+   tracked={trackedIntimations.filter(r=>!company||String(r.company_id)===company)}
+   canEdit={!!data?.can_edit} {busy} onGenerate={generateIntimation} onOpen={open}
+   onMail={r=>mailReader={subject:r.profile.email_subject,message:r.profile.email_message}} onPreview={file=>previewFile=file}/>
+ {/if}
  {#if view==='process'||view==='progress'}{#if processView==='approvals'&&data?.can_approve}
  <section class="sample-request-register sample-approval-queue" aria-label="Sample approvals">
   <div class="approval-heading"><h3>Sample requests &amp; detail corrections</h3><p>{approvalRequests.length} awaiting MD or Super Admin review</p></div>
@@ -222,7 +269,7 @@
     </tbody>
    </table>
   </div>
- </section>{/if}<SampleProcessBoard {company} view={processView} {revision} onopen={open} progressLayout={indentProgress||view==='progress'}/>{:else if view==='sop'}<section class="sop"><h3>Sampling SOP</h3><ol><li><strong>Merchant:</strong> enter buyer, style, fabric, specification, required date, sizes and pieces. Save a draft to assign one indent number per piece and attach supporting files. Then submit the request to MD.</li><li><strong>MD:</strong> review the request. Approval releases the numbered indents to production. Intimations receive their indent numbers at this step.</li><li><strong>Sampling coordinator:</strong> first ask Super Admin to set Capacity (tailors × pieces per day, Sunday off and holidays). In Planning, select indents, set their priority and line, then preview and freeze the plan. Open Freezing to see the locked plan. After their deadline, plans move to Freeze Master; final handover determines delay. Maintain the master register and update live progress daily. Record expected and ready dates for fabric, trims and style, then plan pattern, cutting, tailor allocation, sewing, finishing, audit and handover.</li><li><strong>Departments:</strong> report fabric/trims availability, pattern and marker completion, cutting start/completion, allocation, loading, sewing and finishing. Every report records the submitting account and time; only the request’s assigned merchant accepts it. The assigned merchant can record operational updates directly. QA continues to sign audits.</li><li><strong>CAD / Sampling:</strong> complete patterns and markers. Accept the file or record missing items. Cutting requires a clear file and recorded fabric, trims and style readiness. Allocate a sample tailor and record loading before starting sewing.</li><li><strong>Sampling:</strong> record sewing and finishing progress separately, then send to QA.</li><li><strong>QA:</strong> compare the required specification against the actual garment. Record actual/alternate fabric, trims and style, submission attempt and remarks. Approve, send for rework or reject. Rework returns through sewing, finishing and a new audit; earlier signed reports stay available.</li><li><strong>Sampling / Merchant:</strong> record the DC and handover to merchant or showroom. Enter customer and sender addresses and AWB / delivery reference when completing final handover. Print the dispatch label.</li><li><strong>Traceability:</strong> each garment keeps its indent, plan, audit reports, linked private files and action history. Live planning excludes completed and rejected garments; the master retains them.</li></ol></section>{:else if view==='capacity'}<SampleCapacity {company} onupdated={()=>revision++}/>{:else if ['freezing','freeze-master'].includes(view)}<SamplePlanLedger {company} mode={view} {revision} onopen={open}/>{:else if ['live','master','plan'].includes(view)}<SamplePlanning {company} {view} {revision} canPlan={data?.can_produce} onopen={open} onfrozen={()=>view='freezing'}/>{:else if view==='requests'}
+ </section>{/if}<SampleProcessBoard {company} view={processView} {revision} onopen={open} progressLayout={indentProgress||view==='progress'}/>{:else if view==='sop'}<section class="sop"><h3>Sampling SOP</h3><ol><li><strong>Merchant:</strong> enter buyer, style, fabric, specification, required date, sizes and pieces. Save a draft to assign one indent number per piece and attach supporting files. Then submit the request to MD.</li><li><strong>MD:</strong> review the request. Approval releases the numbered indents to production.</li><li><strong>Sampling coordinator:</strong> first ask Super Admin to set Capacity (tailors × pieces per day, Sunday off and holidays). In Planning, select indents, set their priority and line, then preview and freeze the plan. Open Freezing to see the locked plan. After their deadline, plans move to Freeze Master; final handover determines delay. Maintain the master register and update live progress daily. Record expected and ready dates for fabric, trims and style, then plan pattern, cutting, tailor allocation, sewing, finishing, audit and handover.</li><li><strong>Departments:</strong> report fabric/trims availability, pattern and marker completion, cutting start/completion, allocation, loading, sewing and finishing. Every report records the submitting account and time; only the request’s assigned merchant accepts it. The assigned merchant can record operational updates directly. QA continues to sign audits.</li><li><strong>CAD / Sampling:</strong> complete patterns and markers. Accept the file or record missing items. Cutting requires a clear file and recorded fabric, trims and style readiness. Allocate a sample tailor and record loading before starting sewing.</li><li><strong>Sampling:</strong> record sewing and finishing progress separately, then send to QA.</li><li><strong>QA:</strong> compare the required specification against the actual garment. Record actual/alternate fabric, trims and style, submission attempt and remarks. Approve, send for rework or reject. Rework returns through sewing, finishing and a new audit; earlier signed reports stay available.</li><li><strong>Sampling / Merchant:</strong> record the DC and handover to merchant or showroom. Enter customer and sender addresses and AWB / delivery reference when completing final handover. Print the dispatch label.</li><li><strong>Traceability:</strong> each garment keeps its indent, plan, audit reports, linked private files and action history. Live planning excludes completed and rejected garments; the master retains them.</li></ol></section>{:else if view==='capacity'}<SampleCapacity {company} onupdated={()=>revision++}/>{:else if ['freezing','freeze-master'].includes(view)}<SamplePlanLedger {company} mode={view} {revision} onopen={open}/>{:else if ['live','master','plan'].includes(view)}<SamplePlanning {company} {view} {revision} canPlan={data?.can_produce} onopen={open} onfrozen={()=>view='freezing'}/>{:else if view==='requests'}
  <div class="sample-request-register">
   <div class="request-list-controls"><label class="request-search"><span class="request-search__label">Search indent number, style or buyer</span><Search size={16} aria-hidden="true"/><input bind:value={search} placeholder="Search indent, style or buyer"/></label></div>
   <div class="table-scroll">
@@ -263,7 +310,7 @@
  <div class="ux-dialog__body" use:enter>
  {#if error}<div class="form-error" role="alert">{error}</div>{/if}
  <div class="editor-layout">
- <div class="form-grid"><label data-field="buyer_id" class:field-error={!!fieldErrors.buyer_id}>{intake?'Brand / buyer':'Buyer'}<select bind:value={form.buyer_id} onchange={()=>{if(intake)form.profile.brand=data.buyers.find((b:any)=>b.id===Number(form.buyer_id))?.name||''}}><option value="">Choose buyer</option>{#each data.buyers.filter((b:any)=>b.company_id===Number(form.company_id)) as b}<option value={b.id}>{b.name}</option>{/each}</select>{#if fieldErrors.buyer_id}<small class="field-error-message">{fieldErrors.buyer_id}</small>{/if}</label>
+ <div class="form-grid" inert={intake&&!!form.id}><label data-field="buyer_id" class:field-error={!!fieldErrors.buyer_id}>{intake?'Brand / buyer':'Buyer'}<select bind:value={form.buyer_id} onchange={()=>{if(intake)form.profile.brand=data.buyers.find((b:any)=>b.id===Number(form.buyer_id))?.name||''}}><option value="">Choose buyer</option>{#each data.buyers.filter((b:any)=>b.company_id===Number(form.company_id)) as b}<option value={b.id}>{b.name}</option>{/each}</select>{#if fieldErrors.buyer_id}<small class="field-error-message">{fieldErrors.buyer_id}</small>{/if}</label>
  {#if form.profile.legacy_indent_number}<label>Original Excel indent<input value={form.profile.legacy_indent_number} readonly/></label>{/if}
  {#if form.completion&&form.profile.historical_registered==='true'}<label data-field="source_quantity" class:field-error={!!fieldErrors.source_quantity}>Historical number of pieces<input type="number" min="1" max="10000" step="1" value={form.profile.source_quantity??''} oninput={e=>form.profile.source_quantity=e.currentTarget.value}/>{#if fieldErrors.source_quantity}<small class="field-error-message">{fieldErrors.source_quantity}</small>{/if}</label>{/if}
  {#snippet requestFields(keys:string[])}
@@ -279,7 +326,7 @@
    </details>
   {/each}
  {/if}
- <div class="wide" class:intimation-variants={intake}><h3>Sizes, colours and pieces</h3>{#if form.completion}<p>Update the existing indents’ size and colour. Each row keeps its current indent number.</p>{:else}<p class="indent-count" aria-live="polite"><strong>{pieceCount} {pieceCount===1?'indent number':'indent numbers'} {intake||form.profile.intimation==='true'?'assigned on approval':'assigned when saved'}.</strong></p>{/if}
+ <div class="wide" class:intimation-variants={intake}><h3>Sizes, colours and pieces</h3>{#if form.completion}<p>Update the existing indents’ size and colour. Each row keeps its current indent number.</p>{:else}<p class="indent-count" aria-live="polite"><strong>{pieceCount} {pieceCount===1?'indent number':'indent numbers'} {intake?'for the sample request':'assigned when saved'}.</strong></p>{/if}
  {#each form.variants as v,i}<div class="variant"><label>Size<input bind:value={v.size}/></label><label>Colour<input bind:value={v.colour}/></label><label data-field={'variants.'+i+'.quantity'} class:field-error={!!fieldErrors['variants.'+i+'.quantity']}>Quantity<input type="number" min="1" max="100" step="1" readonly={!!form.completion} bind:value={v.quantity}/>{#if fieldErrors['variants.'+i+'.quantity']}<small class="field-error-message">{fieldErrors['variants.'+i+'.quantity']}</small>{/if}</label><button class="button secondary" disabled={form.variants.length===1||form.completion} onclick={()=>form.variants.splice(i,1)}>Remove</button></div>{/each}{#if !form.completion}<button class="button secondary" onclick={()=>form.variants.push({size:'',colour:'',quantity:1})}>Add size / colour</button>{/if}</div>
  {#if !intake}
   <div class="wide" data-field="email_message" class:field-error={!!fieldErrors.email_message}>
@@ -296,20 +343,43 @@
  {/snippet}
  {#if intake}
   <section class="intimation-communication" aria-label="Buyer email and attachments">
-   <label>Buyer email message<textarea rows="5" bind:value={form.profile.email_message} aria-describedby="sample-buyer-message-help"></textarea><small id="sample-buyer-message-help">Paste the buyer’s email here or attach the saved email.</small></label>
+   <label>Buyer email message<textarea rows="5" readonly={!!form.id} bind:value={form.profile.email_message} aria-describedby="sample-buyer-message-help"></textarea><small id="sample-buyer-message-help">Paste the buyer’s email here or attach the saved email.</small></label>
    {@render uploads()}
   </section>
  {:else}
   {@render uploads()}
  {/if}
  </div>
+ {#if intake&&intimationMatch}
+  <section class="indent-match" aria-labelledby="indent-match-heading">
+   <h3 id="indent-match-heading" tabindex="-1" bind:this={matchHeading}>An indent already exists for this buyer style</h3>
+   {#if intimationMatch.restricted}
+    <p>Your access limits the indent preview. Confirm to record the intimation against the existing indent.</p>
+   {:else}
+    <p>Check the indent details, then confirm which indent to link.</p>
+    <fieldset>
+     <legend class="sr-only">Choose an existing indent</legend>
+     {#each intimationMatch.choices as match (match.id)}
+      <article>
+       <label class="indent-match-choice">
+        <input type="radio" bind:group={matchedIndentID} value={match.id}/>
+        <span><strong>{match.indent_numbers?.join(', ')||'Existing indent'}</strong><small>{match.status==='Submitted'?'Pending approval':match.status==='Changes requested'?'Rework needed':match.status}</small></span>
+       </label>
+       <p>{[match.sample_type,match.required_date&&'Required '+match.required_date].filter(Boolean).join(' · ')}</p>
+       <ul>{#each match.variants as v}<li>{[v.size,v.colour].filter(Boolean).join(' · ')||'Size and colour pending'} · × {v.quantity}</li>{/each}</ul>
+      </article>
+     {/each}
+    </fieldset>
+   {/if}
+  </section>
+ {/if}
  {#if option}<div class="inline-editor"><label>New {label(option.kind)}<input bind:value={option.label} maxlength="100"/></label><button class="button primary" disabled={busy||!option.label.trim()} onclick={addOption}>Add option</button><button class="button secondary" onclick={()=>option=null}>Cancel</button></div>{/if}
  {#if !intake}<h3>Sample BOM</h3>{#if !form.bom.length}<p>No components added. Click Add component to add only what you need.</p>{/if}
  {#each form.bom as b,i}<div class="bom-row"><label data-field={'bom.'+i+'.group'} class:field-error={!!fieldErrors['bom.'+i+'.group']}>Group<select bind:value={b.group}>{#each groups as g}<option>{g}</option>{/each}</select></label>{#each bomFields as [key,title]}<label data-field={'bom.'+i+'.'+key} class:field-error={!!fieldErrors['bom.'+i+'.'+key]}>{title}<input bind:value={b[key]}/>{#if fieldErrors['bom.'+i+'.'+key]}<small class="field-error-message">{fieldErrors['bom.'+i+'.'+key]}</small>{/if}</label>{/each}<button class="text-button" onclick={()=>form.bom.splice(i,1)}>Remove component</button></div>{/each}<button class="button secondary" onclick={()=>form.bom.push({group:'Sewing trims',component:''})}>Add component</button>
- {/if}</div><footer><p class="indent-form-summary">{pieceCount} {pieceCount===1?'piece':'pieces'} · {queuedFileCount} {queuedFileCount===1?'file':'files'} ready to attach</p>{#if form.completion}<button class="button primary" disabled={busy||remarkDictating} onclick={()=>save('complete')}>{data.can_approve?'Save indent details':'Submit detail changes'}</button>{:else if intake}<button type="button" class="button secondary" disabled={busy} onclick={()=>{form=null;option=null}}>Cancel</button><button type="button" class="button primary" disabled={busy} onclick={()=>save('intimation')}>{busy?'Submitting…':'Submit intimation'}</button>{:else}<button class="button secondary" disabled={busy||remarkDictating} onclick={()=>save('save')}>{busy?'Saving…':'Save draft'}</button><button class="button primary" disabled={busy||remarkDictating} onclick={()=>save('submit')}>Submit for approval</button>{/if}</footer></div></div>
+ {/if}</div><footer><p class="indent-form-summary">{pieceCount} {pieceCount===1?'piece':'pieces'} · {queuedFileCount} {queuedFileCount===1?'file':'files'} ready to attach</p>{#if form.completion}<button class="button primary" disabled={busy||remarkDictating} onclick={()=>save('complete')}>{data.can_approve?'Save indent details':'Submit detail changes'}</button>{:else if intake}<button type="button" class="button secondary" disabled={busy} onclick={()=>{form=null;option=null}}>Cancel</button><button type="button" class="button primary" disabled={busy||!!intimationMatch?.choices.length&&!matchedIndentID} onclick={()=>save('intimation')}>{busy?'Submitting…':form.id?'Finish attaching files':intimationMatch?'Confirm and link':'Submit intimation'}</button>{:else}<button class="button secondary" disabled={busy||remarkDictating} onclick={()=>save('save')}>{busy?'Saving…':'Save draft'}</button><button class="button primary" disabled={busy||remarkDictating} onclick={()=>save('submit')}>Submit for approval</button>{/if}</footer></div></div>
 {/if}
 {#if detail}
- <div class="sample-overlay"><div role="dialog" aria-modal="true" aria-label="Sample request details" tabindex="-1" class="sample-dialog sample-detail-dialog"><header><h2>{#if focusIndent}Indent {indentReference(detail.pieces.find((p:any)=>p.id===focusIndent)??{id:focusIndent})}{:else}{detail.record.profile.intimation==='true'?'Intimation '+intimationReference(detail.record):reservedIndent?'Indent '+reservedIndent:'Sample request'}{/if} · {detail.record.profile.buyer_style||'Sample request'}{#if detail.record.profile.est} · EST {detail.record.profile.est}{/if}</h2><div class="detail-header-actions">{#if data.can_edit}<button class="button secondary" disabled={busy} onclick={copyRequest}><Copy size={14}/>Copy as new request</button>{/if}{#if ['Draft','Changes requested'].includes(detail.record.status)&&data.can_edit}<button class="button primary" disabled={busy} onclick={edit}><Pencil size={14}/>Edit / submit</button>{/if}{#if detail.record.status==='Approved'&&detail.can_complete}<button class="button primary" disabled={busy||!!detail.record.profile.pending_completion} onclick={completeDetails}><Pencil size={14}/>Complete / edit details</button>{/if}<span class="header-divider" aria-hidden="true"></span><button class="button secondary" disabled={busy} onclick={()=>{detail=null;production=null}}><X size={14}/>Close</button></div></header><div class="sample-detail-body" use:enter>
+ <div class="sample-overlay"><div role="dialog" aria-modal="true" aria-label="Sample request details" tabindex="-1" class="sample-dialog sample-detail-dialog"><header><h2>{#if focusIndent}Indent {indentReference(detail.pieces.find((p:any)=>p.id===focusIndent)??{id:focusIndent})}{:else}{detail.record.profile.intimation==='true'?'Intimation '+intimationReference(detail.record):reservedIndent?'Indent '+reservedIndent:'Sample request'}{/if} · {detail.record.profile.buyer_style||'Sample request'}{#if detail.record.profile.est} · EST {detail.record.profile.est}{/if}</h2><div class="detail-header-actions">{#if data.can_edit&&!detail.record.indent_linked&&!pendingIntimation(detail.record)}<button class="button secondary" disabled={busy} onclick={copyRequest}><Copy size={14}/>Copy as new request</button>{/if}{#if pendingIntimation(detail.record)&&data.can_edit}<button class="button primary" disabled={busy} onclick={()=>generateIntimation(detail.record)}><Pencil size={14}/>Generate indent</button>{:else if !detail.record.indent_linked&&['Draft','Changes requested'].includes(detail.record.status)&&data.can_edit}<button class="button primary" disabled={busy} onclick={edit}><Pencil size={14}/>Edit / submit</button>{/if}{#if detail.record.status==='Approved'&&detail.can_complete}<button class="button primary" disabled={busy||!!detail.record.profile.pending_completion} onclick={completeDetails}><Pencil size={14}/>Complete / edit details</button>{/if}<span class="header-divider" aria-hidden="true"></span><button class="button secondary" disabled={busy} onclick={()=>{detail=null;production=null}}><X size={14}/>Close</button></div></header><div class="sample-detail-body" use:enter>
  {#if error}<div class="form-error" role="alert">{error}</div>{/if}
  <div class="sample-detail-toolbar"><p>Created by: <strong>{detail.record.created_by_name||detail.record.merchant||'—'}</strong> · Submitted by: <strong>{detail.record.submitted_by||'Not submitted'}</strong></p>{#if detail.pieces.length}<div class="actions"><button class="button secondary" onclick={()=>print('indent')}><Printer size={15} aria-hidden="true"/>Print all indents</button><button class="button secondary" onclick={()=>print('layout')}><Printer size={15} aria-hidden="true"/>Print swatch layout</button></div>{/if}</div>
  {#if reservedPieces.length}
@@ -335,7 +405,7 @@
  <details class="sample-support-section" open><summary>Requested sizes and colours</summary><div class="table-scroll"><table><thead><tr><th>Size</th><th>Colour</th><th>Pieces</th></tr></thead><tbody>{#each detail.record.variants as v}<tr><td>{v.size||'—'}</td><td>{v.colour||'—'}</td><td>{v.quantity??'—'}</td></tr>{/each}</tbody></table></div></details>
  <details class="sample-support-section"><summary>Review sample BOM ({detail.record.bom.length} components)</summary><div class="table-scroll"><table><thead><tr><th>Group / component</th><th>Reference</th><th>Quantity / unit</th><th>Details</th></tr></thead><tbody>{#each detail.record.bom as b}<tr><td>{b.group} · {b.component}</td><td>{b.reference||'—'}</td><td>{b.quantity||'—'} {b.unit||''}</td><td>{[b.colour,b.size,b.ticket,b.thread_position,b.shade,b.placement,b.remarks].filter(Boolean).join(' · ')}</td></tr>{/each}</tbody></table></div></details>
  {#if detail.record.profile.pending_completion}{@const correction=detail.record.profile.pending_completion}<section class="review" aria-label="Proposed detail correction"><h3>Detail correction awaiting approval</h3><p>Submitted by {correction.submitter} · {new Date(correction.submitted_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})} IST</p>{#if Number(correction.payload.buyer_id)!==detail.record.buyer_id}<p>Buyer: {detail.record.buyer_name} → <strong>{data.buyers.find((b:any)=>b.id===Number(correction.payload.buyer_id))?.name||correction.payload.buyer_id}</strong></p>{/if}<dl class="detail-grid">{#each [...fields.map(f=>f[0]),'source_quantity','email_message'] as key}{#if (correction.payload.profile[key]??'')!==(detail.record.profile[key]??'')}<div><dt>{key==='source_quantity'?'Historical quantity':label(key)}</dt><dd>{detail.record.profile[key]||'Blank'} → <strong>{correction.payload.profile[key]||'Blank'}</strong></dd></div>{/if}{/each}</dl><div class="table-scroll"><table><thead><tr><th>Existing indent</th><th>Proposed size</th><th>Proposed colour</th></tr></thead><tbody>{#each correction.payload.variants as row}<tr><td>{indentReference(detail.pieces.find((p:any)=>p.id===row.id)??row)}</td><td>{row.size||'Blank'}</td><td>{row.colour||'Blank'}</td></tr>{/each}</tbody></table></div>{#if JSON.stringify(correction.payload.bom)!==JSON.stringify(detail.record.bom)}<details><summary>Proposed BOM</summary><div class="table-scroll"><table><thead><tr><th>Group</th><th>Component / reference</th><th>Quantity</th><th>Colour / size</th><th>Thread / shade / placement</th><th>Remarks</th></tr></thead><tbody>{#each correction.payload.bom as b}<tr><td>{b.group}</td><td>{b.component} · {b.reference||''}</td><td>{b.quantity||''}</td><td>{b.colour||''} · {b.size||''}</td><td>{b.ticket||''} · {b.thread_position||''} · {b.shade||''} · {b.placement||''}</td><td>{b.remarks||''}</td></tr>{/each}</tbody></table></div></details>{/if}{#if data.can_approve}<label>Review comment<textarea bind:value={review}></textarea></label><div class="indent-review-actions"><button class="button indent-approve" disabled={busy} onclick={()=>decide('approve_completion')}>Approve detail changes</button><button class="button indent-return" disabled={busy||!review.trim()} onclick={()=>decide('return_completion')}>Return for rework</button></div>{/if}</section>{/if}
- {#if detail.record.status==='Submitted'&&data.can_approve}<div class="review"><label>MD / Super Admin review note<textarea bind:value={review}></textarea></label><div class="indent-review-actions"><button class="button indent-approve" disabled={busy} onclick={()=>decide('approve')}>{detail.record.profile.intimation==='true'?'Approve and generate indents':'Approve indents'}</button><button class="button indent-return" disabled={busy||!review.trim()} onclick={()=>decide('return')}>Return for rework</button></div></div>{/if}
+ {#if detail.record.status==='Submitted'&&data.can_approve}<div class="review"><label>MD / Super Admin review note<textarea bind:value={review}></textarea></label><div class="indent-review-actions"><button class="button indent-approve" disabled={busy} onclick={()=>decide('approve')}>{detail.record.profile.intimation==='true'&&!requestIndentNumbers(detail.record).length?'Approve and generate indents':'Approve indents'}</button><button class="button indent-return" disabled={busy||!review.trim()} onclick={()=>decide('return')}>Return for rework</button></div></div>{/if}
  <details class="sample-support-section"><summary>Documents and images</summary><p>Files remain private to users with access to this request.</p><ul class="sample-document-list">{#each detail.files as f}<li><button type="button" class="text-button" onclick={()=>previewFile=f}>Preview {f.category}: {f.name}</button></li>{:else}<li>No documents uploaded.</li>{/each}</ul>
  {#if detail.record.status!=='Submitted'&&((data.can_edit&&detail.record.status!=='Approved')||detail.record.status==='Approved'&&(data.can_produce||data.can_audit||data.can_pattern||data.can_handover))}<div class="document-upload-row"><label>Document category<select bind:value={category}>{#each ['Buyer email','Buyer specification','Sample to copy','CAD','Labels','Audit sheet','Fabric swatch','Trim card','Sample images','Dispatch','Buyer feedback','Other'] as c}<option>{c}</option>{/each}</select></label><label>Link to indent<select bind:value={fileIndent}><option value="">Whole request</option>{#each detail.pieces as p}<option value={String(p.id)}>{indentReference(p)} · {p.size} · {p.colour}</option>{/each}</select></label><label>Upload files (10 MB each)<input type="file" multiple disabled={busy||data.can_documents===false} onchange={upload} accept=".eml,.pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.dxf,.zip"/></label><PhoneScanButton label="sample request documents" destination={detail.record.id+':'+category+':'+fileIndent} disabled={busy||data.can_documents===false} onreceive={file=>attachFiles([file],true)}/></div>{/if}
  </details>
@@ -352,6 +422,15 @@
 {#if inlineHelp}<SpoolyHelp context={'Sampling '+view} onclose={()=>{inlineHelp=false;document.querySelector<HTMLButtonElement>('[data-inline-spooly]')?.focus()}}/>{/if}
 
 <style>
+ .indent-match{margin-top:16px;padding:14px 16px;background:#f1f8fc;border:1px solid #c3dbe9;border-radius:12px}
+ .indent-match h3{margin:0;font-size:17px}
+ .indent-match p{margin:4px 0 8px}
+ .indent-match fieldset{display:grid;gap:8px;border:0;padding:0;margin:0;min-width:0}
+ .indent-match article{border:1px solid #d5e2eb;border-radius:8px;padding:8px 12px;background:#fff}
+ .indent-match .indent-match-choice{display:flex;flex-direction:row;align-items:center;gap:10px}
+ .indent-match-choice input[type="radio"]{width:18px;height:18px;min-height:0;flex:none;accent-color:#087f83}
+ .indent-match-choice small{display:inline;margin-left:8px}
+ .indent-match ul{margin:4px 0 4px 18px;padding:0}
  .sample-dialog.ux-dialog>footer .indent-form-summary{margin:0 auto 0 0;align-self:center;font-size:13px;color:#42566a}
 
 

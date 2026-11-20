@@ -52,7 +52,7 @@ export function api(path:string,body?:unknown,method='POST',onProgress?:(percent
   const response=await request.catch(e=>{reportClientIssue('network');throw e});
   const data=await response.json().catch(()=>{throw new Error('The server response was interrupted. Refresh to check whether the action finished.');});
   if(response.status<500&&data.code!=='action_already_submitted')uncertain.delete(identity);
-  if(!response.ok){if(response.status===401&&path!=='/login'&&path!=='/login/otp'&&typeof window!=='undefined')window.dispatchEvent(new Event('erp:session-expired'));throw Object.assign(new Error(data.error||'Request failed.'),{status:response.status,code:data.code,fields:data.fields});}
+  if(!response.ok){if(response.status===401&&path!=='/login'&&path!=='/login/otp'&&typeof window!=='undefined')window.dispatchEvent(new Event('erp:session-expired'));throw Object.assign(new Error(data.error||'Request failed.'),{status:response.status,code:data.code,fields:data.fields,matches:data.matches,restrictedMatch:data.restricted_match});}
   if(data.csrf){if(csrf!==data.csrf)uncertain.clear();setCSRF(data.csrf);}
   if(typeof window!=='undefined'){
    if(path==='/session'||path==='/login'||path==='/login/otp')sessionUserID.set(data.user?.id??null);
