@@ -33,6 +33,8 @@ export default defineConfig({
    'form-action':['self']
   }}
  })],
+ // The ERP font policy allows only same-origin font URLs.
+ build: {assetsInlineLimit: file => /\.woff2?$/i.test(file) ? false : undefined},
  server: {
   port: 5173,
   strictPort: true,
