@@ -20,7 +20,7 @@ test('standalone payload never includes stale linked company, buyer or PO identi
  const body=exportInvoiceBody({company_id:null,party_type:'buyer',party_id:44,order_id:55,party_name:' Customer A ',invoice_number:'INV-1',currency:'USD',invoice_amount:'1000.00',profile,receipts,ebrcs:[],version:3});
  assert.equal(body.company_id,null);assert.equal(body.party_id,null);assert.equal(body.order_id,null);
  assert.equal(body.party_type,'manual');assert.equal(body.party_name,'Customer A');
- assert.equal(body.profile,profile);assert.equal(body.receipts,receipts);assert.equal(body.version,3);
+ assert.equal(body.profile,profile);assert.deepEqual(body.receipts,receipts);assert.equal(body.version,3);
 });
 test('linked invoice payload keeps existing identity and money strings',()=>{
  const body=exportInvoiceBody({company_id:'5',party_type:'buyer',party_id:'8',order_id:'12',party_name:'ignored',invoice_amount:'123456789.90',profile:{},receipts:[],ebrcs:[]});
