@@ -152,7 +152,7 @@
  {/if}
 {/if}
   {#if auditOpen}
-   <SampleAuditEditor {piece} onclose={closeAudit} onchange={auditSubmitted} showAttachmentsHint={!editorOnly}/>
+   <SampleAuditEditor {piece} onclose={closeAudit} onchange={auditSubmitted} showAttachmentsHint={!editorOnly} measurementsOptional={data?.can_submit_audit_without_measurements===true}/>
   {:else if selectedStep}
    <SampleStageDialog title={selectedStep[1]+' · Indent '+indentReference(piece)} close={closeEditor} {busy}>
     {#if !pendingForStep}<p class="stage-status">Saved status: <strong>{milestone(selectedStep[0],selectedStep[2])}</strong></p>{/if}

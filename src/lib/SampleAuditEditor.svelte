@@ -4,7 +4,7 @@
  import SampleSpecImport from './SampleSpecImport.svelte';
  import {api} from './api';
 
- let {piece,onclose,onchange,showAttachmentsHint=false}:{piece:any;onclose:()=>void;onchange:()=>Promise<void>;showAttachmentsHint?:boolean}=$props();
+ let {piece,onclose,onchange,showAttachmentsHint=false,measurementsOptional=false}:{piece:any;onclose:()=>void;onchange:()=>Promise<void>;showAttachmentsHint?:boolean;measurementsOptional?:boolean}=$props();
  let busy=$state(false),error=$state(''),note=$state('');
  const materials=[['fabric_used','Fabric'],['trims_used','Trims'],['style_used','Style']] as const;
  function draftReport(){
@@ -12,13 +12,16 @@
   return {fabric_used:'Actual',trims_used:'Actual',style_used:'Actual',submission_attempt:String(Math.min(4,(previous?Number(previous.submission_attempt):0)+1)),special_remarks:'',merchant_contact:'',measurements:previous?structuredClone($state.snapshot(previous.measurements)):[]};
  }
  let audit=$state(draftReport());
+ let measurements=$derived(measurementsOptional
+  ? audit.measurements.filter((row:Record<string,unknown>)=>[row.point,row.required,row.actual,row.tolerance,row.remarks].some(value=>String(value??'').trim()!==''))
+  : audit.measurements);
 
  async function submit(result:string){
   if(busy)return;
   busy=true;
   error='';
   try{
-   await api('/sample-indents/'+piece.id,{version:piece.version,action:'audit',result,note,audit});
+   await api('/sample-indents/'+piece.id,{version:piece.version,action:'audit',result,note,audit:{...audit,measurements}});
    await onchange();
   }catch(problem){
    error=(problem as Error).message;
@@ -41,7 +44,8 @@
   </div>
   <h4>Measurements</h4>
   <SampleSpecImport indent={piece.id} onsave={rows=>audit.measurements=rows}/>
-  {#if !audit.measurements.length}<p>Add measurement points from the buyer specification.</p>{/if}
+  {#if measurementsOptional}<p>If historical measurements are unavailable, enter the recorded outcome in QA decision remarks and submit.</p>
+  {:else if !audit.measurements.length}<p>Add measurement points from the buyer specification.</p>{/if}
   {#each audit.measurements as row,i}
    <div class="measurement">
     <label>Measurement point<input bind:value={row.point}/></label>
@@ -58,7 +62,7 @@
   {#if showAttachmentsHint}<p>Upload the fabric swatch, trim card or audit attachment under Documents and select indent {indentReference(piece)}.</p>{/if}
   <footer>
    {#each [['Approved','Submit QA approval'],['Rework','Submit rework'],['Rejected','Submit rejection']] as [result,label]}
-    <button class="button secondary" disabled={busy||!audit.measurements.length||(result!=='Approved'&&!note.trim())} onclick={()=>submit(result)}>{label}</button>
+    <button class="button secondary" disabled={busy||!measurementsOptional&&!measurements.length||(!measurements.length||result!=='Approved')&&!note.trim()} onclick={()=>submit(result)}>{label}</button>
    {/each}
    <button class="text-button" disabled={busy} onclick={onclose}>Cancel</button>
   </footer>
