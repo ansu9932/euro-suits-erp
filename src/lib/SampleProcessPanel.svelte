@@ -156,6 +156,10 @@
      {#if !data}{#if error}<p role="status">{error}</p>{:else}<SkeletonLoader variant="detail" rows={2} columns={2} label="Loading available stage actions…"/>{/if}
      {:else if selectedStep?.[2]==='cad_sent_at'&&data.can_send_cad&&piece.status==='Ready'&&!piece.production.cad_sent_at&&!piece.production.process_exception}
       <p>Record fabric and trims availability before sending this indent to CAD.</p>
+     {:else if selectedStep[0]==='audit'&&!piece.production.audit_actual&&!data.stages.includes('audit')}
+      <p>The Quality team starts the audit and submits the signed report.</p>
+     {:else if selectedStep[0]==='audit'&&!piece.production.audit_actual&&!stageActions.some(item=>item.key==='audit_start'||item.key==='audit')}
+      <p>Finish the sample before starting the audit.</p>
      {:else if !stageActions.length}
       {#if piece.production[selectedStep[2]]}<p>This milestone is recorded. Its saved date is shown above.</p>
       {:else}<p>No update is available for this stage with your current access.</p>{/if}
