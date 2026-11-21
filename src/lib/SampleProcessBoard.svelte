@@ -1,8 +1,9 @@
 <script lang="ts">
  import {SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
- import {Check,ChevronRight,Clock3,RefreshCw,Search} from '@lucide/svelte';
+ import {Check,ChevronRight,Clock3,Download,RefreshCw,Search} from '@lucide/svelte';
  import {tick,untrack} from 'svelte';
  import {api} from './api';
+ import {downloadReport} from './loading';
  import SampleProcessPanel from './SampleProcessPanel.svelte';
  import {indentReference,processSteps,processViews,processLabel,processTone,correctionForStep,correctionStage,stamp,actionLabel,sampleStatusLabel,type ProcessStep} from './sampleProcess';
 
@@ -10,6 +11,7 @@
  let data:any=$state(null),error=$state(''),busy=$state(false),search=$state(''),query=$state(''),page=$state(1),filter=$state('all'),notice=$state('');
  let editor:{row:any;step:string}|null=$state(null);
  let sequence=0,loadedCompany='';
+ let exporting=$state(false),exportError=$state('');
  let searchInput:HTMLInputElement;
  let opener:HTMLButtonElement|null=null;
  const activeView=$derived(view==='all'?filter:view);
@@ -17,7 +19,7 @@
  $effect(()=>{
   const scope=company,queue=activeView,currentPage=page,term=query,version=revision;
   untrack(()=>{
-   if(loadedCompany!==scope){data=null;editor=null;loadedCompany=scope}
+   if(loadedCompany!==scope){data=null;editor=null;exportError='';loadedCompany=scope}
    load(scope,queue,currentPage,term);
   });
   return()=>{sequence++};
@@ -29,6 +31,15 @@
    if(request===sequence)data=result;
   }catch(problem){if(request===sequence)error=(problem as Error).message}
   finally{if(request===sequence)busy=false}
+ }
+ async function exportProgress(){
+  if(busy||exporting||error||!data?.total)return;
+  const scope=company;
+  const params=new URLSearchParams({company:scope,view:activeView,search:query,format:'xlsx'});
+  exporting=true;exportError='';
+  try{await downloadReport('/api/sample-process?'+params,'indent-progress.xlsx')}
+  catch(problem){if(company===scope)exportError=(problem as Error).message}
+  finally{exporting=false}
  }
  function apply(){
   if(busy)return;
@@ -109,7 +120,10 @@
 <section class="sp-board" class:sp-board--progress={progressLayout} aria-label={view==='all'?'Indent progress':processViews[view]||'Sample process'} aria-busy={busy}>
  <header class="sp-board__heading">
   <div><h3>{view==='all'?'Indent progress':processViews[view]||'Sample process'}</h3><p>Choose a stage to update it. Every submission and review keeps its user, date and time.</p></div>
-  <button class="button secondary sp-refresh" type="button" disabled={busy} onclick={()=>load()}><RefreshCw size={16} aria-hidden="true"/>{busy?'Refreshing…':'Refresh'}</button>
+  <div class="sp-heading-actions">
+   {#if progressLayout}<button class="button secondary sp-refresh" type="button" disabled={busy||exporting||!!error||!data?.total} onclick={exportProgress}><Download size={16} aria-hidden="true"/>{exporting?'Exporting…':'Export Excel'}</button>{/if}
+   <button class="button secondary sp-refresh" type="button" disabled={busy} onclick={()=>load()}><RefreshCw size={16} aria-hidden="true"/>{busy?'Refreshing…':'Refresh'}</button>
+  </div>
  </header>
  <form class="sp-filters" onsubmit={event=>{event.preventDefault();apply()}}>
   <label class="sp-search">
@@ -125,13 +139,15 @@
  </form>
  <div class="sp-legend" aria-label="Recorded stage colours"><span class="sp-key sp-key--complete">Recorded</span><span class="sp-key sp-key--active">Current stage</span><span class="sp-key sp-key--pending">Awaiting approval</span><span class="sp-key sp-key--issue">Rework / rejected</span>{#if progressLayout}<span class="sp-key sp-key--unrecorded">Not recorded</span>{/if}</div>
  {#if error}<p class="form-error" role="alert">{error} <button class="text-button" type="button" onclick={()=>load()}>Retry</button></p>{/if}
+ {#if exportError}<p class="form-error" role="alert">{exportError}</p>{/if}
  {#if notice}<p class="sp-notice" role="status">{notice}</p>{/if}
  {#if !data&&!error}<SkeletonLoader variant="list" rows={3} columns={5} label="Loading indent progress…"/>{:else if data}
   <div class="sp-list">
-   {#each data.rows as row (row.id)}
+   {#each data.rows as row, index (row.id)}
+    {@const serial=(data.page-1)*data.page_size+index+1}
     <article class="sp-indent" aria-label={'Progress for '+indentReference(row)}>
      <div class="sp-indent__heading">
-      <div class="sp-indent__identity"><strong>{indentReference(row)}</strong><span>{row.buyer} · {row.profile.buyer_style||'Style not recorded'}</span>{#if row.profile.legacy_indent_number}<small>Old indent {row.profile.legacy_indent_number}</small>{/if}</div>
+      <div class="sp-indent__identity"><strong>{#if progressLayout}<span class="sp-serial">{serial}.</span>{/if}{indentReference(row)}</strong><span>{row.buyer} · {row.profile.buyer_style||'Style not recorded'}</span>{#if row.profile.legacy_indent_number}<small>Old indent {row.profile.legacy_indent_number}</small>{/if}</div>
       <div class="sp-indent__details"><b>{row.size||'Size not recorded'} · {row.colour||'Colour not recorded'} · {quantity(row)}</b><span>Merchant · {row.merchant_id?row.merchant:'Not assigned'}</span>{#if row.profile.buyer_required_date}<span>Required · {stamp(row.profile.buyer_required_date)}</span>{/if}</div>
       <div class="sp-indent__status"><span class={'sp-chip sp-chip--'+badgeTone(row)}>{statusText(row)}</span>{#if !row.active_corrections?.length&&!row.production.process_exception&&row.production.register_source}<small>{progressLayout?'Chart status':'Chart status · recorded steps below'}</small>{:else if !row.active_corrections?.length&&!row.production.process_exception&&row.process_stage!=='closed'}<small>Next · {processLabel(row.process_stage)}</small>{/if}{#if Number(row.late_days)>0}<small class="sp-issue-text">{row.late_days} late day{row.late_days===1?'':'s'}</small>{/if}</div>
       <button class="button secondary sp-details" type="button" disabled={busy} onclick={()=>onopen(row.request_id,row.id)}>{row.latest_update?.decision==='Pending'&&row.can_review?'Review update':'Details'}<ChevronRight size={15} aria-hidden="true"/></button>
@@ -176,6 +192,7 @@
  .sp-board__heading{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 20px;border-bottom:1px solid #e7edf1}
  .sp-board__heading h3{margin:0;font-size:18px;font-weight:750;color:#172c40}
  .sp-board__heading p{margin:4px 0 0;color:#425569;font-size:12px;line-height:1.5}
+ .sp-heading-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
  .sp-refresh,.sp-details{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;min-height:44px;flex:none}
  .sp-filters{display:flex;align-items:end;gap:12px;margin:0;padding:12px 20px;background:#f8fafb;border-bottom:1px solid #e7edf1}
  .sp-filters label{display:grid;gap:6px;color:#263d52;font-size:12px;font-weight:700;min-width:0}
@@ -296,6 +313,15 @@
   border-bottom: 1px solid var(--progress-border);
  }
  .sp-board--progress .sp-indent__identity strong {font-size: 17px; overflow-wrap: anywhere;}
+ .sp-serial{display:inline-block;margin-right:.55em;color:var(--progress-muted);font-size:.85em}
+ @media(min-width:851px){
+  .sp-board--progress .sp-indent:nth-child(4n+1){--card-fill:#f1f7fc;--card-header:#e7f1fa}
+  .sp-board--progress .sp-indent:nth-child(4n+2){--card-fill:#f1f8f5;--card-header:#e6f3ed}
+  .sp-board--progress .sp-indent:nth-child(4n+3){--card-fill:#f7f4fb;--card-header:#efe9f8}
+  .sp-board--progress .sp-indent:nth-child(4n+4){--card-fill:#fcf7ee;--card-header:#f8eedc}
+  .sp-board--progress .sp-indent{background:var(--card-fill)}
+  .sp-board--progress .sp-indent__heading{background:var(--card-header)}
+ }
  .sp-board--progress .sp-indent__status {justify-self: end; text-align: right;}
  .sp-board--progress .sp-chip {border-radius: 999px; padding: 4px 10px;}
  .sp-board--progress .sp-stages {gap: 8px; padding: 14px 16px;}

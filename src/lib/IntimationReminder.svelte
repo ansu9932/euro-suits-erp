@@ -45,7 +45,7 @@
   {#if error}<button type="button" class="button secondary" onclick={load}>Retry</button>
   {:else}<p>There are no merchandisers with pending intimations in this company selection.</p>{/if}
  {:else}
-  <p>Each selected merchandiser receives an Excel report of the pending intimations they can access.</p>
+  <p>Each selected merchandiser receives an Excel report of the pending intimations they can access. You receive a copy of each email.</p>
   <fieldset disabled={sending} class="recipients">
    <legend>Merchandisers</legend>
    <button type="button" class="button secondary" disabled={!available.length} onclick={()=>selected=selectedAll?[]:available.map(recipient=>recipient.id)}>{selectedAll?'Deselect all':'Select all'}</button>
