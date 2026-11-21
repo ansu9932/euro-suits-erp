@@ -24,7 +24,7 @@ export default defineConfig({
    'style-src':['self','unsafe-inline'],
    'img-src':['self','data:','blob:'],
    'font-src':['self'],
-   'connect-src':['self','http://127.0.0.1:37841/scan'],
+   'connect-src':['self','http://127.0.0.1:37841/scan','http://127.0.0.1:37841/pair'],
    'frame-src':['https://challenges.cloudflare.com'],
    'worker-src':['self'],
    'frame-ancestors':['none'],

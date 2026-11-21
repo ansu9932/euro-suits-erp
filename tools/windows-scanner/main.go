@@ -3,16 +3,14 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -50,41 +48,48 @@ func main() {
 	if runtime.GOOS != "windows" {
 		log.Fatal("Run this connector on the Windows PC connected to the Canon GM4070.")
 	}
-	var secret [16]byte
-	if _, err := rand.Read(secret[:]); err != nil {
-		log.Fatal("Could not create a scanner pairing code.")
+	config := os.Getenv("LOCALAPPDATA")
+	if !filepath.IsAbs(config) {
+		log.Fatal("Could not find this Windows user's local settings folder.")
 	}
-	code := hex.EncodeToString(secret[:])
-	fmt.Println("Euro Suits ERP Scanner · Canon GM4070")
-	fmt.Println("Paste this code into Scan document in the ERP on this PC.")
-	fmt.Println("Pairing code:", code)
+	pairs := pairingStore{directory: filepath.Join(config, "Euro Suits Scanner", "Pairings"), approve: confirmPairing}
+	if err := os.MkdirAll(pairs.directory, 0700); err != nil {
+		log.Fatal("Could not open the scanner pairing settings.")
+	}
+	listener, err := net.Listen("tcp4", address)
+	if err != nil {
+		log.Fatal("Could not start Euro Suits Scanner. Close any other scanner connector window and try again.")
+	}
+	fmt.Println("Euro Suits ERP Scanner v2 · Canon GM4070")
+	fmt.Println("To connect the first time, choose Connect scanner in the ERP and confirm the Windows prompt.")
 	fmt.Println("Keep this window open while scanning. Close it to disconnect.")
 	server := &http.Server{
 		Addr:              address,
-		Handler:           scanHandler(code, scanWithWIA),
+		Handler:           scanHandler(pairs, scanWithWIA),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      3 * time.Minute,
 		IdleTimeout:       30 * time.Second,
 		MaxHeaderBytes:    8192,
 	}
-	log.Fatal(server.ListenAndServe())
+	log.Fatal(server.Serve(listener))
 }
 
-func scanHandler(code string, scan scanner) http.HandlerFunc {
+func scanHandler(pairs pairingStore, scan scanner) http.HandlerFunc {
 	inUse := make(chan struct{}, 1)
+	pairingPrompt := make(chan struct{}, 1)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != address || r.Header.Get("Origin") != erpOrigin {
 			http.Error(w, "This connector is available only to Euro Suits ERP on this PC.", http.StatusForbidden)
 			return
 		}
-		if r.URL.Path != "/scan" {
-			http.NotFound(w, r)
-			return
-		}
 		w.Header().Set("Access-Control-Allow-Origin", erpOrigin)
 		w.Header().Set("Vary", "Origin")
 		w.Header().Set("Cache-Control", "no-store")
+		if r.URL.Path != "/scan" && r.URL.Path != "/pair" {
+			http.NotFound(w, r)
+			return
+		}
 		if r.Method == http.MethodOptions {
 			w.Header().Set("Access-Control-Allow-Methods", "POST")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-ERP-Scanner-Code")
@@ -95,8 +100,20 @@ func scanHandler(code string, scan scanner) http.HandlerFunc {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-ERP-Scanner-Code")), []byte(code)) != 1 {
-			sendError(w, http.StatusUnauthorized, "Enter the pairing code shown in the scanner connector window.")
+		pairedBrowser := r.Header.Get("X-ERP-Scanner-Code")
+		if r.URL.Path == "/pair" {
+			select {
+			case pairingPrompt <- struct{}{}:
+				defer func() { <-pairingPrompt }()
+			default:
+				sendError(w, http.StatusConflict, "A scanner connection is already waiting for confirmation on this PC.")
+				return
+			}
+			pairs.connect(w, r, pairedBrowser)
+			return
+		}
+		if !pairs.has(pairedBrowser) {
+			sendError(w, http.StatusUnauthorized, "Connect this browser to Euro Suits Scanner first.")
 			return
 		}
 
@@ -140,12 +157,10 @@ func scanWithWIA(ctx context.Context, request scanRequest) (scanResult, error) {
 		return result, errors.New("Windows could not create a temporary scan folder.")
 	}
 	defer os.RemoveAll(dir)
-	systemRoot := os.Getenv("SystemRoot")
-	if !filepath.IsAbs(systemRoot) {
-		return result, errors.New("Windows PowerShell could not be located.")
+	command, err := windowsPowerShell(ctx, scanScript)
+	if err != nil {
+		return result, err
 	}
-	powershell := filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
-	command := exec.CommandContext(ctx, powershell, "-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-EncodedCommand", encodedScript(scanScript))
 	command.Env = append(os.Environ(), "ERP_SCAN_OUTPUT="+dir, "ERP_SCAN_SOURCE="+request.Source, fmt.Sprintf("ERP_SCAN_COUNT=%d", request.Count))
 	output, commandError := command.Output()
 	var totalBytes int64
@@ -172,23 +187,7 @@ func scanWithWIA(ctx context.Context, request scanRequest) (scanResult, error) {
 		result.Pages = append(result.Pages, page)
 	}
 	if result.Warning == "" {
-		status := strings.TrimSpace(string(output))
-		switch {
-		case ctx.Err() != nil:
-			result.Warning = "The Canon did not finish in time. Check the printer and try again."
-		case status == "EMPTY" && len(result.Pages) == 0:
-			result.Warning = "The feeder is empty. Load the pages face up and try again."
-		case status == "BUSY":
-			result.Warning = "The Canon is busy. Close other scan apps and try again when it is idle."
-		case status == "MISSING":
-			result.Warning = "Windows cannot find the Canon GM4070. Check that it is on and connected."
-		case status == "JAM":
-			result.Warning = "Check the Canon feeder for a paper jam or misfeed."
-		case status == "OFFLINE":
-			result.Warning = "Windows could not communicate with the Canon. Check the connection and try again."
-		case commandError != nil || (status != "OK" && status != "EMPTY"):
-			result.Warning = "Windows could not complete the scan. Check the scanner and try again."
-		}
+		result.Warning = scanWarning(strings.TrimSpace(string(output)), len(result.Pages), ctx.Err(), commandError)
 	}
 	if len(result.Pages) == 0 {
 		if result.Warning == "" {
@@ -197,6 +196,56 @@ func scanWithWIA(ctx context.Context, request scanRequest) (scanResult, error) {
 		return result, errors.New(result.Warning)
 	}
 	return result, nil
+}
+
+func scanWarning(status string, pageCount int, contextError, commandError error) string {
+	if contextError != nil {
+		return "The Canon did not finish in time. Check the printer and try again."
+	}
+	kind, detail, _ := strings.Cut(status, ":")
+	phase, driverCode, _ := strings.Cut(detail, ":")
+	if driverCode != "" {
+		log.Printf("Canon scan result: %s, stage %s, Windows code %s", kind, phase, driverCode)
+	}
+	switch kind {
+	case "EMPTY":
+		if pageCount == 0 {
+			return "The feeder is empty. Load the pages face up and try again."
+		}
+		return ""
+	case "BUSY":
+		return "The Canon is busy. Close other scan apps and try again when it is idle."
+	case "MISSING":
+		return "Windows cannot find the Canon GM4070. Check that it is on and connected."
+	case "JAM":
+		return "Check the Canon feeder for a paper jam or misfeed."
+	case "OFFLINE":
+		if phase == "transfer" {
+			return "Windows lost communication while receiving the scan from the Canon. Test one blank sheet in Canon IJ Scan Utility on this PC."
+		}
+		return "Windows could not connect to the Canon. Check that it is on and available to this PC."
+	case "COVER":
+		return "Close the Canon scanner cover or feeder before scanning."
+	case "UNSUPPORTED":
+		return "This Canon driver does not expose the selected paper source to Windows."
+	case "OK":
+		if commandError == nil {
+			return ""
+		}
+	}
+	if phase == "save" {
+		return "The Canon sent a page, but Windows could not save it. Scan that page again."
+	}
+	return "Windows could not complete the scan. Check the connector window for the Windows error code."
+}
+
+func windowsPowerShell(ctx context.Context, script string) (*exec.Cmd, error) {
+	systemRoot := os.Getenv("SystemRoot")
+	if !filepath.IsAbs(systemRoot) {
+		return nil, errors.New("Windows PowerShell could not be located.")
+	}
+	powershell := filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+	return exec.CommandContext(ctx, powershell, "-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-EncodedCommand", encodedScript(script)), nil
 }
 
 func encodedScript(script string) string {

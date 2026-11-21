@@ -1,5 +1,7 @@
 $ErrorActionPreference = 'Stop'
+$nativeFormat = '{00000000-0000-0000-0000-000000000000}'
 $jpeg = '{B96B3CAE-0728-11D3-9D7B-0000F81EF32E}'
+$phase = 'discovery'
 
 function Find-Property($properties, [int]$id) {
     $properties | Where-Object PropertyID -eq $id | Select-Object -First 1
@@ -12,7 +14,9 @@ try {
     } | Select-Object -First 1
     if (!$canon) { 'MISSING'; exit 0 }
 
+    $phase = 'connect'
     $device = $canon.Connect()
+    $phase = 'configure'
     $source = Find-Property $device.Properties 3088
     if (!$source) { 'UNSUPPORTED'; exit 0 }
     $source.Value = if ($env:ERP_SCAN_SOURCE -eq 'feeder') { 1 } else { 2 }
@@ -21,7 +25,10 @@ try {
 
     $item = $device.Items.Item(1)
     for ($page = 1; $page -le [int]$env:ERP_SCAN_COUNT; $page++) {
-        $image = $item.Transfer($jpeg)
+        $phase = 'transfer'
+        # Receive the driver's preferred format, then convert on the PC.
+        $image = $item.Transfer($nativeFormat)
+        $phase = 'save'
         if ($image.FormatID -ne $jpeg) {
             $process = New-Object -ComObject WIA.ImageProcess
             $process.Filters.Add($process.FilterInfos.Item('Convert').FilterID)
@@ -29,17 +36,22 @@ try {
             $image = $process.Apply($image)
         }
         $path = Join-Path $env:ERP_SCAN_OUTPUT ('page-{0:D2}.jpg' -f $page)
-        $image.SaveFile($path)
+        $temporaryPath = [System.IO.Path]::ChangeExtension($path, '.part.jpg')
+        $image.SaveFile($temporaryPath)
+        [System.IO.File]::Move($temporaryPath, $path)
     }
     'OK'
 } catch {
     $failure = $_.Exception
     while ($failure.InnerException) { $failure = $failure.InnerException }
-    switch ('{0:X8}' -f $failure.HResult) {
+    $driverCode = '{0:X8}' -f $failure.HResult
+    $kind = switch ($driverCode) {
         '80210003' { 'EMPTY' }
         { $_ -in '80210006', '80210007', '8021000D' } { 'BUSY' }
         { $_ -in '80210002', '80210004', '80210020' } { 'JAM' }
         { $_ -in '80210005', '80210008', '8021000A' } { 'OFFLINE' }
+        '80210016' { 'COVER' }
         default { 'FAILED' }
     }
+    '{0}:{1}:{2}' -f $kind, $phase, $driverCode
 }

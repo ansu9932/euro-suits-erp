@@ -1,7 +1,7 @@
 <script lang="ts">
  import {onDestroy, onMount, tick} from 'svelte';
  import {ScanLine, X} from '@lucide/svelte';
- import {createScannedDocument, documentScanPageLimit, getScannerCode, saveScannerCode, scanDocumentPages, type ScannerSource} from './windowsScan';
+ import {clearScannerCode, connectScanner, createScannedDocument, documentScanPageLimit, getScannerCode, scanDocumentPages, type ScannerSource} from './windowsScan';
 
  let {label, destination, disabled = false, maxBytes = 10 * 1024 * 1024, onreceive}: {
   label: string;
@@ -16,11 +16,10 @@
  let dialog = $state<HTMLDialogElement>();
  let open = $state(false);
  let code = $state('');
- let showCode = $state(false);
  let source = $state<ScannerSource>('feeder');
  let pages = $state<string[]>([]);
  let selected = $state(0);
- let busy = $state<'scan' | 'add' | null>(null);
+ let busy = $state<'pair' | 'scan' | 'add' | null>(null);
  let problem = $state('');
  let warning = $state('');
  let scanController: AbortController | undefined;
@@ -36,7 +35,6 @@
  async function start() {
   if (open) return;
   code = getScannerCode();
-  showCode = !code;
   scanDestination = destination;
   open = true;
   await tick();
@@ -54,14 +52,25 @@
   warning = '';
  }
 
- async function scan(batch: boolean) {
-  if (busy || disabled || scanDestination !== destination || pages.length >= documentScanPageLimit) return;
-  const pairingCode = code.trim().toLowerCase();
-  if (!/^[0-9a-f]{32}$/.test(pairingCode)) {
-   showCode = true;
-   problem = 'Enter the pairing code from the scanner connector window.';
-   return;
+ async function connect() {
+  if (busy || disabled || scanDestination !== destination) return;
+  const controller = new AbortController();
+  scanController = controller;
+  busy = 'pair';
+  problem = '';
+  try {
+   const connection = await connectScanner(controller.signal);
+   if (!controller.signal.aborted) code = connection;
+  } catch (error) {
+   if (!controller.signal.aborted) problem = error instanceof Error ? error.message : 'Could not connect the scanner.';
+  } finally {
+   if (!controller.signal.aborted) busy = null;
   }
+ }
+
+ async function scan(batch: boolean) {
+  if (busy || disabled || !code || scanDestination !== destination || pages.length >= documentScanPageLimit) return;
+  const connection = code;
   const controller = new AbortController();
   scanController = controller;
   busy = 'scan';
@@ -69,17 +78,18 @@
   warning = '';
   try {
    const count = batch ? documentScanPageLimit - pages.length : 1;
-   const result = await scanDocumentPages(pairingCode, source, count, controller.signal);
+   const result = await scanDocumentPages(connection, source, count, controller.signal);
    if (controller.signal.aborted || scanDestination !== destination) return;
-   saveScannerCode(pairingCode);
-   showCode = false;
    warning = result.warning || '';
    selected = pages.length;
    pages = [...pages, ...result.pages];
   } catch (error) {
    if (!controller.signal.aborted) {
     problem = error instanceof Error ? error.message : 'The scan failed. Try again.';
-    showCode = true;
+    if ((error as {status?: number}).status === 401) {
+     clearScannerCode(connection);
+     code = '';
+    }
    }
   } finally {
    if (!controller.signal.aborted) busy = null;
@@ -132,21 +142,21 @@
        <option value="flatbed">Scanner glass</option>
       </select>
      </label>
-     <button type="button" class="button secondary" disabled={!!busy} onclick={() => showCode = !showCode}>{showCode ? 'Hide pairing' : 'Pair scanner'}</button>
     </div>
-    {#if showCode}
-     <label>Scanner pairing code
-      <input type="password" autocomplete="off" spellcheck="false" bind:value={code} disabled={!!busy} />
-     </label>
-     <p class="help">Open Euro Suits Scanner on this Windows PC and enter its pairing code. Chrome may ask to connect to apps on this device when you first scan.</p>
+    {#if code}
+     <div class="controls">
+      <button type="button" class="button secondary" disabled={disabled || !!busy || pages.length >= documentScanPageLimit} onclick={() => scan(false)}>Scan one page</button>
+      {#if source === 'feeder'}
+       <button type="button" class="button secondary" disabled={disabled || !!busy || pages.length >= documentScanPageLimit} onclick={() => scan(true)}>Scan feeder</button>
+      {/if}
+     </div>
+    {:else}
+     <p class="help">Open Euro Suits Scanner v2 on this PC. Connect once and approve the Windows prompt. This browser will remember the connection.</p>
+     <div class="controls">
+      <button type="button" class="button secondary" disabled={disabled || !!busy} onclick={connect}>Connect scanner</button>
+     </div>
     {/if}
-    <div class="controls">
-     <button type="button" class="button secondary" disabled={disabled || !!busy || pages.length >= documentScanPageLimit} onclick={() => scan(false)}>Scan one page</button>
-     {#if source === 'feeder'}
-      <button type="button" class="button secondary" disabled={disabled || !!busy || pages.length >= documentScanPageLimit} onclick={() => scan(true)}>Scan feeder</button>
-     {/if}
-    </div>
-    {#if busy}<p role="status">{busy === 'scan' ? 'Scanning from the Canon…' : 'Creating and adding the PDF…'}</p>{/if}
+    {#if busy}<p role="status">{busy === 'pair' ? 'Waiting for confirmation on this Windows PC…' : busy === 'scan' ? 'Scanning from the Canon…' : 'Creating and adding the PDF…'}</p>{/if}
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
     {#if warning}<p class="problem" role="status">{warning}</p>{/if}
     {#if pages.length}
@@ -184,7 +194,7 @@
  .page-controls {align-items:center}
  .remove {margin-left:auto}
  label {display:grid;gap:4px;font-size:13px;font-weight:650}
- input,select {min-height:40px;padding:6px 10px;border:1px solid #cbd9e4;border-radius:8px;font:inherit;color:inherit;background:#fff}
+ select {min-height:40px;padding:6px 10px;border:1px solid #cbd9e4;border-radius:8px;font:inherit;color:inherit;background:#fff}
  p {margin:0}
  .help {font-size:13px;color:#42566a}
  .problem {color:#9f2828}
