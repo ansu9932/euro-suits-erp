@@ -104,6 +104,7 @@
   return tone;
  }
  function statusText(row:any){
+  if(row.current_stage_label)return row.current_stage_label;
   const issue=row.production.process_exception;
   if(issue)return issue.result+' · '+processLabel(issue.stage);
   if(row.active_corrections?.length)return 'Rework requested · '+correctionStage(row.active_corrections[0]);
@@ -315,11 +316,11 @@
  .sp-board--progress .sp-indent__identity strong {font-size: 17px; overflow-wrap: anywhere;}
  .sp-serial{display:inline-block;margin-right:.55em;color:var(--progress-muted);font-size:.85em}
  @media(min-width:851px){
-  .sp-board--progress .sp-indent:nth-child(4n+1){--card-fill:#f1f7fc;--card-header:#e7f1fa}
-  .sp-board--progress .sp-indent:nth-child(4n+2){--card-fill:#f1f8f5;--card-header:#e6f3ed}
-  .sp-board--progress .sp-indent:nth-child(4n+3){--card-fill:#f7f4fb;--card-header:#efe9f8}
-  .sp-board--progress .sp-indent:nth-child(4n+4){--card-fill:#fcf7ee;--card-header:#f8eedc}
-  .sp-board--progress .sp-indent{background:var(--card-fill)}
+  .sp-board--progress .sp-indent:nth-child(4n+1){--card-fill:#f8f2fb;--card-header:#eee1f5;--card-edge:#ad88bd}
+  .sp-board--progress .sp-indent:nth-child(4n+2){--card-fill:#fcf2eb;--card-header:#f6e2d3;--card-edge:#c99676}
+  .sp-board--progress .sp-indent:nth-child(4n+3){--card-fill:#f7f3eb;--card-header:#ede5d6;--card-edge:#ab9572}
+  .sp-board--progress .sp-indent:nth-child(4n+4){--card-fill:#f4f1ef;--card-header:#ebe3df;--card-edge:#a78c80}
+  .sp-board--progress .sp-indent{border-inline-start:3px solid var(--card-edge);background:var(--card-fill)}
   .sp-board--progress .sp-indent__heading{background:var(--card-header)}
  }
  .sp-board--progress .sp-indent__status {justify-self: end; text-align: right;}
@@ -354,7 +355,7 @@
   margin: 0;
   padding: 10px 16px;
   border-top: 1px solid var(--progress-border);
-  background: #fbfcfd;
+  background: var(--card-fill, #fbfcfd);
  }
  .sp-board--progress .sp-pagination {padding-inline: 0; margin-top: 12px;}
  .sp-board--progress :is(.sp-notice,.form-error) {margin-inline: 0;}
