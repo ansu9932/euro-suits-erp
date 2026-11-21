@@ -65,10 +65,6 @@
   notice='Stage update saved. Approval status appears beside the indent.';
   await load();
  }
- function audit(row:any){
-  editor=null;
-  onopen(row.request_id,row.id);
- }
  function stageState(row:any,step:ProcessStep){
   if(row.production.process_exception?.stage===step[0])return 'issue';
   if(row.latest_update?.decision==='Pending'&&step[3].some(key=>key===row.latest_update.action))return 'pending';
@@ -184,7 +180,7 @@
 {#if editor}
  {#key editor.row.id+':'+editor.step}
   {@const selected=editor}
-  <SampleProcessPanel piece={selected.row} merchant={selected.row.merchant_id?selected.row.merchant:''} editorOnly initialStep={selected.step} onclose={closeStage} onchange={updated} onaudit={()=>audit(selected.row)}/>
+  <SampleProcessPanel piece={selected.row} merchant={selected.row.merchant_id?selected.row.merchant:''} editorOnly initialStep={selected.step} onclose={closeStage} onchange={updated}/>
  {/key}
 {/if}
 

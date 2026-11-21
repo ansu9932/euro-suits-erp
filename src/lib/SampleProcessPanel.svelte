@@ -2,13 +2,15 @@
  import {SkeletonLoader,SpinnerLoader} from '#lib/components/loaders/index.ts';
  import {ChevronRight} from '@lucide/svelte';
  import SampleStageDialog from './SampleStageDialog.svelte';
+ import SampleAuditEditor from './SampleAuditEditor.svelte';
  import SampleCommentField from './SampleCommentField.svelte';
  import {untrack} from 'svelte';
  import {api} from './api';
  import {indentReference,processSteps,processLabel,actionLabel,stamp,correctionForStep,correctionStage,planFields,sampleStatusLabel,type ProcessStep} from './sampleProcess';
- let {piece,merchant='',onchange,onaudit,editorOnly=false,initialStep='',onclose}:{piece:any;merchant?:string;onchange:()=>Promise<void>;onaudit:()=>void;editorOnly?:boolean;initialStep?:string;onclose?:()=>void}=$props();
+ let {piece,merchant='',onchange,editorOnly=false,initialStep='',onclose}:{piece:any;merchant?:string;onchange:()=>Promise<void>;editorOnly?:boolean;initialStep?:string;onclose?:()=>void}=$props();
  let data:any=$state(null),busy=$state(false),loading=$state(true),error=$state(''),notice=$state(''),action=$state(''),note=$state(''),reviewNote=$state(''),result=$state(''),stage=$state(''),expected=$state(''),destination=$state('Merchant'),values:any=$state({}),sequence=0;
  let selectedStep=$state<ProcessStep|null>(null);
+ let auditOpen=$state(false);
  let editorError=$state('');
  let updateDictating=$state(false),reviewDictating=$state(false);
  let pending=$derived(data?.updates.find((u:any)=>u.decision==='Pending'));
@@ -37,7 +39,12 @@
  $effect(()=>{const id=piece.id,v=piece.version,step=initialStep;untrack(()=>{if(editorOnly&&!selectedStep&&step)selectedStep=processSteps.find(item=>item[2]===step)??null;load(id)});return()=>{sequence++}});
  async function load(id=piece.id){const seq=++sequence;loading=true;try{const d=await api('/sample-indents/'+id+'/process');if(seq===sequence){data=d;error='';if(editorOnly&&selectedStep&&!action)openStage(selectedStep)}}catch(e){if(seq===sequence)error=(e as Error).message}finally{if(seq===sequence)loading=false}}
  function choose(key:string){
-  if(key==='audit'){closeEditor();onaudit();return}
+  if(key==='audit'){
+   auditOpen=true;
+   selectedStep=null;
+   action='';
+   return;
+  }
   action=key;note='';editorError='';
   const material=key==='fabric'||key==='trims';
   result=key==='file_review'?'Clear':key==='exception'?'Rework':material?piece.production[key+'_availability']||(piece.production[key+'_update_date']?'In stock':''):'';
@@ -46,7 +53,13 @@
   destination=piece.production.handover_destination||'Merchant';
   stage=key==='resolve'?piece.production.process_exception?.stage||'':selectedStep?.[0]||'';
  }
- function closeEditor(){selectedStep=null;action='';editorError='';if(editorOnly)onclose?.()}
+ function closeEditor(){if(auditOpen)return;selectedStep=null;action='';editorError='';if(editorOnly)onclose?.()}
+ function closeAudit(){if(!auditOpen)return;auditOpen=false;if(editorOnly)onclose?.()}
+ async function auditSubmitted(){
+  await onchange();
+  closeAudit();
+  if(!editorOnly){await load();notice='Audit submitted for approval.'}
+ }
  function openStage(step:ProcessStep){
   selectedStep=step;
   const missingDC=step[2]==='merchant_actual'&&!piece.production.handover_dc;
@@ -138,7 +151,9 @@
   </details>
  {/if}
 {/if}
-  {#if selectedStep}
+  {#if auditOpen}
+   <SampleAuditEditor {piece} onclose={closeAudit} onchange={auditSubmitted} showAttachmentsHint={!editorOnly}/>
+  {:else if selectedStep}
    <SampleStageDialog title={selectedStep[1]+' · Indent '+indentReference(piece)} close={closeEditor} {busy}>
     {#if !pendingForStep}<p class="stage-status">Saved status: <strong>{milestone(selectedStep[0],selectedStep[2])}</strong></p>{/if}
     {#if stepCorrection}<section class="sp-issue"><strong>Rework requested</strong><p class="sp-comment">{stepCorrection.review_comment}</p></section>{/if}
@@ -156,7 +171,7 @@
      {#if !data}{#if error}<p role="status">{error}</p>{:else}<SkeletonLoader variant="detail" rows={2} columns={2} label="Loading available stage actions…"/>{/if}
      {:else if selectedStep?.[2]==='cad_sent_at'&&data.can_send_cad&&piece.status==='Ready'&&!piece.production.cad_sent_at&&!piece.production.process_exception}
       <p>Record fabric and trims availability before sending this indent to CAD.</p>
-     {:else if selectedStep[0]==='audit'&&!piece.production.audit_actual&&!data.stages.includes('audit')}
+     {:else if selectedStep[0]==='audit'&&!piece.production.audit_actual&&!(data.can_submit_audit??data.stages.includes('audit'))}
       <p>The Quality team starts the audit and submits the signed report.</p>
      {:else if selectedStep[0]==='audit'&&!piece.production.audit_actual&&!stageActions.some(item=>item.key==='audit_start'||item.key==='audit')}
       <p>Finish the sample before starting the audit.</p>
