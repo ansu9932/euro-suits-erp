@@ -1,5 +1,6 @@
 <script lang="ts">
  import PhoneScanButton from './PhoneScanButton.svelte';
+ import WindowsScanButton from './WindowsScanButton.svelte';
  import SpoolyHelp from './SpoolyHelp.svelte';
  let inlineHelp=$state(false);
  import {holdDashboardLoad} from './signInTransition';
@@ -453,7 +454,17 @@
   <summary>Documents and images <span class="attachment-count">{detail.files.length}</span></summary>
   {#if fileNotice}<p role="status" class="file-notice">{fileNotice}</p>{/if}
   <SampleDocumentList files={detail.files} disabled={busy} onpreview={file=>previewFile=file} onremove={removeDocument}/>
- {#if detail.record.status!=='Submitted'&&((data.can_edit&&detail.record.status!=='Approved')||detail.record.status==='Approved'&&(data.can_produce||data.can_audit||data.can_pattern||data.can_handover))}<div class="document-upload-row"><label>Document category<select bind:value={category}>{#each ['Buyer email','Buyer specification','Sample to copy','CAD','Labels','Audit sheet','Fabric swatch','Trim card','Sample images','Dispatch','Buyer feedback','Other'] as c}<option>{c}</option>{/each}</select></label><label>Link to indent<select bind:value={fileIndent}><option value="">Whole request</option>{#each detail.pieces as p}<option value={String(p.id)}>{indentReference(p)} · {p.size} · {p.colour}</option>{/each}</select></label><label>Upload files (10 MB each)<input type="file" multiple disabled={busy||data.can_documents===false} onchange={upload} accept=".eml,.pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.dxf,.zip"/></label><PhoneScanButton label="sample request documents" destination={detail.record.id+':'+category+':'+fileIndent} disabled={busy||data.can_documents===false} onreceive={file=>attachFiles([file],true)}/></div>{/if}
+ {#if detail.record.status!=='Submitted'&&((data.can_edit&&detail.record.status!=='Approved')||detail.record.status==='Approved'&&(data.can_produce||data.can_audit||data.can_pattern||data.can_handover))}
+  {@const scanDestination = detail.record.id + ':' + category + ':' + fileIndent}
+  {@const scanDisabled = busy || data.can_documents === false}
+  <div class="document-upload-row">
+   <label>Document category<select bind:value={category}>{#each ['Buyer email','Buyer specification','Sample to copy','CAD','Labels','Audit sheet','Fabric swatch','Trim card','Sample images','Dispatch','Buyer feedback','Other'] as c}<option>{c}</option>{/each}</select></label>
+   <label>Link to indent<select bind:value={fileIndent}><option value="">Whole request</option>{#each detail.pieces as p}<option value={String(p.id)}>{indentReference(p)} · {p.size} · {p.colour}</option>{/each}</select></label>
+   <label>Upload files (10 MB each)<input type="file" multiple disabled={busy||data.can_documents===false} onchange={upload} accept=".eml,.pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.dxf,.zip"/></label>
+   <PhoneScanButton label="sample request documents" destination={scanDestination} disabled={scanDisabled} onreceive={file=>attachFiles([file],true)}/>
+   <WindowsScanButton label="sample request documents" destination={scanDestination} disabled={scanDisabled} onreceive={file=>attachFiles([file],true)}/>
+  </div>
+ {/if}
  </details>
 {#if view!=='process'} <details class="sample-support-section" bind:this={stageSection} open={view==='process'}><summary>Individual indents · production and actions</summary>{#each detail.pieces.filter((p:any)=>!focusIndent||p.id===focusIndent) as piece (piece.id)}<SamplePiece {piece} {data} merchant={detail.record.merchant_id?detail.record.merchant:''} onchange={refreshDetail} onprint={print} onform={previewForm} onissue={()=>stockForm={company_id:detail.record.company_id,material_id:detail.record.profile.alternate_material_id||detail.record.profile.material_id,indent_id:piece.id,metres:'',reference:''}}/>{:else}<p>{detail.record.profile.intimation==='true'?'Indent numbers are generated after MD approval.':'Production actions are available after approval.'}</p>{/each}
  </details>{/if}

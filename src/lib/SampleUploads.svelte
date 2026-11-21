@@ -1,5 +1,6 @@
 <script lang="ts">
  import PhoneScanButton from './PhoneScanButton.svelte';
+ import WindowsScanButton from './WindowsScanButton.svelte';
  import {Check, FileText, Upload, X} from '@lucide/svelte';
  import {SpinnerLoader} from './components/loaders';
  import {enter} from './motion';
@@ -55,6 +56,11 @@
   if (available) add(chosen);
  }
 
+ function addScan(file: File) {
+  if (!available) throw new Error('This section cannot accept a file right now.');
+  add([file]);
+ }
+
  function dragOver(event: DragEvent) {
   event.preventDefault();
   if (event.dataTransfer) event.dataTransfer.dropEffect = available ? 'copy' : 'none';
@@ -104,7 +110,12 @@
   <span class="prompt">{dragging ? 'Drop files here' : !canUpload ? 'Attachments unavailable' : full ? 'File limit reached' : disabled ? 'Saving…' : 'Drag and drop files'}</span>
   {#if canUpload && !full && !disabled}<span class="choose">Choose files</span>{/if}
  </button>
- {#if canUpload}<div class="scan-option"><PhoneScanButton label={title} {destination} disabled={!available} onreceive={file=>{if(!available)throw new Error('This section is full.');add([file]);}}/></div>{/if}
+ {#if canUpload}
+  <div class="scan-option">
+   <PhoneScanButton label={title} {destination} disabled={!available} onreceive={addScan}/>
+   <WindowsScanButton label={title} {destination} maxBytes={maxSize} disabled={!available} onreceive={addScan}/>
+  </div>
+ {/if}
  <p id={uid + '-help'} class="help">{canUpload ? 'Up to 10 MB each · PDF, images, Office, email, CAD, text or ZIP' : 'Ask a Super Admin to enable attachment uploads for your account.'}</p>
  {#if uploadError}<p class="upload-error" role="alert">{uploadError}</p>{:else if error}<p class="upload-error" role="alert">{error}</p>{/if}
  {#if files.length}
@@ -142,7 +153,7 @@
  .drop.dragging .icon {animation:lift .85s ease-in-out infinite}
  .prompt {font-size:13px;font-weight:650}
  .choose {padding:4px 10px;border:1px solid #b8d5cd;border-radius:8px;background:#fff;color:#086356;font-size:13px;font-weight:700}
- .scan-option {margin-top:8px}
+ .scan-option {display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
  .help,.upload-error {margin:7px 0 0;font-size:12px;color:#42566a}
  .upload-error {color:#9f2828;overflow-wrap:anywhere}
  ul {list-style:none;display:grid;gap:6px;padding:0;margin:8px 0 0}
