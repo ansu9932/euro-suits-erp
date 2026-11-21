@@ -12,6 +12,7 @@
  let editorError=$state('');
  let updateDictating=$state(false),reviewDictating=$state(false);
  let pending=$derived(data?.updates.find((u:any)=>u.decision==='Pending'));
+ let pendingForStep=$derived(selectedStep&&pending?.stage===selectedStep[0]&&selectedStep[3].some(key=>key===pending?.action));
  let corrections=$derived(data?.active_corrections??[]);
  let stepCorrection=$derived(selectedStep?correctionForStep(corrections,selectedStep):undefined);
  let approvalTarget=$derived(data?.approval_target||'assigned merchant');
@@ -48,9 +49,8 @@
  function closeEditor(){selectedStep=null;action='';editorError='';if(editorOnly)onclose?.()}
  function openStage(step:ProcessStep){
   selectedStep=step;
-  const missingTailor=step[2]==='allocation_actual'&&!piece.production.sample_maker;
   const missingDC=step[2]==='merchant_actual'&&!piece.production.handover_dc;
-  const preferred=missingTailor||missingDC?'plan':step[3][0];
+  const preferred=missingDC?'plan':step[3][0];
   const next=stageActions.find(item=>item.key===preferred)??stageActions.find(item=>item.key!=='exception');
   if(next?.key==='audit'&&stageActions.some(item=>item.key==='audit_start')){choose('audit_start');return}
   choose(next?.key??'');
@@ -67,7 +67,7 @@
   }
   return 'Not recorded';
  }
- async function send(review=''){if(busy||loading||(review?reviewDictating:updateDictating||!activeAction||pending))return;busy=true;error='';editorError='';notice='';try{
+ async function send(review=''){if(busy||loading||(review?!pending||!data?.can_review||reviewDictating:updateDictating||!activeAction||pending))return;busy=true;error='';editorError='';notice='';try{
   const payload:any=review?{action:'review_process',update_id:pending.id,decision:review,note:reviewNote}:{action,note,result,stage,expected_date:result==='In stock'?'':expected,destination};
   if(action==='plan'&&!review)payload.production=Object.fromEntries(editorFields.map(([key])=>[key,String(values[key]||'')]));
   if(action==='handover'&&!review)payload.dispatch=Object.fromEntries(['awb','dispatch_to','dispatch_from','dispatch_contact'].map(key=>[key,values[key]||'']));
@@ -75,6 +75,25 @@
  }catch(e){if(selectedStep||action)editorError=(e as Error).message;else error=(e as Error).message}finally{busy=false}}
 
 </script>
+{#snippet pendingReview()}
+ <section class="sp-pending" aria-label="Update awaiting approval">
+  <h4>{actionLabel(pending.action)} · Awaiting approval</h4>
+  <p>Submitted by <strong>{pending.submitted_by}</strong> · {stamp(pending.submitted_at)}</p>
+  {#if pending.comment}<p class="sp-comment">{pending.comment}</p>{/if}
+  {#if data.can_review}
+   {#key pending.id}
+    <SampleCommentField label="Review comment" hint="(required for correction or rejection)" bind:value={reviewNote} bind:dictating={reviewDictating} disabled={busy||loading} indentId={piece.id} action="review_process" updateId={pending.id}/>
+   {/key}
+   <div class="sp-actions">
+    <button class="button primary" type="button" disabled={busy||loading||reviewDictating} onclick={()=>send('Approved')}>Accept update</button>
+    <button class="button secondary" type="button" disabled={busy||loading||reviewDictating||!reviewNote.trim()} onclick={()=>send('Changes requested')}>Request correction</button>
+    <button class="button danger" type="button" disabled={busy||loading||reviewDictating||!reviewNote.trim()} onclick={()=>send('Rejected')}>Reject update</button>
+   </div>
+  {:else}
+   <p>Waiting for approval by {pendingTarget}.</p>
+  {/if}
+ </section>
+{/snippet}
 <section class="sp-process" aria-label={'Process for indent '+piece.id} aria-busy={loading||busy}>
 {#if !editorOnly}
  <div class="sp-process__heading"><div><h4>Department follow-up</h4><p>Responsible merchant: <strong>{merchant||'Not assigned — MD / Super Admin must assign one'}</strong></p></div><span class="sp-status" class:sp-status--issue={!!piece.production.process_exception||!!corrections.length||['Rework','Rejected'].includes(piece.status)}>{piece.production.process_exception?piece.production.process_exception.result:corrections.length?'Rework requested':sampleStatusLabel(piece.status)}</span></div>
@@ -97,15 +116,7 @@
   {#each corrections as correction (correction.id)}
    <section class="sp-issue" aria-label={correctionStage(correction)+' rework requested'}><strong>Rework requested · {correctionStage(correction)}</strong><p class="sp-comment">{correction.review_comment}</p>{#if correction.reviewed_by}<span>{correction.reviewed_by} · {stamp(correction.reviewed_at)}</span>{/if}</section>
   {/each}
-  {#if pending}<section class="sp-pending" aria-label="Update awaiting approval">
-   <p>Submitted by <strong>{pending.submitted_by}</strong> · {stamp(pending.submitted_at)}</p>
-   {#if data.can_review}
-    {#key pending.id}
-     <SampleCommentField label="Review comment" hint="(required for correction or rejection)" bind:value={reviewNote} bind:dictating={reviewDictating} disabled={busy} indentId={piece.id} action="review_process" updateId={pending.id}/>
-    {/key}
-    <div class="sp-actions"><button class="button primary" disabled={busy||reviewDictating} onclick={()=>send('Approved')}>Accept update</button><button class="button secondary" disabled={busy||reviewDictating||!reviewNote.trim()} onclick={()=>send('Changes requested')}>Request correction</button><button class="button danger" disabled={busy||reviewDictating||!reviewNote.trim()} onclick={()=>send('Rejected')}>Reject update</button></div>
-   {:else}<p>Waiting for approval by {pendingTarget}.</p>{/if}
-  </section>{/if}
+  {#if pending&&!selectedStep}{@render pendingReview()}{/if}
   <details class="sp-history">
    <summary><ChevronRight size={16} aria-hidden="true"/>Update &amp; review history <span>({data.updates.length}{data.updates.length===1000?'+':''})</span></summary>
    <div class="sp-history__records">
@@ -129,9 +140,10 @@
 {/if}
   {#if selectedStep}
    <SampleStageDialog title={selectedStep[1]+' · Indent '+indentReference(piece)} close={closeEditor} {busy}>
-    <p class="stage-status">Saved status: <strong>{milestone(selectedStep[0],selectedStep[2])}</strong></p>
+    {#if !pendingForStep}<p class="stage-status">Saved status: <strong>{milestone(selectedStep[0],selectedStep[2])}</strong></p>{/if}
     {#if stepCorrection}<section class="sp-issue"><strong>Rework requested</strong><p class="sp-comment">{stepCorrection.review_comment}</p></section>{/if}
     {#if editorOnly&&error}<p class="form-error" role="alert">{error} <button class="text-button" type="button" onclick={()=>load()}>Retry</button></p>{/if}
+    {#if editorError}<p class="form-error" role="alert">{editorError}</p>{/if}
     {#if stageActions.length>1||(!action&&stageActions.length===1)}
      <label class="stage-action">Stage action<select value={action} disabled={busy} onchange={e=>choose(e.currentTarget.value)}>
       <option value="" disabled>Choose a stage action</option>
@@ -139,7 +151,7 @@
      </select></label>
     {/if}
     {#if pending}
-     <p>An update is awaiting approval by {pendingTarget}. {editorOnly?'Open this indent’s Details to review the update.':'See the review below the stage cards.'}</p>
+     {@render pendingReview()}
     {:else if !activeAction}
      {#if !data}{#if error}<p role="status">{error}</p>{:else}<SkeletonLoader variant="detail" rows={2} columns={2} label="Loading available stage actions…"/>{/if}
      {:else if selectedStep?.[2]==='cad_sent_at'&&data.can_send_cad&&piece.status==='Ready'&&!piece.production.cad_sent_at&&!piece.production.process_exception}
@@ -151,12 +163,14 @@
     {:else}
      <form class="sp-editor" onsubmit={e=>{e.preventDefault();send()}}>
       <div class="sp-editor__card">
-       {#if editorError}<p class="form-error" role="alert">{editorError}</p>{/if}
        <h4>{activeAction.label}</h4>
        {#if action==='fabric'||action==='trims'}<div class="sp-form-grid"><label>Availability<select bind:value={result} required><option value="">Choose availability</option><option value="In stock">In house / in stock</option><option>To order</option><option>Ordered</option></select></label>{#if result==='To order'||result==='Ordered'}<label>Expected arrival date<input type="date" bind:value={expected} required={result==='Ordered'}/></label>{/if}</div>
        {:else if action==='send_cad'}<p>Send this indent to Pattern follow-up for CAD to pick up.</p>
+       {:else if action==='cut'&&String(piece.production.register_source?.process_status||'').trim().toUpperCase()==='UNDER CUTTING'}<p>Confirm that cutting is complete for this historical indent.</p>
        {:else if action==='cut_start'||action==='cut'}<p>Confirm the pattern and marker are complete, and fabric and trims are ready.</p>
-       {:else if action==='allocate'}<p>Allocate this indent to {piece.production.sample_maker||'the sample tailor saved in the plan'}.</p>
+       {:else if action==='allocate'}
+        {#if piece.production.sample_maker}<p>Allocate this indent to {piece.production.sample_maker}.</p>
+        {:else}<p>You can record allocation now and add the sample tailor later under “Update plan / tailor / handover DC”.</p>{/if}
        {:else if action==='plan'}<div class="sp-form-grid">{#each editorFields as [key,label,type]}<label>{label}<input type={type==='date'?'date':'text'} bind:value={values[key]} maxlength="2000"/></label>{/each}</div>
        {:else if action==='file_review'}<label>Sample file<select bind:value={result}><option>Clear</option><option>Missing</option></select></label>
        {:else if action==='exception'||action==='resolve'}<div class="sp-form-grid"><label>Department / stage<select bind:value={stage} disabled={action==='resolve'} required>{#each data.stages as key}<option value={key}>{processLabel(key)}</option>{/each}</select></label>{#if action==='exception'}<label>Result<select bind:value={result}><option>Rework</option><option>Rejected</option></select></label>{/if}</div>
